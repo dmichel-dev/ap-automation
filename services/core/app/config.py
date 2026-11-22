@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     mistral_ocr_model: str = "mistral-ocr-latest"
     confidence_threshold: float = 0.85
     home_currency: str = "USD"
+    file_storage_dir: str = "/data/files"
+    file_retention_days: int = 30
 
 
 @lru_cache

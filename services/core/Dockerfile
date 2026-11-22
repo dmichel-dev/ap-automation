@@ -10,7 +10,9 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY app ./app
-RUN useradd --system --uid 10001 core && chown -R core /app
+# /data/files is created here so the named volume inherits the core user's ownership
+RUN useradd --system --uid 10001 core \
+ && mkdir -p /data/files && chown -R core /app /data/files && chmod 700 /data/files
 USER core
 
 EXPOSE 8000

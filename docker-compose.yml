@@ -20,6 +20,7 @@ services:
     volumes:
       - pg_data:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro
+      - ./db/migrations:/migrations:ro
     # No host port. If ever needed for a local SQL client, uncomment (5432-5434 are taken):
     # ports:
     #   - "127.0.0.1:5440:5432"
@@ -83,6 +84,10 @@ services:
       MISTRAL_OCR_MODEL: ${MISTRAL_OCR_MODEL}
       CONFIDENCE_THRESHOLD: ${CONFIDENCE_THRESHOLD}
       HOME_CURRENCY: ${HOME_CURRENCY}
+      FILE_STORAGE_DIR: /data/files
+      FILE_RETENTION_DAYS: ${FILE_RETENTION_DAYS}
+    volumes:
+      - ap_files:/data/files     # original invoice files, core service only
     # Internal only: reachable from n8n at http://core:8000
     expose:
       - "8000"
@@ -92,6 +97,7 @@ services:
 volumes:
   pg_data:
   n8n_data:
+  ap_files:
 
 networks:
   backend:
