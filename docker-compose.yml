@@ -5,7 +5,7 @@ name: ap-automation
 
 services:
   postgres:
-    image: postgres:16.16-alpine
+    image: postgres:17.12-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_ADMIN_USER}
@@ -18,7 +18,7 @@ services:
       AP_DB_USER: ${AP_DB_USER}
       AP_DB_PASSWORD: ${AP_DB_PASSWORD}
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      - pg17_data:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro
       - ./db/migrations:/migrations:ro
     # No host port. If ever needed for a local SQL client, uncomment (5432-5434 are taken):
@@ -61,6 +61,7 @@ services:
       N8N_PERSONALIZATION_ENABLED: "false"
       EXECUTIONS_DATA_PRUNE: "true"
       EXECUTIONS_DATA_MAX_AGE: 336        # hours (14 days)
+      N8N_LOG_LEVEL: ${N8N_LOG_LEVEL:-info}  # debug shows every trigger poll
       NODE_OPTIONS: --max-old-space-size=512
     ports:
       - "127.0.0.1:5678:5678"
@@ -122,7 +123,9 @@ services:
     networks: [backend]
 
 volumes:
-  pg_data:
+  # Postgres 17 data (upgraded from 16 by dump/restore on 2026-11-22; the old pg_data
+  # volume is kept outside compose as a fallback until it is deleted by hand)
+  pg17_data:
   n8n_data:
   ap_files:
 

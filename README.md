@@ -25,7 +25,7 @@ Intake channels ──► common invoice format ──► core checks ──► 
 | n8n Community Edition | Orchestration: intake triggers, routing, integrations |
 | Python core (FastAPI) | Extraction, normalization, validation, persistence |
 | Mistral OCR (`mistral-ocr-latest`) | PDF/scan text and structured-data extraction |
-| PostgreSQL 16 | n8n database + `ap` schema (invoices, lines, taxes, review queue, log) |
+| PostgreSQL 17 | n8n database + `ap` schema (invoices, lines, taxes, review queue, log) |
 | Docker Compose | Runs everything locally and on the VPS |
 
 ## Quick start
