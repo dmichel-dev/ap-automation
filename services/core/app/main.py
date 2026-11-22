@@ -1,21 +1,24 @@
 """AP core service: extraction, validation and persistence for every intake channel.
 
-Endpoints so far:
-  GET  /health   liveness + database check (no auth)
-  POST /extract  file → common invoice format (no persistence; used by tests and debugging)
+Endpoints:
+  GET  /health            liveness + database check (no auth)
+  POST /invoices/process  file + source → extract, check, store; returns the status for n8n routing
+  POST /extract           file → common invoice format (no persistence; tests and debugging)
 """
 
 import hmac
 import logging
+from datetime import datetime
 from functools import lru_cache
-from typing import Annotated
+from pathlib import Path
+from typing import Annotated, Literal
 
 import psycopg
-from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from . import files
+from . import files, processing
 from .config import get_settings
 from .extraction import build_common_invoice
 from .models import CommonInvoice
@@ -65,6 +68,33 @@ def health() -> JSONResponse:
         db = "unreachable"
     status = 200 if db == "ok" else 503
     return JSONResponse({"status": "ok" if status == 200 else "degraded", "db": db}, status_code=status)
+
+
+def get_processing_config() -> processing.Config:
+    s = get_settings()
+    return processing.Config(
+        database_url=s.ap_database_url.get_secret_value(), storage_dir=Path(s.file_storage_dir),
+        retention_days=s.file_retention_days, confidence_threshold=s.confidence_threshold,
+    )
+
+
+@app.post("/invoices/process", response_model=processing.ProcessOutcome, dependencies=[Depends(require_token)])
+def process_invoice(
+    file: Annotated[UploadFile, File(description="PDF, PNG, JPEG, WebP or TIFF")],
+    channel: Annotated[Literal["email", "drive", "upload"], Form()],
+    source_ref: Annotated[str, Form(min_length=1, max_length=500, description="e.g. gmail:<messageId>:<attachmentId>")],
+    provider: Annotated[ExtractionProvider, Depends(get_provider)],
+    cfg: Annotated[processing.Config, Depends(get_processing_config)],
+    received_at: Annotated[datetime | None, Form()] = None,
+    n8n_execution_id: Annotated[str | None, Form(max_length=100)] = None,
+) -> processing.ProcessOutcome:
+    """The shared core for every channel: extract → normalize → check → store. Idempotent per source_ref."""
+    content = file.file.read(files.MAX_FILE_BYTES + 1)
+    req = processing.ProcessRequest(
+        content=content, file_name=(file.filename or "unnamed")[:255], channel=channel, source_ref=source_ref,
+        received_at=received_at, execution_id=n8n_execution_id,
+    )
+    return processing.process(req, provider, cfg)
 
 
 @app.post("/extract", response_model=CommonInvoice, dependencies=[Depends(require_token)])

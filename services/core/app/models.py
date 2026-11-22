@@ -24,7 +24,15 @@ class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+LineKind = Literal["item", "discount", "shipping", "fee", "rounding", "other"]
+TaxStage = Literal["before_tax", "after_tax"]
+
+
 class ExtractedLine(_Strict):
+    kind: Literal["item", "discount", "shipping", "fee", "other"] = Field(
+        description="item for goods/services; discount, shipping (incl. freight, delivery), fee (handling, "
+        "service charge) or other when the table row is one of those"
+    )
     description: str | None = Field(description="Line item description, in the original language")
     quantity: str | None = Field(description="Quantity exactly as printed")
     unit_price: str | None = Field(description="Unit price exactly as printed, including any currency symbol")
@@ -40,6 +48,19 @@ class ExtractedTax(_Strict):
     rate: str | None = Field(description="Tax rate exactly as printed")
     taxable_base: str | None = Field(description="Amount the tax applies to, exactly as printed")
     amount: str | None = Field(description="Tax amount exactly as printed")
+
+
+class ExtractedAdjustment(_Strict):
+    kind: Literal["discount", "shipping", "fee", "rounding", "other"] = Field(
+        description="discount (rebate, remise, Rabatt, early-payment discount), shipping (freight, delivery), "
+        "fee (handling, service charge, surcharge), rounding (rounding adjustment), other"
+    )
+    label: str | None = Field(description="Label exactly as printed, e.g. 'Remise 5 %', 'Shipping', 'Rounding'")
+    amount: str | None = Field(description="Money amount exactly as printed (not the percentage)")
+    position: TaxStage = Field(
+        description="before_tax if printed above the tax line(s) in the totals section, after_tax if printed "
+        "below them (between the tax and the grand total)"
+    )
 
 
 class ExtractionResult(_Strict):
@@ -60,7 +81,11 @@ class ExtractionResult(_Strict):
     invoice_date: str | None = Field(description="Issue date exactly as printed, do not reformat")
     due_date: str | None = Field(description="Payment due date exactly as printed, do not reformat; null if not printed")
     currency: str | None = Field(description="Currency code or symbol exactly as printed, e.g. 'EUR', '€', 'US$', '円'")
-    line_items: list[ExtractedLine] = Field(description="Every line item, in document order")
+    line_items: list[ExtractedLine] = Field(description="Every row of the line item table, in document order")
+    adjustments: list[ExtractedAdjustment] = Field(
+        description="Charges or allowances printed in the totals section, outside the line item table: discounts, "
+        "shipping, fees, rounding. Never the subtotal, a tax line or the grand total. Empty if none"
+    )
     tax_lines: list[ExtractedTax] = Field(description="Every tax line of the tax summary; empty if no tax is shown")
     subtotal: str | None = Field(description="Total before tax, exactly as printed")
     tax_total: str | None = Field(description="Total tax amount, exactly as printed")
@@ -117,7 +142,12 @@ class Party(BaseModel):
 
 
 class InvoiceLine(BaseModel):
+    """Table rows and totals-section adjustments (discount, shipping, fee, rounding) alike.
+    Discounts are always negative (before any credit-note sign flip)."""
+
     line_no: int
+    kind: LineKind = "item"
+    tax_stage: TaxStage = "before_tax"   # after_tax: printed between the tax and the grand total
     description: str | None = None
     quantity: Decimal | None = None
     unit_price: Decimal | None = None

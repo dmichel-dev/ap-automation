@@ -1,6 +1,7 @@
 #!/bin/sh
 # Runs once, on the first start of an empty Postgres volume.
-# Creates: the n8n role + database, and the ap_app role owning the "ap" schema.
+# Creates: the n8n role + database, the ap_app role owning the "ap" schema,
+# and the ap_test database used by the integration tests.
 # Tables are created by the next init file(s).
 set -eu
 
@@ -13,6 +14,9 @@ CREATE ROLE :"ap_user"  LOGIN PASSWORD :'ap_pw';
 CREATE DATABASE :"n8n_db" OWNER :"n8n_user";
 REVOKE ALL ON DATABASE :"n8n_db" FROM PUBLIC;
 GRANT CONNECT ON DATABASE :"n8n_db" TO :"n8n_user", :"ap_user";
+-- Separate database for the core service's integration tests (rebuilt by the tests)
+CREATE DATABASE ap_test OWNER :"ap_user";
+REVOKE ALL ON DATABASE ap_test FROM PUBLIC;
 SQL
 
 psql -v ON_ERROR_STOP=1 \

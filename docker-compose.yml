@@ -109,11 +109,17 @@ services:
       AP_DATABASE_URL: postgresql://unused@localhost/unused
       CORE_API_TOKEN: test-token
       MISTRAL_API_KEY: ${MISTRAL_API_KEY}
+      # Integration tests rebuild the ap schema in this separate database, never in the real one
+      AP_TEST_DATABASE_URL: postgresql://${AP_DB_USER}:${AP_DB_PASSWORD}@postgres:5432/ap_test
     volumes:
       - ./services/core:/app
+      - ./db/migrations:/migrations:ro
       - ./test-data:/test-data:ro
-    network_mode: bridge   # internet only (live test); no access to the backend network
+    depends_on:
+      postgres:
+        condition: service_healthy
     mem_limit: 256m
+    networks: [backend]
 
 volumes:
   pg_data:

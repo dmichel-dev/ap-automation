@@ -55,6 +55,8 @@ def parse_amount(raw: str | None, currency: str | None = None) -> Decimal | None
     s = clean_text(raw)
     if s is None:
         return None
+    if "%" in s:
+        raise NormalizationError("unparseable_amount", f"percentage instead of an amount in {raw!r}")
     negative = (s.startswith("(") and s.endswith(")")) or bool(re.search(r"-\s*\D*\d", s)) or s.endswith("-")
     runs = [r.strip() for r in _NUMBER_RUN.findall(s)]
     runs = [r for r in runs if r]

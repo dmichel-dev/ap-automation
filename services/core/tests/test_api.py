@@ -25,7 +25,7 @@ class FakeProvider:
         return ProviderResult(annotation={"document_kind": "not_invoice", **{k: None for k in (
             "supplier_name supplier_tax_id supplier_address supplier_country_code buyer_name buyer_tax_id "
             "invoice_number related_invoice_number invoice_date due_date currency subtotal tax_total total language"
-        ).split()}, "line_items": [], "tax_lines": []}, ocr_text="Dear customer", pages=1)
+        ).split()}, "line_items": [], "adjustments": [], "tax_lines": []}, ocr_text="Dear customer", pages=1)
 
 
 @pytest.fixture

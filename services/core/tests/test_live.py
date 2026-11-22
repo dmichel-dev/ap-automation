@@ -63,3 +63,23 @@ def test_live_png_french_credit_note_with_ambiguous_date():
     assert inv.dates.suggested_order == "DMY" and inv.dates.suggested_invoice_date == date(2026, 4, 3)
     assert inv.related_invoice_number == "F-2026-0311"
     assert [i.code for i in inv.issues] == ["ambiguous_date"]
+
+
+def test_live_full_pipeline_against_test_db(clean_db, tmp_path):
+    """Real Mistral + real Postgres (ap_test): process, re-send same source, re-send same file."""
+    from app.processing import Config, ProcessRequest, process
+
+    cfg = Config(database_url=clean_db, storage_dir=tmp_path, retention_days=30, confidence_threshold=0.85)
+    provider = MistralOcrProvider(os.environ["MISTRAL_API_KEY"])
+    pdf = (FIXTURES / "us_invoice_brightwater.pdf").read_bytes()
+
+    first = process(ProcessRequest(pdf, "bw.pdf", "email", "gmail:live:1"), provider, cfg)
+    print(first.model_dump_json(indent=2))
+    assert first.status == "ready" and first.summary["total"] == Decimal("641.24")
+    assert first.confidence["ocr"] > 0.9 and first.confidence["completeness"] == 1
+
+    again = process(ProcessRequest(pdf, "bw.pdf", "email", "gmail:live:1"), provider, cfg)
+    assert again.already_processed and again.invoice_id == first.invoice_id
+
+    dup = process(ProcessRequest(pdf, "bw.pdf", "email", "gmail:live:2"), provider, cfg)
+    assert dup.status == "rejected" and dup.reasons[0]["code"] == "duplicate_file"

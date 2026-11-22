@@ -7,36 +7,13 @@ from app.extraction import build_common_invoice
 from app.providers.base import ProviderResult
 from app.providers.mistral import MistralOcrProvider
 
+from .conftest import base_annotation
+
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def annotation(**overrides):
-    base = {
-        "document_kind": "invoice",
-        "supplier_name": "Brightwater Paper Supply LLC",
-        "supplier_tax_id": "00-0000000",
-        "supplier_address": "412 Fictional Ave, Springfield, OR 97477, USA",
-        "supplier_country_code": "US",
-        "buyer_name": "Example Buyer Inc.",
-        "buyer_tax_id": None,
-        "invoice_number": "BW-1042",
-        "related_invoice_number": None,
-        "invoice_date": "11/18/2026",
-        "due_date": "12/18/2026",
-        "currency": "$",
-        "line_items": [
-            {"description": "Copy paper", "quantity": "10", "unit_price": "$42.00", "amount": "$420.00", "tax_rate": None},
-            {"description": "Toner", "quantity": "2", "unit_price": "$85.50", "amount": "$171.00", "tax_rate": None},
-        ],
-        "tax_lines": [{"tax_type": "sales_tax", "label": "Sales tax 8.5%", "rate": "8.5%",
-                       "taxable_base": "$591.00", "amount": "$50.24"}],
-        "subtotal": "$591.00",
-        "tax_total": "$50.24",
-        "total": "USD 641.24",
-        "language": "en",
-    }
-    base.update(overrides)
-    return base
+    return base_annotation(**overrides)
 
 
 def build(ocr_text="Total due: USD 641.24 (all amounts in $)", **overrides):
@@ -159,3 +136,33 @@ def test_recorded_mistral_response_parses():
     assert 0.9 < result.ocr_confidence_avg <= 1
     assert result.annotation["invoice_number"] == "BW-1042"
     assert "word_confidence_scores" not in json.dumps(result.raw)
+
+
+def test_adjustments_become_lines_and_discount_is_negative():
+    inv = build(adjustments=[
+        {"kind": "discount", "label": "Discount 5%", "amount": "29.55", "position": "before_tax"},
+        {"kind": "shipping", "label": "Shipping", "amount": "$15.00", "position": "after_tax"},
+        {"kind": "rounding", "label": "Rounding", "amount": "-0.01", "position": "after_tax"},
+    ])
+    kinds = [(li.line_no, li.kind, li.tax_stage, li.amount) for li in inv.lines[2:]]
+    assert kinds == [(3, "discount", "before_tax", Decimal("-29.55")),
+                     (4, "shipping", "after_tax", Decimal("15.00")),
+                     (5, "rounding", "after_tax", Decimal("-0.01"))]
+
+
+def test_discount_row_in_table_is_negative():
+    lines = annotation()["line_items"] + [{"kind": "discount", "description": "Loyalty discount", "quantity": None,
+                                            "unit_price": None, "amount": "$20.00", "tax_rate": None}]
+    inv = build(line_items=lines)
+    assert inv.lines[2].kind == "discount" and inv.lines[2].amount == Decimal("-20.00")
+
+
+def test_withholding_tax_is_negative():
+    inv = build(tax_lines=[{"tax_type": "withholding", "label": "Retención 15%", "rate": "15%",
+                            "taxable_base": "591.00", "amount": "88.65"}])
+    assert inv.taxes[0].amount == Decimal("-88.65")
+
+
+def test_percentage_given_as_amount_is_flagged():
+    inv = build(adjustments=[{"kind": "discount", "label": "Remise", "amount": "5 %", "position": "before_tax"}])
+    assert inv.lines[2].amount is None and "unparseable_amount" in codes(inv)

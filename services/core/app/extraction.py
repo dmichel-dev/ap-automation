@@ -122,6 +122,7 @@ def build_common_invoice(result: ProviderResult, provider_name: str) -> CommonIn
     lines = [
         InvoiceLine(
             line_no=i,
+            kind=li.kind,
             description=n.clean_text(li.description),
             quantity=_amount(li.quantity, None, f"lines[{i}].quantity", issues),
             unit_price=_amount(li.unit_price, currency, f"lines[{i}].unit_price", issues),
@@ -130,6 +131,20 @@ def build_common_invoice(result: ProviderResult, provider_name: str) -> CommonIn
         )
         for i, li in enumerate(data.line_items, start=1)
     ]
+    # Totals-section adjustments become lines too, so they count in the totals check
+    # and become separate bill lines in QuickBooks (Day 2)
+    for adj in data.adjustments:
+        i = len(lines) + 1
+        lines.append(InvoiceLine(
+            line_no=i, kind=adj.kind, tax_stage=adj.position, description=n.clean_text(adj.label),
+            amount=_amount(adj.amount, currency, f"lines[{i}].amount", issues),
+        ))
+    for li in lines:
+        # A discount reduces the amount, whether or not the PDF prints a minus sign
+        if li.kind == "discount" and li.amount is not None:
+            li.amount = -abs(li.amount)
+            li.unit_price = -abs(li.unit_price) if li.unit_price is not None else None
+
     taxes = [
         TaxLine(
             tax_type=t.tax_type, label=n.clean_text(t.label),
@@ -139,6 +154,10 @@ def build_common_invoice(result: ProviderResult, provider_name: str) -> CommonIn
         )
         for i, t in enumerate(data.tax_lines, start=1)
     ]
+    for t in taxes:
+        # Withholding tax is deducted from the amount payable
+        if t.tax_type == "withholding" and t.amount is not None:
+            t.amount = -abs(t.amount)
     subtotal = _amount(data.subtotal, currency, "subtotal", issues)
     tax_total = _amount(data.tax_total, currency, "tax_total", issues)
     total = _amount(data.total, currency, "total", issues)
