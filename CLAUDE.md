@@ -39,6 +39,7 @@ Intake channels → **common invoice format** → shared processing core → ban
 - **Duplicates:** same file hash → `rejected`; same supplier + invoice number with a different file → `needs_review`.
 - **Test emails:** sent from the connected Gmail connector, **only to `invoices@davidmichel.dev`**, and each one is shown to David before sending.
 - **Git:** commit and **push to GitHub after each step**.
+- **Releases:** a milestone is one completed Day. Tag it (`v0.1.0` = Day 1 … `v0.7.0` = Day 7; `v1.0.0` when the repo goes public), push the tag, and create a **draft** GitHub release with notes for clients (what it does, how it was verified, known limits). Never publish a release: David does that himself when the repo goes public.
 - **Day 3 note:** emails to `invoices@` without a valid attachment must be logged and labelled, never silently ignored.
 
 ## Day 1 scope (today)
