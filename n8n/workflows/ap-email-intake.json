@@ -1,0 +1,629 @@
+{
+  "name": "AP – Email intake",
+  "nodes": [
+    {
+      "name": "Gmail Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "q": "deliveredto:invoices@davidmichel.dev -label:ap-processed",
+          "readStatus": "both"
+        },
+        "options": {
+          "downloadAttachments": true,
+          "dataPropertyAttachmentsPrefixName": "attachment_"
+        },
+        "maxResults": 10
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail – david@davidmichel.dev"
+        }
+      },
+      "id": "gmail-trigger"
+    },
+    {
+      "name": "Get AP labels",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        220,
+        300
+      ],
+      "executeOnce": true,
+      "parameters": {
+        "resource": "label",
+        "operation": "getAll",
+        "returnAll": true
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail – david@davidmichel.dev"
+        }
+      },
+      "id": "get-ap-labels"
+    },
+    {
+      "name": "Guard and split",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Guard and split: one item per invoice attachment, or one item explaining why there is none.\n// Deterministic code only: nothing here reads the document content.\nconst ALIAS = 'invoices@davidmichel.dev';\nconst LABELS = { processed: 'AP/Processed', ready: 'AP/Ready', review: 'AP/Review', rejected: 'AP/Rejected', error: 'AP/Error' };\nconst BY_MIME = { 'application/pdf': 1, 'image/png': 1, 'image/jpeg': 1, 'image/webp': 1, 'image/tiff': 1 };\nconst BY_EXT = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', tif: 'image/tiff', tiff: 'image/tiff' };\nconst MIN_IMAGE_BYTES = 15000;   // smaller images are almost always signature logos\n\n// Label IDs, looked up by name so nothing is hard-coded\nconst byName = Object.fromEntries($('Get AP labels').all().map(i => [i.json.name, i.json.id]));\nconst labels = {};\nfor (const [key, name] of Object.entries(LABELS)) {\n  if (!byName[name]) throw new Error(`Gmail label \"${name}\" not found: create it in Gmail first`);\n  labels[key] = byName[name];\n}\n\n// n8n stores a human-readable size (\"45.2 kB\"); convert it back to bytes\nfunction toBytes(size) {\n  const m = String(size ?? '').match(/([\\d.]+)\\s*(B|kB|MB|GB)/i);\n  if (!m) return 0;\n  return Math.round(parseFloat(m[1]) * { b: 1, kb: 1e3, mb: 1e6, gb: 1e9 }[m[2].toLowerCase()]);\n}\n\nconst out = [];\nfor (const email of $('Gmail Trigger').all()) {\n  const mail = email.json;\n  const base = { message_id: mail.id, thread_id: mail.threadId, labels };\n\n  // Second guard after the Gmail search: the alias must be a recipient\n  const recipients = [...(mail.to?.value ?? []), ...(mail.cc?.value ?? [])].map(a => String(a.address ?? '').toLowerCase());\n  const deliveredTo = String(mail.headers?.['delivered-to'] ?? '').toLowerCase();\n  if (!recipients.includes(ALIAS) && !deliveredTo.includes(ALIAS)) {\n    out.push({ json: { ...base, route: 'not_for_alias', reason: 'not_addressed_to_alias' }, pairedItem: { item: 0 } });\n    continue;\n  }\n\n  const binary = email.binary ?? {};\n  const keys = Object.keys(binary).filter(k => k.startsWith('attachment_'))\n    .sort((a, b) => Number(a.split('_')[1]) - Number(b.split('_')[1]));\n  const accepted = [], skipped = [];\n  for (const key of keys) {\n    const b = binary[key];\n    const ext = String(b.fileName ?? '').split('.').pop().toLowerCase();\n    const mime = BY_MIME[b.mimeType] ? b.mimeType : BY_EXT[ext];\n    const size = toBytes(b.fileSize);\n    if (!mime) { skipped.push({ type: b.mimeType ?? 'unknown', size, why: 'unsupported_type' }); continue; }\n    if (mime.startsWith('image/') && size < MIN_IMAGE_BYTES) { skipped.push({ type: mime, size, why: 'small_image' }); continue; }\n    accepted.push({ key, index: Number(key.split('_')[1]), mime, size });\n  }\n\n  if (accepted.length === 0) {\n    // Never silently ignored: logged and labelled (file names are not logged, they may be personal data)\n    out.push({ json: { ...base, route: 'no_valid_attachment', reason: 'no_valid_attachment',\n                       details: { attachments: keys.length, skipped } }, pairedItem: { item: 0 } });\n    continue;\n  }\n  for (const a of accepted) {\n    out.push({\n      json: { ...base, route: 'process', source_ref: `gmail:${mail.id}:${a.index}`, mime: a.mime, size: a.size,\n              attachments_in_email: accepted.length },\n      binary: { file: binary[a.key] },\n      pairedItem: { item: 0 },\n    });\n  }\n}\nreturn out;"
+      },
+      "id": "guard-and-split"
+    },
+    {
+      "name": "Route intake",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "invoice-attachment",
+                    "leftValue": "={{ $json.route === 'process' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "invoice attachment"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "no-valid-attachment",
+                    "leftValue": "={{ $json.route === 'no_valid_attachment' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "no valid attachment"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "not-for-alias",
+                    "leftValue": "={{ $json.route === 'not_for_alias' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "not for alias"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "route-intake"
+    },
+    {
+      "name": "Process invoice (core)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        120
+      ],
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "http://core:8000/invoices/process",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "file"
+            },
+            {
+              "name": "channel",
+              "value": "email"
+            },
+            {
+              "name": "source_ref",
+              "value": "={{ $json.source_ref }}"
+            },
+            {
+              "name": "n8n_execution_id",
+              "value": "={{ $execution.id }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 300000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "process-invoice-core"
+    },
+    {
+      "name": "Route by status",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1140,
+        100
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "ready",
+                    "leftValue": "={{ $json.statusCode === 200 && $json.body.status === 'ready' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ready"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "needs_review",
+                    "leftValue": "={{ $json.statusCode === 200 && $json.body.status === 'needs_review' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "needs_review"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "rejected",
+                    "leftValue": "={{ ($json.statusCode === 200 && $json.body.status === 'rejected') || [413, 415].includes($json.statusCode) }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "rejected"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "error"
+        }
+      },
+      "id": "route-by-status"
+    },
+    {
+      "name": "Label: ready",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1400,
+        -100
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "addLabels",
+        "messageId": "={{ $('Guard and split').item.json.message_id }}",
+        "labelIds": "={{ [$('Guard and split').item.json.labels.ready, $('Guard and split').item.json.labels.processed] }}"
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail – david@davidmichel.dev"
+        }
+      },
+      "id": "label-ready"
+    },
+    {
+      "name": "Label: review",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1400,
+        40
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "addLabels",
+        "messageId": "={{ $('Guard and split').item.json.message_id }}",
+        "labelIds": "={{ [$('Guard and split').item.json.labels.review, $('Guard and split').item.json.labels.processed] }}"
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail – david@davidmichel.dev"
+        }
+      },
+      "id": "label-review"
+    },
+    {
+      "name": "Label: rejected",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1400,
+        180
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "addLabels",
+        "messageId": "={{ $('Guard and split').item.json.message_id }}",
+        "labelIds": "={{ [$('Guard and split').item.json.labels.rejected, $('Guard and split').item.json.labels.processed] }}"
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail – david@davidmichel.dev"
+        }
+      },
+      "id": "label-rejected"
+    },
+    {
+      "name": "Label: error",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1400,
+        340
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "addLabels",
+        "messageId": "={{ $('Guard and split').item.json.message_id }}",
+        "labelIds": "={{ [$('Guard and split').item.json.labels.error] }}"
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail – david@davidmichel.dev"
+        }
+      },
+      "id": "label-error"
+    },
+    {
+      "name": "Log core error",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1620,
+        340
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details)\nVALUES ('email', $1, $2, $3, $4, $5, $6::jsonb)",
+        "options": {
+          "queryReplacement": "={{ [$('Guard and split').item.json.source_ref, $execution.id, 'core_call', 'error', 'core service call failed', JSON.stringify({ status_code: $('Process invoice (core)').item.json.statusCode ?? null, error: $('Process invoice (core)').item.json.body?.error ?? $('Process invoice (core)').item.json.error?.message ?? null })] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "AP database (ap_app)"
+        }
+      },
+      "id": "log-core-error"
+    },
+    {
+      "name": "Label: no valid attachment",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        900,
+        360
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "addLabels",
+        "messageId": "={{ $('Guard and split').item.json.message_id }}",
+        "labelIds": "={{ [$('Guard and split').item.json.labels.rejected, $('Guard and split').item.json.labels.processed] }}"
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail – david@davidmichel.dev"
+        }
+      },
+      "id": "label-no-valid-attachment"
+    },
+    {
+      "name": "Log no valid attachment",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1120,
+        360
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details)\nVALUES ('email', $1, $2, $3, $4, $5, $6::jsonb)",
+        "options": {
+          "queryReplacement": "={{ ['gmail:' + $('Guard and split').item.json.message_id, $execution.id, 'intake', 'warning', 'email without a valid invoice attachment', JSON.stringify($('Guard and split').item.json.details)] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "AP database (ap_app)"
+        }
+      },
+      "id": "log-no-valid-attachment"
+    },
+    {
+      "name": "Log not for alias",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        900,
+        540
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details)\nVALUES ('email', $1, $2, $3, $4, $5, $6::jsonb)",
+        "options": {
+          "queryReplacement": "={{ ['gmail:' + $json.message_id, $execution.id, 'intake', 'warning', 'email not addressed to the invoices alias', JSON.stringify({})] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "AP database (ap_app)"
+        }
+      },
+      "id": "log-not-for-alias"
+    }
+  ],
+  "connections": {
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get AP labels",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get AP labels": {
+      "main": [
+        [
+          {
+            "node": "Guard and split",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard and split": {
+      "main": [
+        [
+          {
+            "node": "Route intake",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route intake": {
+      "main": [
+        [
+          {
+            "node": "Process invoice (core)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Label: no valid attachment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log not for alias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process invoice (core)": {
+      "main": [
+        [
+          {
+            "node": "Route by status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Label: error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by status": {
+      "main": [
+        [
+          {
+            "node": "Label: ready",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Label: review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Label: rejected",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Label: error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Label: error": {
+      "main": [
+        [
+          {
+            "node": "Log core error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Label: no valid attachment": {
+      "main": [
+        [
+          {
+            "node": "Log no valid attachment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "timezone": "Europe/Paris"
+  },
+  "pinData": {},
+  "active": false
+}
