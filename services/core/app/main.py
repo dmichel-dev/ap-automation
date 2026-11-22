@@ -4,21 +4,37 @@ Endpoints:
   GET  /health            liveness + database check (no auth)
   POST /invoices/process  file + source → extract, check, store; returns the status for n8n routing
   POST /extract           file → common invoice format (no persistence; tests and debugging)
+
+Day 2 (n8n does the QuickBooks/Plaid calls; the core keeps state and rules):
+  GET  /invoices/{id}/file               original file, for the accounting attachment
+  POST /invoices/{id}/exclude-from-posting
+  POST /postings/claim                   invoices to post now, with the document to send (leased)
+  POST /postings/{invoice_id}/result     outcome of a posting / attachment
+  PUT  /vendor-links                     supplier + currency → accounting vendor
+  PUT  /bank/accounts/{item_key}         the bank account used for matching
+  GET  /bank/sync-state/{item_key}       cursor for Plaid /transactions/sync
+  POST /bank/sync-page/{item_key}        one page of /transactions/sync
+  POST /matching/run/{item_key}          deterministic matching → payments to record (leased)
+  POST /matches/{id}/payment             payment recorded in the accounting system
 """
 
 import hmac
 import logging
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
+from uuid import UUID
 
 import psycopg
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from . import files, processing
+from pydantic import BaseModel, Field
+
+from . import accounting, db, files, matching, processing
 from .config import get_settings
 from .extraction import build_common_invoice
 from .models import CommonInvoice
@@ -106,3 +122,163 @@ def extract(
     prepared = files.prepare(content)
     result = provider.extract(prepared.content, prepared.mime_type)
     return build_common_invoice(result, provider.name)
+
+
+# =====================================================================================
+# Day 2: accounting postings, bank sync, matching
+# =====================================================================================
+def get_accounting_config() -> accounting.AccountingConfig:
+    s = get_settings()
+    return accounting.AccountingConfig(
+        database_url=s.ap_database_url.get_secret_value(), storage_dir=Path(s.file_storage_dir),
+        home_currency=s.home_currency, expense_account_id=s.qbo_expense_account_id,
+        tax_account_id=s.qbo_tax_account_id, bank_account_id=s.qbo_bank_account_id,
+        max_attempts=s.posting_max_attempts, lease_minutes=s.posting_lease_minutes,
+    )
+
+
+def get_rules() -> matching.Rules:
+    s = get_settings()
+    return matching.Rules(
+        abs_tolerance=Decimal(s.match_amount_abs_tolerance), pct_tolerance=Decimal(s.match_amount_pct_tolerance),
+        days_before_invoice=s.match_days_before_invoice, days_after_due=s.match_days_after_due,
+        default_terms_days=s.match_default_terms_days, min_name_similarity=s.match_name_min_similarity,
+    )
+
+
+AcctCfg = Annotated[accounting.AccountingConfig, Depends(get_accounting_config)]
+Auth = [Depends(require_token)]
+
+
+@app.exception_handler(accounting.NotFound)
+def _not_found(_: Request, exc: accounting.NotFound) -> JSONResponse:
+    return JSONResponse({"error": "not_found", "message": str(exc)}, status_code=404)
+
+
+@app.exception_handler(accounting.Conflict)
+def _conflict(_: Request, exc: accounting.Conflict) -> JSONResponse:
+    return JSONResponse({"error": "conflict", "message": str(exc)}, status_code=409)
+
+
+def _json(row: dict | None) -> dict | None:
+    """DB row → JSON-safe dict (Decimal as exact string, dates as ISO)."""
+    if row is None:
+        return None
+    def conv(v):
+        if isinstance(v, (Decimal, UUID)):
+            return str(v)
+        return v.isoformat() if isinstance(v, (date, datetime)) else v
+    return {k: conv(v) for k, v in row.items()}
+
+
+@app.get("/invoices/{invoice_id}/file", dependencies=Auth)
+def invoice_file(invoice_id: str, cfg: AcctCfg) -> FileResponse:
+    with db.connect(cfg.database_url) as conn:
+        path, mime, name = accounting.stored_file(conn, cfg.storage_dir, invoice_id)
+    return FileResponse(path, media_type=mime, filename=name)
+
+
+class Exclusion(BaseModel):
+    reason: Literal["superseded_test_data", "manual"]
+    note: str | None = Field(default=None, max_length=200)
+
+
+@app.post("/invoices/{invoice_id}/exclude-from-posting", dependencies=Auth)
+def exclude_from_posting(invoice_id: str, body: Exclusion, cfg: AcctCfg) -> dict:
+    with db.connect(cfg.database_url) as conn:
+        return _json(accounting.exclude_from_posting(conn, invoice_id, body.reason, body.note))
+
+
+@app.post("/postings/claim", dependencies=Auth)
+def claim_postings(cfg: AcctCfg, limit: int = 10) -> dict:
+    with db.connect(cfg.database_url) as conn:
+        items = accounting.claim_postings(conn, cfg, max(1, min(limit, 50)))
+    return {"count": len(items), "items": items}
+
+
+class PostingResult(BaseModel):
+    outcome: Literal["posted", "attached", "failed"]
+    external_id: str | None = Field(default=None, max_length=50)
+    vendor_external_id: str | None = Field(default=None, max_length=50)
+    exchange_rate: Decimal | None = Field(default=None, gt=0)
+    exchange_rate_date: date | None = None
+    attachment_external_id: str | None = Field(default=None, max_length=50)
+    error_code: str | None = Field(default=None, max_length=100)
+    error_message: str | None = Field(default=None, max_length=2000)
+    retryable: bool = True
+    execution_id: str | None = Field(default=None, max_length=100)
+
+
+@app.post("/postings/{invoice_id}/result", dependencies=Auth)
+def posting_result(invoice_id: str, body: PostingResult, cfg: AcctCfg) -> dict:
+    if body.outcome == "posted" and not (body.external_id and body.vendor_external_id):
+        raise HTTPException(422, "posted requires external_id and vendor_external_id")
+    if body.outcome == "attached" and not body.attachment_external_id:
+        raise HTTPException(422, "attached requires attachment_external_id")
+    with db.connect(cfg.database_url) as conn:
+        posting, to_delete = accounting.record_result(conn, cfg, invoice_id, body.model_dump())
+    accounting.delete_stored_file(cfg.storage_dir, to_delete)      # after COMMIT
+    return _json(posting)
+
+
+class VendorLink(BaseModel):
+    supplier_key: str = Field(min_length=1, max_length=200)
+    currency: str = Field(pattern=r"^[A-Z]{3}$")
+    external_id: str = Field(min_length=1, max_length=50)
+    display_name: str = Field(min_length=1, max_length=100)
+
+
+@app.put("/vendor-links", dependencies=Auth)
+def vendor_link(body: VendorLink, cfg: AcctCfg) -> dict:
+    with db.connect(cfg.database_url) as conn:
+        return _json(accounting.link_vendor(conn, body.supplier_key, body.currency, body.external_id,
+                                            body.display_name))
+
+
+class BankAccount(BaseModel):
+    account_id: str = Field(min_length=1, max_length=100)
+    account_currency: str = Field(pattern=r"^[A-Z]{3}$")
+
+
+@app.put("/bank/accounts/{item_key}", dependencies=Auth)
+def bank_account(item_key: str, body: BankAccount, cfg: AcctCfg) -> dict:
+    with db.connect(cfg.database_url) as conn:
+        return _json(accounting.register_account(conn, item_key, body.account_id, body.account_currency))
+
+
+@app.get("/bank/sync-state/{item_key}", dependencies=Auth)
+def bank_sync_state(item_key: str, cfg: AcctCfg) -> dict:
+    with db.connect(cfg.database_url) as conn:
+        return _json(accounting.sync_state(conn, item_key))
+
+
+class SyncPage(BaseModel):
+    added: list[dict] = []
+    modified: list[dict] = []
+    removed: list[dict] = []
+    next_cursor: str
+    has_more: bool
+
+
+@app.post("/bank/sync-page/{item_key}", dependencies=Auth)
+def bank_sync_page(item_key: str, body: SyncPage, cfg: AcctCfg) -> dict:
+    with db.connect(cfg.database_url) as conn:
+        return accounting.store_sync_page(conn, item_key, body.added, body.modified, body.removed,
+                                          body.next_cursor, body.has_more)
+
+
+@app.post("/matching/run/{item_key}", dependencies=Auth)
+def matching_run(item_key: str, cfg: AcctCfg, rules: Annotated[matching.Rules, Depends(get_rules)]) -> dict:
+    with db.connect(cfg.database_url) as conn:
+        return accounting.run_matching(conn, cfg, item_key, rules)
+
+
+class PaymentRecorded(BaseModel):
+    external_payment_id: str = Field(min_length=1, max_length=50)
+    execution_id: str | None = Field(default=None, max_length=100)
+
+
+@app.post("/matches/{match_id}/payment", dependencies=Auth)
+def match_payment(match_id: int, body: PaymentRecorded, cfg: AcctCfg) -> dict:
+    with db.connect(cfg.database_url) as conn:
+        return _json(accounting.record_payment(conn, match_id, body.external_payment_id, body.execution_id))

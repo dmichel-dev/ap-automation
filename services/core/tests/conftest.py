@@ -5,7 +5,8 @@ import psycopg
 import pytest
 
 MIGRATIONS = Path("/migrations")
-TABLES = "invoice_lines, invoice_tax_lines, review_queue, processing_log, invoices"
+TABLES = ("matches, bank_transactions, bank_sync_state, accounting_postings, vendor_links, "
+          "invoice_lines, invoice_tax_lines, review_queue, processing_log, invoices")
 
 
 def base_annotation(**overrides):

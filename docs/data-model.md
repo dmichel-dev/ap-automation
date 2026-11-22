@@ -9,6 +9,11 @@ Defined in [`db/migrations/`](../db/migrations). Migrations run as the `ap_app` 
 | `invoice_tax_lines` | Generic tax breakdown: `vat`, `gst`, `sales_tax`, `withholding`, `other`, `none` |
 | `review_queue` | Human review items (at most one open item per invoice) |
 | `processing_log` | Append-only audit trail; `invoice_id` is optional so events without an invoice are logged too |
+| `vendor_links` | Supplier + currency → accounting vendor (QuickBooks fixes a vendor's currency, so one supplier can have one vendor per currency) |
+| `accounting_postings` | One per invoice sent to QuickBooks: bill or vendor credit, rate used, attachment, payment status and reason; created **before** any API call |
+| `bank_sync_state` | The bank account used for matching, its currency and the Plaid sync cursor (no access token) |
+| `bank_transactions` | Plaid transactions as received; **positive amount = money out** |
+| `matches` | Invoice ↔ bank transaction: `accepted` (used for a payment), `candidate` (ambiguous, for review), `dismissed` |
 
 ## Conventions
 
@@ -19,6 +24,9 @@ Defined in [`db/migrations/`](../db/migrations). Migrations run as the `ap_app` 
 - **Codes:** `currency` is ISO 4217, `supplier_country` is ISO 3166-1 alpha-2, `language` is BCP 47.
 - **Database safeguards:** a `ready` invoice must have every required field and no ambiguous date. `processing_log` rejects UPDATE, DELETE and TRUNCATE.
 - `processing_log` never stores document content (privacy): only IDs, steps, check names and short messages.
+- **Posting safeguards:** one posting per invoice; a `posted` row always has the external ID, vendor and exchange rate used; payment status and reason must agree (e.g. `paid_with_difference` ⇔ `payment_difference`).
+- **Matching safeguards:** a bank transaction pays at most one invoice and an invoice is paid by at most one transaction (partial unique indexes on accepted matches), so even a buggy or concurrent run can't pay twice.
+- `invoices.posting_excluded_reason` keeps an invoice out of posting (e.g. superseded test data); it can't be set once the invoice is posted.
 
 ## Original file retention
 
@@ -27,7 +35,7 @@ Original files are needed until they're attached to the QuickBooks bill (Day 2),
 - **Storage:** Docker volume `ap_files`, mounted **only in the core service** at `/data/files`. `invoices.file_path` is relative to that root.
   n8n gets a file through the core API (`GET /invoices/{id}/file`), so there is no shared volume.
 - **Deletion triggers:**
-  1. **After posting** (Day 2): once the attachment is confirmed in QuickBooks, n8n calls the core service to delete the file (`reason = posted`).
+  1. **After posting** (Day 2): when n8n reports the attachment ID to the core service (`POST /postings/{id}/result`), the core deletes the file (`reason = posted`), after the database commit.
   2. **Retention limit** (Day 3): a daily n8n schedule calls a purge endpoint that deletes files whose `file_delete_after` has passed (`reason = retention`). `file_delete_after = received_at + FILE_RETENTION_DAYS` (default 30; shorter for the public demo).
   3. Rejected documents follow the same retention limit (`reason = rejected`).
 - **After deletion:** `file_path` is cleared, `file_deleted_at` and `file_deletion_reason` are set, and the deletion is logged. `file_sha256` stays, so a re-sent file is still detected as a duplicate.

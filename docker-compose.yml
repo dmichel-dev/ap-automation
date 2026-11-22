@@ -89,6 +89,15 @@ services:
       HOME_CURRENCY: ${HOME_CURRENCY}
       FILE_STORAGE_DIR: /data/files
       FILE_RETENTION_DAYS: ${FILE_RETENTION_DAYS}
+      # Day 2: accounting accounts (QuickBooks IDs) and matching rules, see docs/matching.md
+      QBO_EXPENSE_ACCOUNT_ID: ${QBO_EXPENSE_ACCOUNT_ID:-20}
+      QBO_TAX_ACCOUNT_ID: ${QBO_TAX_ACCOUNT_ID:-21}
+      QBO_BANK_ACCOUNT_ID: ${QBO_BANK_ACCOUNT_ID:-35}
+      MATCH_AMOUNT_ABS_TOLERANCE: ${MATCH_AMOUNT_ABS_TOLERANCE:-1.00}
+      MATCH_AMOUNT_PCT_TOLERANCE: ${MATCH_AMOUNT_PCT_TOLERANCE:-0.005}
+      MATCH_DAYS_BEFORE_INVOICE: ${MATCH_DAYS_BEFORE_INVOICE:-3}
+      MATCH_DAYS_AFTER_DUE: ${MATCH_DAYS_AFTER_DUE:-30}
+      MATCH_NAME_MIN_SIMILARITY: ${MATCH_NAME_MIN_SIMILARITY:-0.6}
     volumes:
       - ap_files:/data/files     # original invoice files, core service only
     # Internal only: reachable from n8n at http://core:8000

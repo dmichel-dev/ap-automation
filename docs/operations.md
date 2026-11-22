@@ -41,3 +41,21 @@ docker compose exec -T postgres psql -X -q -U postgres -d n8n -f /tmp/fp.sql > b
 5. Keep the old volume (`ap-automation_pg_data`) as a fallback for a while, then delete it: `docker volume rm ap-automation_pg_data`.
 
 **Rollback:** switch the image back to `postgres:16.16-alpine` and the volume back to `pg_data` in `docker-compose.yml`, then `docker compose up -d`.
+
+## Applying migrations to an existing database
+
+Migrations run automatically only on an empty volume. On an existing database (back up first):
+
+```bash
+scripts/backup.sh --online
+docker compose exec postgres sh /docker-entrypoint-initdb.d/01_migrate.sh   # applies only the new ones
+docker compose up -d --build core
+```
+
+Migration 004 (Day 2) was applied this way on 2026-11-22, after backup `pg_dumpall_20261122-172709.sql`.
+
+## Keeping an invoice out of accounting
+
+`POST /invoices/{id}/exclude-from-posting` with `{"reason": "superseded_test_data" | "manual", "note": "…"}`. It is logged and refused once the invoice is posted (reverse it in QuickBooks instead).
+
+Used once on 2026-11-22 for invoice `f6a94cb0-…` (BW-1042, Step 5 test of Day 1): its fictional supplier name was too close to a real company and was renamed in the test set, and it has the same amount as the renamed invoice, so posting it would also confuse bank matching.
