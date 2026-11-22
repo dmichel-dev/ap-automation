@@ -221,3 +221,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- AP Automation -----------------------------------------------------------
+# Secrets: only .env.example is committed
+.env.*
+!.env.example
+# n8n exports must never include credentials
+**/credentials*.json
+# Local tool settings
+.claude/settings.local.json
+# Generated test run output
+test-data/output/
