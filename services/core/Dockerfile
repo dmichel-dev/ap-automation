@@ -1,4 +1,4 @@
-FROM python:3.13.18-slim-bookworm
+FROM python:3.13.18-slim-bookworm AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -9,10 +9,21 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
-COPY app ./app
 # /data/files is created here so the named volume inherits the core user's ownership
 RUN useradd --system --uid 10001 core \
- && mkdir -p /data/files && chown -R core /app /data/files && chmod 700 /data/files
+ && mkdir -p /data/files && chown -R core /data/files && chmod 700 /data/files
+
+# --- test image: adds pytest; source and tests are mounted by the core-test service
+FROM base AS test
+COPY requirements-dev.txt .
+RUN pip install -r requirements-dev.txt
+USER core
+CMD ["pytest", "-q"]
+
+# --- runtime image (default)
+FROM base AS runtime
+COPY app ./app
+RUN chown -R core /app
 USER core
 
 EXPOSE 8000

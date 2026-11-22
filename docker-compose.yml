@@ -71,7 +71,9 @@ services:
     networks: [backend]
 
   core:
-    build: ./services/core
+    build:
+      context: ./services/core
+      target: runtime
     image: ap-automation/core:dev
     restart: unless-stopped
     depends_on:
@@ -93,6 +95,25 @@ services:
       - "8000"
     mem_limit: 200m
     networks: [backend]
+
+  # Unit tests: docker compose run --rm --build core-test
+  # Live Mistral smoke test (costs a few cents): docker compose run --rm core-test pytest -m live
+  core-test:
+    profiles: [test]
+    build:
+      context: ./services/core
+      target: test
+    image: ap-automation/core:test
+    working_dir: /app
+    environment:
+      AP_DATABASE_URL: postgresql://unused@localhost/unused
+      CORE_API_TOKEN: test-token
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY}
+    volumes:
+      - ./services/core:/app
+      - ./test-data:/test-data:ro
+    network_mode: bridge   # internet only (live test); no access to the backend network
+    mem_limit: 256m
 
 volumes:
   pg_data:
