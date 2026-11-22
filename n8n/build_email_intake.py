@@ -249,4 +249,4 @@ if __name__ == "__main__":
     ids = None
     if len(sys.argv) == 3 and sys.argv[1] == "--credentials":
         ids = json.load(open(sys.argv[2]))
-    print(json.dumps(build(ids), indent=2, ensure_ascii=False))
+    print(json.dumps(build(ids), indent=2, ensure_ascii=False, sort_keys=True))
