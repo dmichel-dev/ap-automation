@@ -1,0 +1,26 @@
+{
+  "id": "D-es-eur-ambiguous-date",
+  "file": "D-es-eur-ambiguous-date.pdf",
+  "email": {
+    "subject": "Factura 2026/045 – Estudio Nubeazul",
+    "body": "Hola,\n\nadjuntamos la factura 2026/045 por un total de 1.653,60 €.\n\nUn saludo,\nEstudio Nubeazul (proveedor ficticio de prueba)"
+  },
+  "expect": {
+    "status": "needs_review",
+    "reasons": [
+      "ambiguous_date"
+    ],
+    "document_type": "invoice",
+    "invoice_number": "2026/045",
+    "currency": "EUR",
+    "total": "1653.60",
+    "invoice_date": null,
+    "supplier_country": "ES",
+    "min_lines": 2,
+    "suggested_dates": {
+      "order": "DMY",
+      "invoice_date": "2026-04-03"
+    }
+  },
+  "note": "03/04/2026 is ambiguous; Spain writes day first, so 3 April 2026 is suggested. IRPF withholding reduces the total."
+}

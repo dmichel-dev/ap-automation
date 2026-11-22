@@ -29,10 +29,10 @@ def run(content: bytes):
 
 
 def test_live_pdf_us_invoice():
-    inv = run((FIXTURES / "us_invoice_brightwater.pdf").read_bytes())
+    inv = run((FIXTURES / "us_invoice_quillmoor.pdf").read_bytes())
     print(inv.model_dump_json(indent=2, exclude={"ocr_text"}))
     assert inv.is_invoice and inv.document_type == "invoice"
-    assert inv.invoice_number == "BW-1042" and inv.currency == "USD"
+    assert inv.invoice_number == "QM-1042" and inv.currency == "USD"
     assert inv.invoice_date == date(2026, 11, 18) and inv.due_date == date(2026, 12, 18)
     assert inv.total == Decimal("641.24") and inv.tax_total == Decimal("50.24")
     assert len(inv.lines) == 2 and inv.supplier.country == "US"
@@ -71,15 +71,15 @@ def test_live_full_pipeline_against_test_db(clean_db, tmp_path):
 
     cfg = Config(database_url=clean_db, storage_dir=tmp_path, retention_days=30, confidence_threshold=0.85)
     provider = MistralOcrProvider(os.environ["MISTRAL_API_KEY"])
-    pdf = (FIXTURES / "us_invoice_brightwater.pdf").read_bytes()
+    pdf = (FIXTURES / "us_invoice_quillmoor.pdf").read_bytes()
 
-    first = process(ProcessRequest(pdf, "bw.pdf", "email", "gmail:live:1"), provider, cfg)
+    first = process(ProcessRequest(pdf, "qm.pdf", "email", "gmail:live:1"), provider, cfg)
     print(first.model_dump_json(indent=2))
     assert first.status == "ready" and first.summary["total"] == Decimal("641.24")
     assert first.confidence["ocr"] > 0.9 and first.confidence["completeness"] == 1
 
-    again = process(ProcessRequest(pdf, "bw.pdf", "email", "gmail:live:1"), provider, cfg)
+    again = process(ProcessRequest(pdf, "qm.pdf", "email", "gmail:live:1"), provider, cfg)
     assert again.already_processed and again.invoice_id == first.invoice_id
 
-    dup = process(ProcessRequest(pdf, "bw.pdf", "email", "gmail:live:2"), provider, cfg)
+    dup = process(ProcessRequest(pdf, "qm.pdf", "email", "gmail:live:2"), provider, cfg)
     assert dup.status == "rejected" and dup.reasons[0]["code"] == "duplicate_file"

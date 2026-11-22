@@ -1,0 +1,16 @@
+{
+  "id": "G-duplicate-of-A",
+  "file": "A-fr-eur-discount.pdf",
+  "email": {
+    "subject": "RAPPEL – Facture AV-2026-0147",
+    "body": "Bonjour,\n\nsauf erreur de notre part, la facture AV-2026-0147 ci-jointe reste à régler.\n\nCordialement,\nAteliers Verlibreux (fournisseur fictif de test)"
+  },
+  "expect": {
+    "status": "rejected",
+    "reasons": [
+      "duplicate_file"
+    ],
+    "occurrence": 2
+  },
+  "note": "Same bytes as A: rejected before any OCR call. 'occurrence: 2' = the second row with this file."
+}

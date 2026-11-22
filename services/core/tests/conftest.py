@@ -12,13 +12,13 @@ def base_annotation(**overrides):
     """A complete, consistent provider annotation (fictional US supplier)."""
     base = {
         "document_kind": "invoice",
-        "supplier_name": "Brightwater Paper Supply LLC",
+        "supplier_name": "Quillmoor Paper Supply LLC",
         "supplier_tax_id": "00-0000000",
         "supplier_address": "412 Fictional Ave, Springfield, OR 97477, USA",
         "supplier_country_code": "US",
         "buyer_name": "Example Buyer Inc.",
         "buyer_tax_id": None,
-        "invoice_number": "BW-1042",
+        "invoice_number": "QM-1042",
         "related_invoice_number": None,
         "invoice_date": "11/18/2026",
         "due_date": "12/18/2026",

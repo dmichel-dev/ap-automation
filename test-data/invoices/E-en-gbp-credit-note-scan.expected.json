@@ -1,0 +1,21 @@
+{
+  "id": "E-en-gbp-credit-note-scan",
+  "file": "E-en-gbp-credit-note-scan.png",
+  "email": {
+    "subject": "Credit note CN-0042 – Thistlecombe Office Supplies",
+    "body": "Hello,\n\nPlease find attached our credit note CN-0042 (GBP 152.40) relating to invoice INV-8812.\n\nKind regards,\nThistlecombe Office Supplies (fictional test supplier)"
+  },
+  "expect": {
+    "status": "ready",
+    "reasons": [],
+    "document_type": "credit_note",
+    "invoice_number": "CN-0042",
+    "currency": "GBP",
+    "total": "-152.40",
+    "invoice_date": "2026-11-19",
+    "supplier_country": "GB",
+    "related_invoice_number": "INV-8812",
+    "min_lines": 2
+  },
+  "note": "Scanned image; amounts printed positive, stored negative. May fall below the provisional 0.85 confidence threshold: that would be a calibration finding for Day 3."
+}

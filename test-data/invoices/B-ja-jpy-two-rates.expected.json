@@ -1,0 +1,21 @@
+{
+  "id": "B-ja-jpy-two-rates",
+  "file": "B-ja-jpy-two-rates.pdf",
+  "email": {
+    "subject": "請求書送付のご案内（KS-2026-088）",
+    "body": "Example Buyer Inc. ご担当者様\n\nいつもお世話になっております。\n請求書（KS-2026-088、合計18,135円）を添付にてお送りいたします。\n\n株式会社架空商事（テスト用の架空企業）"
+  },
+  "expect": {
+    "status": "ready",
+    "reasons": [],
+    "document_type": "invoice",
+    "invoice_number": "KS-2026-088",
+    "currency": "JPY",
+    "total": "18135",
+    "invoice_date": "2026-11-20",
+    "due_date": "2026-12-31",
+    "supplier_country": "JP",
+    "min_lines": 3
+  },
+  "note": "CJK text, era-free CJK dates, zero-decimal currency, two tax rates truncated per rate."
+}

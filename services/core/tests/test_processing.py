@@ -16,7 +16,7 @@ from app.providers.base import ProviderError, ProviderResult
 from .conftest import base_annotation
 
 AUTH = {"Authorization": "Bearer test-token"}
-OCR_TEXT = "Brightwater Paper Supply LLC ... Total due: USD 641.24 (all amounts in $)"
+OCR_TEXT = "Quillmoor Paper Supply LLC ... Total due: USD 641.24 (all amounts in $)"
 
 
 class FakeProvider:
@@ -83,7 +83,7 @@ def test_log_contains_no_document_content(env):
     state, cfg = env
     post()
     text = str(q(cfg.database_url, "SELECT message, details FROM ap.processing_log"))
-    assert "Brightwater" not in text and "641.24" not in text
+    assert "Quillmoor" not in text and "641.24" not in text
 
 
 def test_same_source_is_idempotent(env):

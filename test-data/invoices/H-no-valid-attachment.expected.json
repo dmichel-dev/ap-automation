@@ -1,0 +1,17 @@
+{
+  "id": "H-no-valid-attachment",
+  "file": "H-delivery-note.docx",
+  "email": {
+    "subject": "Delivery note DN-77",
+    "body": "Hello,\n\nattached is the delivery note for today's delivery.\n\nRegards,\nThistlecombe Office Supplies (fictional test supplier)"
+  },
+  "expect": {
+    "no_invoice_row": true,
+    "log_message": "email without a valid invoice attachment",
+    "labels": [
+      "AP/Rejected",
+      "AP/Processed"
+    ]
+  },
+  "note": "Only a .docx: no invoice is created; the email is labelled and logged, never ignored."
+}

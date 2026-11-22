@@ -8,7 +8,7 @@ from app.validation import Duplicate, validate
 
 from .conftest import base_annotation
 
-OCR_TEXT = "Brightwater Paper Supply LLC ... Total due: USD 641.24 (all amounts in $)"
+OCR_TEXT = "Quillmoor Paper Supply LLC ... Total due: USD 641.24 (all amounts in $)"
 
 
 def check(ocr_avg=0.98, ocr_text=OCR_TEXT, duplicates=None, threshold=0.85, **overrides):

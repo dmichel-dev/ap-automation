@@ -157,7 +157,7 @@ def test_resolve_country(code, tax_id, expected):
 
 
 @pytest.mark.parametrize("a, b", [
-    ("Brightwater Paper Supply, LLC", "BRIGHTWATER PAPER SUPPLY LLC"),
+    ("Quillmoor Paper Supply, LLC", "QUILLMOOR PAPER SUPPLY LLC"),
     ("Société Fictive S.A.R.L.", "Societe Fictive SARL"),
     ("Kranich & Söhne GmbH", "Kranich and Söhne"),
     ("株式会社サクラ文具", "サクラ文具"),

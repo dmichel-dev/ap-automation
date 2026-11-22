@@ -1,0 +1,23 @@
+{
+  "id": "C-de-eur-wrong-total",
+  "file": "C-de-eur-wrong-total.pdf",
+  "email": {
+    "subject": "Rechnung RE-2026-0311 – Kranich & Söhne Feinmechanik",
+    "body": "Sehr geehrte Damen und Herren,\n\nanbei erhalten Sie unsere Rechnung RE-2026-0311.\n\nMit freundlichen Grüßen\nKranich & Söhne Feinmechanik GmbH (fiktiver Testlieferant)"
+  },
+  "expect": {
+    "status": "needs_review",
+    "reasons": [
+      "total_mismatch"
+    ],
+    "document_type": "invoice",
+    "invoice_number": "RE-2026-0311",
+    "currency": "EUR",
+    "total": "875.13",
+    "invoice_date": "2026-11-18",
+    "due_date": "2026-12-18",
+    "supplier_country": "DE",
+    "min_lines": 3
+  },
+  "note": "Printed total is 875,13 € but lines + 19 % VAT = 865,13 €; shipping is a table row."
+}

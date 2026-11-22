@@ -235,3 +235,6 @@ test-data/output/
 
 # Database backups (contain password hashes and invoice data)
 backups/
+
+# Local end-to-end run outputs
+test-data/results/*.json

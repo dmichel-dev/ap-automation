@@ -32,6 +32,7 @@ Intake channels ──► common invoice format ──► core checks ──► 
 
 ```bash
 cp .env.example .env        # then fill in the values (openssl rand -hex 32 for secrets)
+docker volume create ap-automation_pg17_data   # once: the database volume is external (protected from `down -v`)
 docker compose up -d --build
 open http://localhost:5678  # n8n
 ```

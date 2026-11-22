@@ -13,8 +13,12 @@ RUN pip install -r requirements.txt
 RUN useradd --system --uid 10001 core \
  && mkdir -p /data/files && chown -R core /data/files && chmod 700 /data/files
 
-# --- test image: adds pytest; source and tests are mounted by the core-test service
+# --- test image: adds pytest, PDF generation and Noto fonts (Latin, CJK; Arabic and
+# Devanagari for Day 4). Source and tests are mounted by the core-test service.
 FROM base AS test
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends fonts-noto-core fonts-noto-cjk \
+ && rm -rf /var/lib/apt/lists/*
 COPY requirements-dev.txt .
 RUN pip install -r requirements-dev.txt
 USER core

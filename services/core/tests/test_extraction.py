@@ -33,8 +33,8 @@ def test_clean_us_invoice():
     assert inv.invoice_date == date(2026, 11, 18) and inv.due_date == date(2026, 12, 18)
     assert inv.total == Decimal("641.24") and inv.lines[1].amount == Decimal("171.00")
     assert inv.taxes[0].rate == Decimal("8.5")
-    assert inv.normalized.invoice_number == "BW1042"
-    assert inv.normalized.supplier_name == "brightwater paper supply"
+    assert inv.normalized.invoice_number == "QM1042"
+    assert inv.normalized.supplier_name == "quillmoor paper supply"
     assert codes(inv) == []          # explicit 'USD' in the total wins over '$'
 
 
@@ -69,12 +69,12 @@ def test_ambiguous_date_canada_has_no_suggestion():
 
 
 def test_credit_note_amounts_are_negative():
-    inv = build(document_kind="credit_note", related_invoice_number="BW-1001")
+    inv = build(document_kind="credit_note", related_invoice_number="QM-1001")
     assert inv.document_type == "credit_note"
     assert inv.total == Decimal("-641.24") and inv.subtotal == Decimal("-591.00")
     assert inv.lines[0].amount == Decimal("-420.00") and inv.taxes[0].amount == Decimal("-50.24")
     assert inv.lines[0].quantity == Decimal("10")
-    assert inv.related_invoice_number == "BW-1001"
+    assert inv.related_invoice_number == "QM-1001"
 
 
 def test_credit_note_already_negative_is_kept():
@@ -132,9 +132,9 @@ def test_recorded_mistral_response_parses():
     data = json.loads((FIXTURES / "mistral_us_invoice.json").read_text())
     provider = MistralOcrProvider("dummy-key")
     result = provider.parse_response(data)
-    assert result.pages == 1 and "Brightwater" in result.ocr_text
+    assert result.pages == 1 and "Quillmoor" in result.ocr_text
     assert 0.9 < result.ocr_confidence_avg <= 1
-    assert result.annotation["invoice_number"] == "BW-1042"
+    assert result.annotation["invoice_number"] == "QM-1042"
     assert "word_confidence_scores" not in json.dumps(result.raw)
 
 
