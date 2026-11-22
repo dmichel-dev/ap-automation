@@ -218,3 +218,26 @@ def test_credit_note_with_discount_balances():
                           "amount": "21,00"}],
               subtotal="105,00", tax_total="21,00", total="126,00")
     assert v.status == "ready", v.reasons
+
+
+def test_withholding_repeated_as_adjustment_is_counted_once():
+    # Seen live (Spanish invoice D): IRPF returned as a tax line AND as an 'other' adjustment
+    v = check(currency="EUR", supplier_country_code="ES", ocr_text=OCR_TEXT + " EUR",
+              line_items=[{"kind": "item", "description": "Diseño", "quantity": "1", "unit_price": "1.560,00",
+                           "amount": "1.560,00", "tax_rate": None}],
+              adjustments=[{"kind": "other", "label": "Retención IRPF 15 %", "amount": "-234,00",
+                            "position": "after_tax"}],
+              tax_lines=[{"tax_type": "vat", "label": "IVA 21 %", "rate": "21 %", "taxable_base": "1.560,00",
+                          "amount": "327,60"},
+                         {"tax_type": "withholding", "label": "Retención IRPF 15 %", "rate": "15 %",
+                          "taxable_base": None, "amount": "-234,00"}],
+              subtotal="1.560,00", tax_total=None, total="1.653,60")
+    assert v.status == "ready", v.reasons
+    assert [i.code for i in v.info] == ["adjustment_repeats_tax"]
+
+
+def test_shipping_equal_to_a_tax_amount_is_kept():
+    # Only 'other' adjustments are deduplicated: real shipping that happens to equal the tax stays
+    v = check(adjustments=[{"kind": "shipping", "label": "Shipping", "amount": "50.24", "position": "after_tax"}],
+              total="USD 691.48")
+    assert v.status == "ready" and v.info == [], (v.reasons, v.info)

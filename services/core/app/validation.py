@@ -20,7 +20,7 @@ REQUIRED_FIELDS = ("supplier_name", "invoice_number", "invoice_date", "currency"
 MIN_READABLE_CHARS = 20
 
 # Normalization issues that are information only (don't block auto-posting)
-INFO_ISSUES = {"currency_from_country"}
+INFO_ISSUES = {"currency_from_country", "adjustment_repeats_tax"}
 
 
 @dataclass

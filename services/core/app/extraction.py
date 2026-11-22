@@ -158,6 +158,20 @@ def build_common_invoice(result: ProviderResult, provider_name: str) -> CommonIn
         # Withholding tax is deducted from the amount payable
         if t.tax_type == "withholding" and t.amount is not None:
             t.amount = -abs(t.amount)
+    # A tax (often a withholding) sometimes comes back twice: as a tax line and as an
+    # 'other' totals adjustment. Counting both would break the totals check, so an 'other'
+    # adjustment with the same amount as a tax line is dropped, and the drop is recorded.
+    tax_amounts = {abs(t.amount) for t in taxes if t.amount is not None}
+    kept = []
+    for li in lines:
+        from_adjustments = li.line_no > len(data.line_items)     # table rows are never dropped
+        if (from_adjustments and li.kind == "other" and li.amount is not None
+                and abs(li.amount) in tax_amounts):
+            issues.add("adjustment_repeats_tax", f"lines[{li.line_no}]",
+                       f"'{li.description}' ({li.amount}) repeats a tax line; counted once, as tax")
+            continue
+        kept.append(li)
+    lines = [li.model_copy(update={"line_no": i}) for i, li in enumerate(kept, start=1)]
     subtotal = _amount(data.subtotal, currency, "subtotal", issues)
     tax_total = _amount(data.tax_total, currency, "tax_total", issues)
     total = _amount(data.total, currency, "total", issues)

@@ -41,6 +41,8 @@ Sign rules:
 - Withholding tax is negative.
 - For credit notes, everything is flipped after that.
 
+Counted once: when the model returns a tax (usually a withholding such as Spanish IRPF) both as a tax line and as an `other` totals adjustment with the same amount, the adjustment is dropped and recorded as the info issue `adjustment_repeats_tax`. Only `other` adjustments are affected; table rows and real discount/shipping/fee/rounding lines are never dropped. Found by the end-to-end test on 2026-11-22.
+
 | Check | Formula | Tolerance |
 |---|---|---|
 | Lines | `subtotal` = all before-tax lines, **or** = item lines only (subtotal printed before the discount) | 1 minor unit × lines |
