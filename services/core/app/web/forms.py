@@ -21,22 +21,10 @@ class FormError(ValueError):
 
 
 ACTIONS: tuple[review.Action, ...] = get_args(review.Action)
-# Reasons for which the page asks the reviewer to pick the account themselves (no supplier default
-# pre-filled): an item that may be a fixed asset needs an explicit expense-or-asset choice
-ACCOUNT_CHOICE_REASONS = frozenset({"possible_capex"})
+# The page's words for the core's review.AccountRequired (a possible fixed asset approved without an account)
 NO_ACCOUNT_CHOSEN = (
     "Possible fixed asset: choose an expense account or a fixed asset account, then approve. Nothing was saved."
 )
-
-
-def account_choice_required(item: dict[str, Any]) -> bool:
-    return bool({r["code"] for r in item["reasons"]} & ACCOUNT_CHOICE_REASONS)
-
-
-def require_account(form: FormData, item: dict[str, Any]) -> None:
-    """The page left the account empty on purpose: an approval must carry the reviewer's choice."""
-    if account_choice_required(item) and not text(form, "account_id"):
-        raise FormError(NO_ACCOUNT_CHOSEN)
 
 
 def chosen_action(form: FormData) -> review.Action:

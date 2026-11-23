@@ -10,6 +10,7 @@ from app.main import app
 from fastapi.testclient import TestClient
 
 from .conftest import AUTH, QUILLMOOR_KEY, known_supplier, query, seed_accounts
+from .review_samples import SAMPLES, supplier_key
 from .test_processing import FakeProvider, env, post  # noqa: F401  (env is a fixture)
 
 OPEN_BOOKS = postings.BookClose(known=True)
@@ -365,3 +366,24 @@ def test_review_list_filters_by_scope(new):
 
 def test_unknown_review_item_is_404(cfg):
     assert c.get("/review/items/999999", headers=AUTH).status_code == 404
+
+
+def test_a_possible_fixed_asset_is_never_approved_on_the_default_account(env, cfg):  # noqa: F811
+    """The supplier has a default account, but an item that may be a fixed asset needs an explicit choice,
+    whoever approves it (the machine API here, the review page in test_review_page.py)."""
+    pellingham = next(s for s in SAMPLES if s.key == "pellingham")
+    known_supplier(cfg.database_url, supplier_key(pellingham))
+    env[0]["provider"] = FakeProvider(**pellingham.annotation)
+    body = post().json()
+    assert codes(body) == ["possible_capex"]
+    r = act(body["review_id"], "approve", reviewer="david")
+    assert r.status_code == 409 and "may be a fixed asset" in r.json()["message"]
+    assert item(body["review_id"])["status"] == "open"
+    assert q(cfg, "SELECT status, expense_account_id FROM ap.invoices")[0] == {
+        "status": "needs_review",
+        "expense_account_id": None,
+    }
+    assert q(cfg, "SELECT 1 FROM ap.processing_log WHERE step = 'review'") == []
+    r = act(body["review_id"], "approve", reviewer="david", account_id="40", set_default=False)
+    assert r.status_code == 200 and r.json()["decision"]["account_id"] == "40"
+    assert r.json()["decision"]["account_source"] == "reviewer"

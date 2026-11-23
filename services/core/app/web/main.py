@@ -387,7 +387,7 @@ def _item_page(
         ),
         chosen=chosen,
         correctable=forms.CORRECTABLE,
-        choose_account=forms.account_choice_required(data),
+        choose_account=review.account_choice_required(data),
         error=message.get("error"),
         done=message.get("done"),
     )
@@ -448,7 +448,6 @@ def _apply(conn: db.Conn, viewer: Viewer, review_id: int, action: review.Action,
         _, file_path = review.reject(conn, review_id, forms.rejection(form, viewer), viewer.scope)
         return file_path
     kind: Literal["approve", "verify"] = "verify" if action == "verify" else "approve"
-    forms.require_account(form, review.detail(conn, review_id, viewer.scope))
     review.approve(conn, review_id, forms.decision(form, viewer), kind, viewer.scope)
     return None
 
@@ -457,6 +456,9 @@ def _decide(s: WebSettings, viewer: Viewer, review_id: int, action: review.Actio
     with _connect(s) as conn:
         try:
             file_path = _apply(conn, viewer, review_id, action, form)
+        except review.AccountRequired:
+            conn.rollback()  # a field left empty on the page: said in the page's words
+            return _item_page(s, conn, viewer, review_id, 422, action, error=forms.NO_ACCOUNT_CHOSEN)
         except (Conflict, forms.FormError) as e:
             conn.rollback()
             status = 422 if isinstance(e, forms.FormError) else 409

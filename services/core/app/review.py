@@ -32,6 +32,9 @@ from .validation import DUPLICATE_DATE_WINDOW_DAYS, DUPLICATE_RULES, posting_blo
 Action = Literal["approve", "verify", "correct", "reject"]
 Scope = Literal["live", "e2e", "demo"]
 FRAUD_CODES = frozenset({"possible_bank_detail_change"})
+# Reasons whose approval must name the account (never the supplier's default by fallback): an item
+# that may be a fixed asset needs an explicit expense-or-asset choice
+ACCOUNT_CHOICE_CODES = frozenset({"possible_capex"})
 MIN_VERIFY_NOTE = 10  # "how was it verified" must say something
 MIN_REJECT_NOTE = 3
 
@@ -42,6 +45,14 @@ class Blocked(Conflict):
     def __init__(self, problems: list[Issue]) -> None:
         super().__init__("correct these first: " + ", ".join(p.code for p in problems))
         self.problems = problems
+
+
+class AccountRequired(Conflict):
+    """The decision must name the account: the supplier's default isn't used for this item."""
+
+
+def account_choice_required(item: db.Row) -> bool:
+    return bool({r["code"] for r in item["reasons"]} & ACCOUNT_CHOICE_CODES)
 
 
 class Decision(BaseModel):
@@ -375,6 +386,8 @@ def approve(
     blockers, tax_mode = posting_blockers(stored_invoice(conn, inv))
     if blockers:
         raise Blocked(blockers)
+    if d.account_id is None and account_choice_required(item):
+        raise AccountRequired("choose the account: this item may be a fixed asset (expense or fixed asset account)")
     account, source = _choose_account(conn, inv, d.account_id)
     conn.execute(
         """UPDATE invoices SET status = 'ready', expense_account_id = %s, expense_account_source = %s, tax_mode = %s
