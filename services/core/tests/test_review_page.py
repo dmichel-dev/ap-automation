@@ -466,3 +466,76 @@ def test_the_environment_defaults_to_production_and_takes_nothing_else(clean_db)
         WebSettings(
             ap_database_url=clean_db, review_listener="internal", review_origins=INTERNAL, review_environment="staging"
         )
+
+
+# =====================================================================================
+# What approving still needs: an account on a possible fixed asset, the dates accepted
+# =====================================================================================
+def account_select(page):
+    start = page.index('id="account_id"') - 60
+    return page[page.index("<select", start) : page.index("</select>", start)]
+
+
+def test_a_possible_fixed_asset_starts_with_no_account_chosen(samples):
+    c, _url, ids = samples  # Pellingham has a default account (Supplies): it isn't pre-filled here
+    page = page_of(c, ids["pellingham"])
+    select = account_select(page)
+    assert 'data-required-for="approve"' in select
+    assert '<option value="" selected>Choose an account</option>' in select
+    assert select.count("selected") == 1  # the placeholder only
+    assert "Choose an expense account or a fixed asset account." in page
+    assert '<button class="go" data-needs-action>' in page  # disabled by the script until chosen
+
+
+def test_other_items_keep_the_supplier_default_pre_filled(samples):
+    c, _url, ids = samples
+    select = account_select(page_of(c, ids["quillmoor"]))
+    assert '<option value="20" selected>Supplies</option>' in select and "data-required-for" not in select
+
+
+def test_approving_a_possible_fixed_asset_without_an_account_is_refused(samples):
+    c, url, ids = samples  # what a browser without scripts sends
+    data = {"csrf": csrf(c), "action": "approve", "approve.account_id": "", "approve.default": "keep"}
+    r = c.post(f"/items/{ids['pellingham']}", data=data)
+    assert r.status_code == 422
+    assert "Possible fixed asset: choose an expense account or a fixed asset account, then approve." in r.text
+    assert ("approve", "checked") in radios(r.text)
+    row = review_row(url, ids["pellingham"])
+    assert row["status"] == "open"
+    assert q(url, "SELECT expense_account_id FROM ap.invoices WHERE id = %s", row["invoice_id"])[0] == {
+        "expense_account_id": None
+    }
+
+
+def test_a_possible_fixed_asset_is_approved_on_the_account_chosen(samples):
+    c, url, ids = samples
+    data = {"csrf": csrf(c), "action": "approve", "approve.account_id": "40", "approve.default": "keep"}
+    assert c.post(f"/items/{ids['pellingham']}", data=data).status_code == 303
+    row = review_row(url, ids["pellingham"])
+    assert row["status"] == "approved" and row["decision"]["account_id"] == "40"
+    assert q(url, "SELECT 1 FROM ap.supplier_defaults WHERE expense_account_id = '40'") == []  # a one-off choice
+
+
+def test_ambiguous_dates_say_exactly_what_to_do(samples):
+    c, _url, ids = samples
+    page = page_of(c, ids["nubeazul"])
+    assert "Approving now would be refused" not in page
+    assert escape("Tick “Accept the suggested reading of the dates” below, or use Correct the data.") in page
+    found = re.search(r'<input type="checkbox" name="approve\.accept_suggested_dates"[^>]*>', page)
+    assert found
+    box = found.group(0)
+    assert 'data-required-for="approve"' in box and 'aria-describedby="dates-needed"' in box
+
+
+def test_ambiguous_dates_not_accepted_are_refused_and_accepted_are_approved(samples):
+    c, url, ids = samples
+    data = {"csrf": csrf(c), "action": "approve", "approve.account_id": "20", "approve.default": "keep"}
+    assert c.post(f"/items/{ids['nubeazul']}", data=data).status_code == 409  # the core's refusal
+    assert review_row(url, ids["nubeazul"])["status"] == "open"
+    r = c.post(f"/items/{ids['nubeazul']}", data=data | {"approve.accept_suggested_dates": "1"})
+    row = review_row(url, ids["nubeazul"])  # accepting a reading counts as a correction, then approved
+    assert r.status_code == 303 and row["status"] == "corrected"
+    assert q(url, "SELECT status, invoice_date::text FROM ap.invoices WHERE id = %s", row["invoice_id"])[0] == {
+        "status": "ready",
+        "invoice_date": "2026-04-03",
+    }

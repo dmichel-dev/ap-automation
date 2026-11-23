@@ -387,6 +387,7 @@ def _item_page(
         ),
         chosen=chosen,
         correctable=forms.CORRECTABLE,
+        choose_account=forms.account_choice_required(data),
         error=message.get("error"),
         done=message.get("done"),
     )
@@ -447,6 +448,7 @@ def _apply(conn: db.Conn, viewer: Viewer, review_id: int, action: review.Action,
         _, file_path = review.reject(conn, review_id, forms.rejection(form, viewer), viewer.scope)
         return file_path
     kind: Literal["approve", "verify"] = "verify" if action == "verify" else "approve"
+    forms.require_account(form, review.detail(conn, review_id, viewer.scope))
     review.approve(conn, review_id, forms.decision(form, viewer), kind, viewer.scope)
     return None
 

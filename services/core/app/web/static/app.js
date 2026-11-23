@@ -148,11 +148,18 @@ function accountCombobox(select) {
 document.addEventListener("DOMContentLoaded", () => {
   for (const select of document.querySelectorAll("select[data-combobox]")) accountCombobox(select);
 
-  // A panel without a chosen action (possible fraud: nothing is pre-selected) can't be confirmed.
-  // Without scripts the button stays enabled and the server refuses the empty choice.
+  // The confirm button waits for what the chosen action still needs: an action at all (possible
+  // fraud: nothing is pre-selected), and every field marked data-required-for="<action>" (an account
+  // to choose, the suggested dates to accept). Without scripts the button stays enabled and the
+  // server refuses what is missing.
+  const filled = (el) => (el.type === "checkbox" ? el.checked : el.value !== "");
   for (const button of document.querySelectorAll("button[data-needs-action]")) {
     const form = button.form;
-    const update = () => { button.disabled = !form.querySelector('input[name="action"]:checked'); };
+    const update = () => {
+      const chosen = form.querySelector('input[name="action"]:checked');
+      const needed = chosen ? [...form.querySelectorAll(`[data-required-for~="${chosen.value}"]`)] : [];
+      button.disabled = !chosen || !needed.every(filled);
+    };
     form.addEventListener("change", update);
     update();
   }

@@ -168,16 +168,22 @@
 
       {% if decide in item.actions %}
       <div class="fields fields-{{ decide }}">
-        {% if item.blockers %}
+        {# Blockers the suggested reading of the dates settles (a date left empty because it reads two ways) #}
+        {% set by_tick = inv.dates_ambiguous and inv.invoice_date_suggested %}
+        {% set date_blockers = item.blockers | selectattr("code", "equalto", "missing_field") | selectattr("field", "in", dates) | list if by_tick else [] %}
+        {% set other_blockers = item.blockers | reject("in", date_blockers) | list %}
+        {% if other_blockers %}
         <div class="note">
           <p><strong>Approving now would be refused.</strong> Correct these first:</p>
-          <ul>{% for b in item.blockers %}<li>{{ (b.code | explain).sentence }}{% if b.get("message") %} <span class="muted">{{ b.message }}</span>{% endif %}</li>{% endfor %}</ul>
-          {% if inv.dates_ambiguous and inv.invoice_date_suggested %}<p class="hint">A date that reads two ways is settled by accepting the suggested reading below.</p>{% endif %}
+          <ul>{% for b in other_blockers %}<li>{{ (b.code | explain).sentence }}{% if b.get("message") %} <span class="muted">{{ b.message }}</span>{% endif %}</li>{% endfor %}</ul>
         </div>
         {% endif %}
+        {% if date_blockers %}
+        <p class="note" id="dates-needed">The invoice date reads two ways. Tick “Accept the suggested reading of the dates” below, or use Correct the data.</p>
+        {% endif %}
         <label for="account_id">Expense account</label>
-        <select name="{{ decide }}.account_id" id="account_id" data-combobox aria-describedby="account-hint">
-          {% set chosen_account = inv.expense_account_id or (item.supplier_default_account.id if item.supplier_default_account else "") %}
+        <select name="{{ decide }}.account_id" id="account_id" data-combobox aria-describedby="account-hint"{% if choose_account %} data-required-for="{{ decide }}"{% endif %}>
+          {% set chosen_account = "" if choose_account else (inv.expense_account_id or (item.supplier_default_account.id if item.supplier_default_account else "")) %}
           {% if not chosen_account %}<option value="" selected>Choose an account</option>{% endif %}
           {% for label, group in account_groups %}
           <optgroup label="{{ label }}">
@@ -185,7 +191,7 @@
           </optgroup>
           {% endfor %}
         </select>
-        <p class="hint" id="account-hint">Grouped by type, with the supplier's default first.</p>
+        <p class="hint" id="account-hint">{% if choose_account %}Choose an expense account or a fixed asset account.{% else %}Grouped by type, with the supplier's default first.{% endif %}</p>
         <fieldset class="sub">
           <legend>Supplier's default account</legend>
           {% if item.supplier_default_account %}
@@ -197,7 +203,7 @@
           {% endif %}
         </fieldset>
         {% if inv.dates_ambiguous and inv.invoice_date_suggested %}
-        <label class="opt"><input type="checkbox" name="{{ decide }}.accept_suggested_dates" value="1"> Accept the suggested reading of the dates ({{ inv.invoice_date_suggested }})</label>
+        <label class="opt"><input type="checkbox" name="{{ decide }}.accept_suggested_dates" value="1"{% if date_blockers %} data-required-for="{{ decide }}" aria-describedby="dates-needed"{% endif %}> Accept the suggested reading of the dates ({{ inv.invoice_date_suggested }})</label>
         {% endif %}
         <label for="{{ decide }}-note">{{ "How was it confirmed? Required" if decide == "verify" else "Note, optional" }}</label>
         <textarea name="{{ decide }}.note" id="{{ decide }}-note" maxlength="1000" rows="2"></textarea>
