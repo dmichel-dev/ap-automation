@@ -1,10 +1,13 @@
 # Runs on every push and pull request: lint, workflow check, type check, tests.
+# Skipped when only documentation changed; a new push cancels the run still going on the same ref.
 # The tests run in the core's test image against a throwaway PostgreSQL; live OCR tests are skipped.
 name: CI
 
 on:
   push:
+    paths-ignore: ["**.md", "docs/**", "LICENSE"]
   pull_request:
+    paths-ignore: ["**.md", "docs/**", "LICENSE"]
 
 permissions:
   contents: read
