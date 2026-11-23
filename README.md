@@ -17,8 +17,8 @@ Intake channels ──► common invoice format ──► core checks ──► 
 - **Channels** are pluggable. Each one hands files to the same core endpoint.
 - **The LLM only extracts data.** Every approval decision is deterministic, unit-tested code, which protects against prompt injection hidden in uploaded documents.
 - **n8n orchestrates, the Python core decides.** n8n runs the triggers and the calls (Gmail, QuickBooks, Plaid) and routes on the core's answers. Every rule lives in the core, typed and tested: which email attachments to process, validation and routing, the content of each bill, what QuickBooks' answers mean (reuse a vendor or create it, a duplicate bill), and whether a failure is retried or sent to review.
-- Anything uncertain (failed check, ambiguous date, low confidence, possible duplicate, a bank payment that fits several bills) goes to **human review**. Nothing is guessed.
-- Details: [invoice format](docs/common-invoice-format.md), [checks and routing](docs/validation.md), [data model](docs/data-model.md), [bank matching](docs/matching.md), [Plaid and QuickBooks facts verified live](docs/integrations.md), [operations](docs/operations.md).
+- Anything uncertain (failed check, ambiguous date, low confidence, possible duplicate, a supplier's first invoice, a bank payment that fits several bills) goes to **human review**. Nothing is guessed, including the expense account: each supplier's account is chosen once by a person, then reused.
+- Details: [invoice format](docs/common-invoice-format.md), [checks and routing](docs/validation.md), [human review](docs/review.md), [data model](docs/data-model.md), [bank matching](docs/matching.md), [Plaid and QuickBooks facts verified live](docs/integrations.md), [operations](docs/operations.md).
 - **Safe to re-run.** Every write to QuickBooks is reserved in the database first, searched before it is created and sent with a fixed request ID, so a crash or a retry never creates a second bill or payment.
 
 ## Stack
@@ -48,7 +48,7 @@ Three levels, from fastest to most realistic:
 
 | Level | What it covers | Command |
 |---|---|---|
-| Unit + integration (347) | Normalization, validation, totals, dates, duplicates, email screening, posting content and decisions, matching, the full pipeline on a test database | `docker compose run --rm core-test` |
+| Unit + integration (379) | Normalization, validation, totals, dates, duplicates, email screening, posting content and decisions, matching, the full pipeline on a test database | `docker compose run --rm core-test` |
 | Live provider (3) | Real Mistral OCR calls on a fictional invoice | `docker compose run --rm core-test pytest -m live` |
 | End to end (12 emails) | Gmail → n8n → core → database → Gmail labels → QuickBooks → bank matching | send the test set, then `scripts/run_e2e.sh --since <start time>` |
 
@@ -80,7 +80,7 @@ Every commit runs [pre-commit](https://pre-commit.com) (`.pre-commit-config.yaml
 
 ## Updating the n8n workflow
 
-The workflows are generated from code (`n8n/build_email_intake.py`, `n8n/build_post_qbo.py`, `n8n/build_bank_sync.py`) and committed without credentials. After a change made in the n8n editor, `scripts/export_workflow.sh` exports the live workflows, strips credential IDs and instance data, refuses to write a file if a secret scan matches, and shows the diff.
+The workflows are generated from code (`n8n/build_email_intake.py`, `n8n/build_post_qbo.py`, `n8n/build_bank_sync.py`, `n8n/build_sync_reference.py`) and committed without credentials. After a change made in the n8n editor, `scripts/export_workflow.sh` exports the live workflows, strips credential IDs and instance data, refuses to write a file if a secret scan matches, and shows the diff.
 
 ## Repository layout
 
@@ -105,3 +105,13 @@ docs/                Architecture and data-format documentation
 - [ ] Day 5: VPS deployment (Caddy, HTTPS)
 - [ ] Day 6: Public demo page
 - [ ] Day 7: Video, architecture diagram, case study
+
+**After the 7 days (documented, not built):**
+
+- **Coding rules and AI-suggested accounts:** a rules table (supplier, keywords, amount → account), then account suggestions from past decisions. A suggestion is only shown pre-selected; a person still confirms it, and approval stays deterministic.
+- **Per-line account coding** (today: one account per invoice).
+- **Approval thresholds and an approver role:** above an amount, a second person approves after the reviewer.
+- **Segregation of duties:** whoever sets up a supplier or its bank details can't approve its invoices or payments; enforced by the roles in the database.
+- **AP ageing report:** open bills by due-date bucket (current, 1–30, 31–60, 61–90, 90+ days), per supplier and currency.
+- **Purchase orders and 3-way matching:** invoice ↔ PO ↔ goods receipt, with quantity and price tolerances.
+- **Early-payment discounts:** read terms such as "2/10 net 30" and flag bills worth paying early.

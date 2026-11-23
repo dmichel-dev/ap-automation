@@ -34,6 +34,7 @@ from nodes import (
     qbo_call,
     qbo_send,
     set_node,
+    stop,
     switch_node,
     workflow,
 )
@@ -48,17 +49,6 @@ PASS_THROUGH = "status_code: $json.statusCode ?? 0, body: $json.body ?? null"
 
 def qbo(name: str, pos: list[int], method: str, path: str, query: dict[str, str] | None = None) -> Node:
     return qbo_call(name, pos, method, "={{ " + MATCHING + ".qbo_base }}" + path, MATCHING + ".minorversion", query)
-
-
-def stop(name: str, pos: list[int], message: str) -> Node:
-    """Ends the run as failed (visible in the executions list; Day 3 adds the alert)."""
-    return {
-        "name": name,
-        "type": "n8n-nodes-base.stopAndError",
-        "typeVersion": 1,
-        "position": pos,
-        "parameters": {"errorMessage": "={{ " + message + " }}"},
-    }
 
 
 def _trigger_nodes() -> list[Node]:

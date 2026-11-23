@@ -26,6 +26,9 @@ All checks are deterministic Python ([`validation.py`](../services/core/app/vali
 | No line items | `no_line_items` | review |
 | Totals (below) | `lines_mismatch`, `tax_mismatch`, `total_mismatch` | review |
 | Same supplier + document type + number, different file | `possible_duplicate` | review |
+| Same supplier + document type + total + currency, invoice dates within 7 days, **another number** | `possible_duplicate` | review (the same bill resent with a new number, or a misread number) |
+| Supplier not known yet (first invoice) | `new_vendor` | review: is it a genuine supplier? (supplier onboarding control) |
+| Supplier has no default account | `expense_account_missing` | review: the reviewer chooses the account, saved as the supplier's default |
 | Confidence below the threshold | `low_confidence`, `no_ocr_confidence` | review |
 | Service period ends before it starts | `service_period_inverted` | review |
 | Service period ends before the month of the invoice date (cut-off), material | `cutoff_prior_period` | review |
@@ -34,6 +37,10 @@ All checks are deterministic Python ([`validation.py`](../services/core/app/vali
 | At posting: invoice date or end of service period on or before the book close date | `period_closed` | posting review (nothing is posted into a closed period) |
 
 `currency_from_country` (e.g. `$` read as USD for a US supplier) and a non-material `cutoff_prior_period` are information only, stored in `checks.info`.
+
+**Known supplier:** it has a default account, or it is linked to a QuickBooks vendor (`vendor_links`), or **exactly one** active QuickBooks vendor has the same normalized name (legal forms such as LLC or SARL removed, our `(EUR)` currency suffix ignored). Name matching is exact on purpose: a fuzzy match would let a look-alike name ("Quilmoor Paper") pass a control meant to catch it. Two QuickBooks vendors with the same name count as unknown.
+
+A supplier that is known but has no default account (e.g. a QuickBooks vendor, or a supplier posted before this rule existed) gets only `expense_account_missing`, once. Decisions and their rules: [review.md](review.md).
 
 ## Company accounting policy settings
 

@@ -38,6 +38,7 @@ def make_invoice(
     day=date(2026, 11, 18),
     due=date(2026, 12, 18),
     with_file=True,
+    account="20",  # Supplies: the account chosen for the invoice (None: none chosen)
 ):
     inv_id = str(uuid.uuid4())
     rel = f"2026/11/{inv_id}.pdf" if with_file else None
@@ -48,9 +49,10 @@ def make_invoice(
         cfg,
         """INSERT INTO ap.invoices (id, channel, source_ref, file_name, file_mime_type, file_size_bytes,
                   file_sha256, file_path, document_type, invoice_number, invoice_number_norm, invoice_date, due_date,
-                  supplier_name, supplier_name_norm, currency, total, status, tax_mode)
+                  supplier_name, supplier_name_norm, currency, total, status, tax_mode,
+                  expense_account_id, expense_account_source)
                 VALUES (%s, 'email', %s, 'invoice.pdf', 'application/pdf', 100, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, 'exclusive')""",
+                        %s, %s, %s, 'exclusive', %s, %s)""",
         inv_id,
         f"test:{inv_id}",
         hashlib.sha256(inv_id.encode()).hexdigest(),
@@ -65,6 +67,8 @@ def make_invoice(
         currency,
         D(total),
         status,
+        account,
+        "supplier_default" if account else None,
     )
     for i, a in enumerate(lines, start=1):
         sql(

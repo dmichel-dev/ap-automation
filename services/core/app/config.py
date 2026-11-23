@@ -23,7 +23,6 @@ class Settings(BaseSettings):
     # Accounting (QuickBooks Online). Account IDs are the sandbox defaults; see docs/integrations.md
     qbo_api_host: str = "https://sandbox-quickbooks.api.intuit.com"
     qbo_realm_id: str = ""  # QuickBooks company ID (not a secret, but kept out of git)
-    qbo_expense_account_id: str = "20"  # Supplies
     qbo_withholding_account_id: str = ""  # liability for taxes withheld at source (e.g. IRPF)
     qbo_tax_recoverable_account_id: str = ""  # only if a tax rule is "recoverable"
     tax_treatment_file: str = ""  # default: app/tax_treatment.json

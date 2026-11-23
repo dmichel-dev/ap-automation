@@ -2,18 +2,31 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
+from uuid import UUID
 
 import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from .models import CommonInvoice, Issue
-from .validation import Duplicate, Validation
+from .validation import DUPLICATE_DATE_WINDOW_DAYS, Duplicate, SupplierStatus, Validation
 
 Row = dict[str, Any]
 Conn = psycopg.Connection[Row]  # every connection returns rows as dicts
+
+
+def jsonable(value: Any) -> Any:
+    """DB values → JSON-safe (Decimal as an exact string, dates as ISO 8601), recursively."""
+    if isinstance(value, dict):
+        return {k: jsonable(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [jsonable(v) for v in value]
+    if isinstance(value, (Decimal, UUID)):
+        return str(value)
+    return value.isoformat() if isinstance(value, (date, datetime)) else value
 
 
 def connect(url: str) -> Conn:
@@ -56,18 +69,56 @@ def supplier_key(inv: CommonInvoice) -> str | None:
     return inv.normalized.supplier_tax_id or inv.normalized.supplier_name
 
 
-def find_possible_duplicates(conn: Conn, inv: CommonInvoice) -> list[Duplicate]:
+def find_possible_duplicates(conn: Conn, inv: CommonInvoice, exclude_id: str | None = None) -> list[Duplicate]:
+    """Earlier documents of the same supplier and type (rejected ones don't count) with
+    - the same number (same_number), or
+    - the same total and currency, dated within DUPLICATE_DATE_WINDOW_DAYS, and a different number
+      (same_amount_near_date: the same bill sent again with a new number, or a typo in the number)."""
     key, number = supplier_key(inv), inv.normalized.invoice_number
-    if not key or not number or not inv.document_type:
+    if not key or not inv.document_type:
         return []
     rows = conn.execute(
-        """SELECT id, status FROM invoices
-            WHERE supplier_key = %s AND document_type = %s AND invoice_number_norm = %s
-              AND status <> 'rejected'
+        """SELECT id, status,
+                  CASE WHEN invoice_number_norm = %(number)s THEN 'same_number' ELSE 'same_amount_near_date' END AS rule
+             FROM invoices
+            WHERE supplier_key = %(key)s AND document_type = %(type)s AND status <> 'rejected'
+              AND id IS DISTINCT FROM %(exclude)s::uuid
+              AND (invoice_number_norm = %(number)s
+                   OR (%(total)s::numeric IS NOT NULL AND total = %(total)s AND currency = %(currency)s
+                       AND invoice_date BETWEEN %(day)s::date - %(days)s AND %(day)s::date + %(days)s
+                       AND invoice_number_norm IS DISTINCT FROM %(number)s))
             ORDER BY created_at""",
-        (key, inv.document_type, number),
+        {
+            "key": key,
+            "type": inv.document_type,
+            "number": number,
+            "total": inv.total,
+            "currency": inv.currency,
+            "day": inv.invoice_date,
+            "days": DUPLICATE_DATE_WINDOW_DAYS,
+            "exclude": exclude_id,
+        },
     ).fetchall()
-    return [Duplicate(str(r["id"]), r["status"]) for r in rows]
+    return [Duplicate(str(r["id"]), r["status"], r["rule"]) for r in rows]
+
+
+def supplier_status(conn: Conn, inv: CommonInvoice) -> SupplierStatus:
+    """Known supplier (default account, vendor link, or one active accounting vendor with the same
+    normalized name) and its default account. Two vendors with the same name: not known (no guess)."""
+    key = supplier_key(inv)
+    if not key:
+        return SupplierStatus(known=False)
+    default = conn.execute(
+        "SELECT expense_account_id FROM supplier_defaults WHERE supplier_key = %s", (key,)
+    ).fetchone()
+    account = default["expense_account_id"] if default else None
+    if account:
+        return SupplierStatus(True, "supplier_default", account)
+    if conn.execute("SELECT 1 FROM vendor_links WHERE supplier_key = %s LIMIT 1", (key,)).fetchone():
+        return SupplierStatus(True, "vendor_link")
+    name = inv.normalized.supplier_name
+    same_name = one(conn, "SELECT count(*) AS n FROM qbo_vendors WHERE active AND name_norm = %s", (name,))["n"]
+    return SupplierStatus(True, "accounting_vendor_name") if name and same_name == 1 else SupplierStatus(False)
 
 
 def _reasons(items: list[Issue]) -> Jsonb:
@@ -93,7 +144,9 @@ def insert_invoice(
     execution_id: str | None,
     confidence_threshold: float,
     duplicate_of: str | None = None,
+    expense_account_id: str | None = None,
 ) -> None:
+    """expense_account_id: the supplier's default account, recorded on a ready invoice (audit trail)."""
     v = validation
     row: dict[str, Any] = {
         "id": invoice_id,
@@ -117,6 +170,8 @@ def insert_invoice(
         "n8n_execution_id": execution_id,
         "duplicate_of": duplicate_of,
         "extraction": Jsonb(raw_extraction) if raw_extraction is not None else None,
+        "expense_account_id": expense_account_id,
+        "expense_account_source": "supplier_default" if expense_account_id else None,
     }
     if inv is not None:
         d = inv.dates

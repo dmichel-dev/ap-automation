@@ -133,15 +133,23 @@ def process(req: ProcessRequest, provider: ExtractionProvider, cfg: Config) -> P
 
     # --- 4: checks + persistence (one transaction)
     with db.connect(cfg.database_url) as conn:
-        dup_lock = f"dup:{db.supplier_key(inv)}:{inv.document_type}:{inv.normalized.invoice_number}"
-        db.lock(conn, source_lock, file_lock, dup_lock)
+        # One supplier at a time: the duplicate and new-supplier checks see each other's results
+        supplier_lock = f"supplier:{db.supplier_key(inv)}"
+        db.lock(conn, source_lock, file_lock, supplier_lock)
         if row := db.find_by_source(conn, req.channel, req.source_ref):  # lost a race
             return _existing(row)
         if same := db.find_same_file(conn, sha256):
             return _reject_duplicate_file(conn, req, prepared, sha256, received_at, same, cfg)
 
         duplicates = db.find_possible_duplicates(conn, inv)
-        v = validate(inv, confidence_threshold=cfg.confidence_threshold, duplicates=duplicates, policy=cfg.policy)
+        supplier = db.supplier_status(conn, inv)
+        v = validate(
+            inv,
+            confidence_threshold=cfg.confidence_threshold,
+            duplicates=duplicates,
+            policy=cfg.policy,
+            supplier=supplier,
+        )
         v.checks["info"] = [i.model_dump() for i in v.info]
         invoice_id = str(uuid.uuid4())
 
@@ -168,6 +176,7 @@ def process(req: ProcessRequest, provider: ExtractionProvider, cfg: Config) -> P
                 execution_id=req.execution_id,
                 confidence_threshold=cfg.confidence_threshold,
                 duplicate_of=duplicates[0].invoice_id if duplicates else None,
+                expense_account_id=supplier.default_account_id if v.status == "ready" else None,
             )
             review_id = db.open_review(conn, invoice_id, v.reasons) if v.status == "needs_review" else None
             db.log(

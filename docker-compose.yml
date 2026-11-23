@@ -95,7 +95,6 @@ services:
       # Day 2: accounting accounts (QuickBooks IDs) and matching rules, see docs/matching.md
       QBO_REALM_ID: ${QBO_REALM_ID:-}
       QBO_API_HOST: ${QBO_API_HOST:-https://sandbox-quickbooks.api.intuit.com}
-      QBO_EXPENSE_ACCOUNT_ID: ${QBO_EXPENSE_ACCOUNT_ID:-20}
       QBO_WITHHOLDING_ACCOUNT_ID: ${QBO_WITHHOLDING_ACCOUNT_ID:-}
       QBO_TAX_RECOVERABLE_ACCOUNT_ID: ${QBO_TAX_RECOVERABLE_ACCOUNT_ID:-}
       TAX_TREATMENT_FILE: ${TAX_TREATMENT_FILE:-}

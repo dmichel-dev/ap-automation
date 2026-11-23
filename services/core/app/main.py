@@ -31,7 +31,6 @@ from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Any, Literal
-from uuid import UUID
 
 import psycopg
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -39,7 +38,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
-from . import accounting, db, files, intake, matching, postings, processing
+from . import accounting, db, files, intake, matching, postings, processing, qbo_reference, review
 from .config import get_settings
 from .extraction import build_common_invoice
 from .models import CommonInvoice
@@ -152,7 +151,6 @@ def get_accounting_config() -> accounting.AccountingConfig:
         database_url=s.ap_database_url.get_secret_value(),
         storage_dir=Path(s.file_storage_dir),
         home_currency=s.home_currency,
-        expense_account_id=s.qbo_expense_account_id,
         withholding_account_id=s.qbo_withholding_account_id,
         tax_recoverable_account_id=s.qbo_tax_recoverable_account_id,
         tax_treatment=TaxTreatment.load(Path(s.tax_treatment_file) if s.tax_treatment_file else None),
@@ -190,15 +188,10 @@ def _conflict(_: Request, exc: accounting.Conflict) -> JSONResponse:
     return JSONResponse({"error": "conflict", "message": str(exc)}, status_code=409)
 
 
-def _json_value(v: Any) -> Any:
-    if isinstance(v, (Decimal, UUID)):
-        return str(v)
-    return v.isoformat() if isinstance(v, (date, datetime)) else v
-
-
 def _json(row: db.Row) -> JsonDict:
     """DB row → JSON-safe dict (Decimal as exact string, dates as ISO)."""
-    return {k: _json_value(v) for k, v in row.items()}
+    out: JsonDict = db.jsonable(row)
+    return out
 
 
 @app.get("/invoices/{invoice_id}/file", dependencies=Auth)
@@ -409,3 +402,83 @@ def match_payment_failed(match_id: int, body: FailureFacts, cfg: AcctCfg) -> Jso
 def match_payment(match_id: int, body: PaymentRecorded, cfg: AcctCfg) -> JsonDict:
     with db.connect(cfg.database_url) as conn:
         return _json(accounting.record_payment(conn, match_id, body.external_payment_id, body.execution_id))
+
+
+# =====================================================================================
+# Day 3: QuickBooks reference data (accounts, vendors) and review decisions
+# =====================================================================================
+@app.exception_handler(qbo_reference.SyncError)
+def _sync_error(_: Request, exc: qbo_reference.SyncError) -> JSONResponse:
+    return JSONResponse({"error": "sync_refused", "message": str(exc)}, status_code=422)
+
+
+@app.exception_handler(review.Blocked)
+def _blocked(_: Request, exc: review.Blocked) -> JSONResponse:
+    problems = [p.model_dump() for p in exc.problems]
+    return JSONResponse({"error": "blocked", "message": str(exc), "problems": problems}, status_code=409)
+
+
+@app.post("/reference/{entity}", dependencies=Auth)
+def store_reference(entity: Literal["accounts", "vendors"], body: Lookup, cfg: AcctCfg) -> JsonDict:
+    """A QuickBooks query response (all accounts or all vendors), passed through by the sync workflow."""
+    name: qbo_reference.Entity = "Account" if entity == "accounts" else "Vendor"
+    with db.connect(cfg.database_url) as conn:
+        return qbo_reference.store(conn, name, body.status_code, body.body)
+
+
+@app.get("/accounting/accounts", dependencies=Auth)
+def coding_accounts(cfg: AcctCfg) -> list[JsonDict]:
+    """The account picker: accounts an invoice can be coded to (from the last sync)."""
+    with db.connect(cfg.database_url) as conn:
+        return [_json(r) for r in qbo_reference.coding_accounts(conn)]
+
+
+@app.get("/review/items", dependencies=Auth)
+def review_items(
+    cfg: AcctCfg,
+    scope: review.Scope = "live",
+    status: Literal["open", "approved", "corrected", "rejected", "verified", "written_off", "all"] = "open",
+) -> list[JsonDict]:
+    with db.connect(cfg.database_url) as conn:
+        return review.list_items(conn, scope, status)
+
+
+@app.get("/review/items/{review_id}", dependencies=Auth)
+def review_item(review_id: int, cfg: AcctCfg) -> JsonDict:
+    with db.connect(cfg.database_url) as conn:
+        return review.detail(conn, review_id)
+
+
+@app.post("/review/items/{review_id}/approve", dependencies=Auth)
+def review_approve(review_id: int, body: review.Decision, cfg: AcctCfg) -> JsonDict:
+    with db.connect(cfg.database_url) as conn:
+        review.approve(conn, review_id, body)
+        conn.commit()
+        return review.detail(conn, review_id)
+
+
+@app.post("/review/items/{review_id}/verify", dependencies=Auth)
+def review_verify(review_id: int, body: review.Decision, cfg: AcctCfg) -> JsonDict:
+    """Fraud items: confirmed with the supplier through a known contact; the note says how."""
+    with db.connect(cfg.database_url) as conn:
+        review.approve(conn, review_id, body, action="verify")
+        conn.commit()
+        return review.detail(conn, review_id)
+
+
+@app.post("/review/items/{review_id}/correct", dependencies=Auth)
+def review_correct(review_id: int, body: review.Correction, cfg: AcctCfg) -> JsonDict:
+    with db.connect(cfg.database_url) as conn:
+        result = review.correct(conn, review_id, body)
+        conn.commit()
+        return result
+
+
+@app.post("/review/items/{review_id}/reject", dependencies=Auth)
+def review_reject(review_id: int, body: review.Rejection, cfg: AcctCfg) -> JsonDict:
+    with db.connect(cfg.database_url) as conn:
+        _, file_path = review.reject(conn, review_id, body)
+        conn.commit()
+    accounting.delete_stored_file(cfg.storage_dir, file_path)
+    with db.connect(cfg.database_url) as conn:
+        return review.detail(conn, review_id)

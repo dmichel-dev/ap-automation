@@ -45,7 +45,6 @@ class AccountingConfig:
     database_url: str
     storage_dir: Path
     home_currency: str
-    expense_account_id: str
     bank_account_id: str
     withholding_account_id: str = ""  # liability: tax withheld at source, owed to the tax office
     tax_recoverable_account_id: str = ""  # receivable; only needed if a tax rule says "recoverable"
@@ -77,9 +76,12 @@ def _object_type(inv: Row) -> str:
     return "vendor_credit" if inv["document_type"] == "credit_note" else "bill"
 
 
-def _accounts(cfg: AccountingConfig, used: set[str]) -> dict[str, str]:
+def _accounts(cfg: AccountingConfig, inv: Row, used: set[str]) -> dict[str, str]:
+    """The expense account is the one recorded on the invoice (supplier default or reviewer's choice)."""
+    if "expense" in used and not inv["expense_account_id"]:
+        raise postings.PostingError("expense_account_missing", "no expense account chosen for this invoice")
     accounts = {
-        "expense": cfg.expense_account_id,
+        "expense": inv["expense_account_id"] or "",
         "withholding": cfg.withholding_account_id,
         "tax_recoverable": cfg.tax_recoverable_account_id,
     }
@@ -108,7 +110,7 @@ def _build_document(conn: Conn, inv: Row, cfg: AccountingConfig) -> Row:
         is_credit_note=inv["document_type"] == "credit_note",
         treatment=lambda tax_type: cfg.tax_treatment.treatment(tax_type, inv["supplier_country"]),
     )
-    accounts = _accounts(cfg, {ln.account for ln in doc_lines})
+    accounts = _accounts(cfg, inv, {ln.account for ln in doc_lines})
     body: dict[str, Any] = {
         "CurrencyRef": {"value": inv["currency"]},
         "DocNumber": postings.doc_number(inv["invoice_number"]),

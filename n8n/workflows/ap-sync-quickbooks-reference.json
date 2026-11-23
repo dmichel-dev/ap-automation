@@ -1,0 +1,476 @@
+{
+  "active": false,
+  "connections": {
+    "Accounts (QBO)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Store accounts (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Accounts stored?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Vendors (QBO)",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Stop: accounts not synced",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Every hour": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "QuickBooks target (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Manual run": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "QuickBooks target (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "QuickBooks target (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Accounts (QBO)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Store accounts (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Accounts stored?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Store vendors (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Vendors stored?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Vendors (QBO)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Store vendors (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Vendors stored?": {
+      "main": [
+        [],
+        [
+          {
+            "index": 0,
+            "node": "Stop: vendors not synced",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "AP – Sync QuickBooks reference data",
+  "nodes": [
+    {
+      "id": "every-hour",
+      "name": "Every hour",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "position": [
+        0,
+        200
+      ],
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2
+    },
+    {
+      "id": "manual-run",
+      "name": "Manual run",
+      "parameters": {},
+      "position": [
+        0,
+        400
+      ],
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "executeOnce": true,
+      "id": "quickbooks-target-core",
+      "maxTries": 3,
+      "name": "QuickBooks target (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "method": "GET",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "url": "http://core:8000/accounting/target"
+      },
+      "position": [
+        240,
+        300
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "name": "QuickBooks – Sandbox US"
+        }
+      },
+      "id": "accounts-qbo",
+      "maxTries": 3,
+      "name": "Accounts (QBO)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "method": "GET",
+        "nodeCredentialType": "quickBooksOAuth2Api",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchInterval": 300,
+              "batchSize": 1
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "minorversion",
+              "value": "={{ $('QuickBooks target (core)').first().json.body.minorversion }}"
+            },
+            {
+              "name": "query",
+              "value": "select * from Account maxresults 1000"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "sendQuery": true,
+        "url": "={{ $('QuickBooks target (core)').first().json.body.qbo_base }}/query"
+      },
+      "position": [
+        460,
+        300
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "store-accounts-core",
+      "maxTries": 3,
+      "name": "Store accounts (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ status_code: $json.statusCode ?? 0, body: $json.body ?? null }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "http://core:8000/reference/accounts"
+      },
+      "position": [
+        680,
+        300
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "accounts-stored",
+      "name": "Accounts stored?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        900,
+        300
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "stop-accounts-not-synced",
+      "name": "Stop: accounts not synced",
+      "parameters": {
+        "errorMessage": "={{ 'accounts not synced: HTTP ' + ($json.statusCode ?? 0) + ' ' + ($json.body?.message ?? '') }}"
+      },
+      "position": [
+        1120,
+        460
+      ],
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1
+    },
+    {
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "name": "QuickBooks – Sandbox US"
+        }
+      },
+      "id": "vendors-qbo",
+      "maxTries": 3,
+      "name": "Vendors (QBO)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "method": "GET",
+        "nodeCredentialType": "quickBooksOAuth2Api",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchInterval": 300,
+              "batchSize": 1
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "minorversion",
+              "value": "={{ $('QuickBooks target (core)').first().json.body.minorversion }}"
+            },
+            {
+              "name": "query",
+              "value": "select * from Vendor maxresults 1000"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "sendQuery": true,
+        "url": "={{ $('QuickBooks target (core)').first().json.body.qbo_base }}/query"
+      },
+      "position": [
+        1340,
+        300
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "store-vendors-core",
+      "maxTries": 3,
+      "name": "Store vendors (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ status_code: $json.statusCode ?? 0, body: $json.body ?? null }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "http://core:8000/reference/vendors"
+      },
+      "position": [
+        1560,
+        300
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "vendors-stored",
+      "name": "Vendors stored?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1780,
+        300
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "stop-vendors-not-synced",
+      "name": "Stop: vendors not synced",
+      "parameters": {
+        "errorMessage": "={{ 'vendors not synced: HTTP ' + ($json.statusCode ?? 0) + ' ' + ($json.body?.message ?? '') }}"
+      },
+      "position": [
+        2000,
+        460
+      ],
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1
+    }
+  ],
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "timezone": "Europe/Paris"
+  }
+}

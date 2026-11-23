@@ -76,6 +76,10 @@ python3 scripts/plaid_sandbox.py remove
 
 The workflow **AP – Bank sync & match** runs every hour (or by hand). A failed sync page stops the run; the next run restarts from the saved cursor. A bill payment that fails is retried on later runs while attempts remain; a permanent failure stops it (`matches.payment_last_error`), and a review item is opened when the failure needs a person.
 
+## QuickBooks reference data
+
+The workflow **AP – Sync QuickBooks reference data** runs every hour (or by hand). It copies the chart of accounts and the vendor list into `ap.qbo_accounts` / `ap.qbo_vendors`: the account picker and the known-supplier check read this copy, so QuickBooks tokens stay in n8n. After creating an account in QuickBooks, run it by hand to see it in the picker at once. If the core refuses an answer (QuickBooks error, empty account list, a full page of 1,000 rows), the run fails and the previous copy stays.
+
 ## Keeping an invoice out of accounting
 
 `POST /invoices/{id}/exclude-from-posting` with `{"reason": "superseded_test_data" | "manual", "note": "…"}`. It is logged and refused once the invoice is posted (reverse it in QuickBooks instead).

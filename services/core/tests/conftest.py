@@ -10,7 +10,8 @@ from psycopg.rows import dict_row
 
 MIGRATIONS = Path("/migrations")
 TABLES = (
-    "matches, bank_transactions, bank_sync_state, accounting_postings, vendor_links, "
+    "matches, bank_transactions, bank_sync_state, accounting_postings, vendor_links, supplier_defaults, "
+    "qbo_accounts, qbo_vendors, "
     "invoice_lines, invoice_tax_lines, review_queue, processing_log, invoices"
 )
 
@@ -26,6 +27,41 @@ def query(url: str, sql: str, *args: Any) -> list[dict[str, Any]]:
     with psycopg.connect(url, row_factory=dict_row) as conn:
         cur = conn.execute(sql, args)
         return cur.fetchall() if cur.description else []
+
+
+# A few accounts as the sync workflow stores them (sandbox IDs and names)
+ACCOUNTS = (
+    ("20", "Supplies", "Expense"),
+    ("7", "Advertising", "Expense"),
+    ("40", "Machinery & Equipment", "Fixed Asset"),
+    ("1", "Services", "Income"),  # not an account an invoice can be coded to
+)
+QUILLMOOR_KEY = "000000000"  # supplier_key of base_annotation's supplier (its tax ID, normalized)
+
+
+def seed_accounts(url: str) -> None:
+    for account_id, name, kind in ACCOUNTS:
+        query(
+            url,
+            """INSERT INTO ap.qbo_accounts (external_id, name, fully_qualified_name, account_type, active)
+               VALUES (%s, %s, %s, %s, true) ON CONFLICT DO NOTHING""",
+            account_id,
+            name,
+            name,
+            kind,
+        )
+
+
+def known_supplier(url: str, key: str = QUILLMOOR_KEY, account: str = "20") -> None:
+    """A supplier whose default account was already chosen (what the e2e test setup does too)."""
+    seed_accounts(url)
+    query(
+        url,
+        """INSERT INTO ap.supplier_defaults (supplier_key, expense_account_id, source, set_by)
+           VALUES (%s, %s, 'test_setup', 'tests')""",
+        key,
+        account,
+    )
 
 
 def base_annotation(**overrides):
@@ -111,7 +147,6 @@ def cfg(clean_db, tmp_path):
         database_url=clean_db,
         storage_dir=tmp_path,
         home_currency="USD",
-        expense_account_id="20",
         withholding_account_id="91",
         bank_account_id="35",
         max_attempts=3,

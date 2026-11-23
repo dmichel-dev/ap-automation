@@ -35,10 +35,32 @@ class Policy:
     capex_threshold: Decimal = Decimal("2500")
 
 
+DUPLICATE_RULES = {
+    "same_number": "same supplier and number as invoice {id} ({status})",
+    "same_amount_near_date": "same supplier, total and currency as invoice {id} ({status}), "
+    "dated within {days} days, with a different number",
+}
+DUPLICATE_DATE_WINDOW_DAYS = 7
+
+
 @dataclass
 class Duplicate:
     invoice_id: str
     status: str
+    rule: str = "same_number"  # a key of DUPLICATE_RULES
+
+
+@dataclass(frozen=True)
+class SupplierStatus:
+    """What the company already knows about the supplier (looked up in the database).
+
+    known: a default account was set, the supplier is linked to a vendor in the accounting
+    system, or exactly one active vendor there has the same normalized name.
+    """
+
+    known: bool
+    basis: str | None = None  # supplier_default | vendor_link | accounting_vendor_name
+    default_account_id: str | None = None
 
 
 @dataclass
@@ -182,7 +204,9 @@ def validate(
     confidence_threshold: float,
     duplicates: list[Duplicate] | None = None,
     policy: Policy | None = None,
+    supplier: SupplierStatus | None = None,
 ) -> Validation:
+    """supplier=None skips the supplier checks (only for callers without a database)."""
     f = _Findings()
     # Confidence = OCR page-average confidence × required-field completeness (both stored)
     completeness = round(sum(_present(inv, name) for name in REQUIRED_FIELDS) / len(REQUIRED_FIELDS), 4)
@@ -208,8 +232,29 @@ def validate(
     total_reasons, f.checks["totals"], tax_mode = totals_check(inv)
     f.reasons += total_reasons
     _duplicates_check(duplicates or [], f)
+    _supplier_check(inv, supplier, f)
     _confidence_check(confidence, ocr, completeness, confidence_threshold, f)
     return result("needs_review" if f.reasons else "ready", tax_mode)
+
+
+def posting_blockers(inv: CommonInvoice) -> tuple[list[Issue], str | None]:
+    """After a person's review: what still prevents posting, and the totals formula that matched.
+
+    Blocks: a fact the bill needs (a real date, not an ambiguous one), a wrong sign, inconsistent
+    dates, totals that don't add up. Judgement reasons (possible duplicate, new supplier, capex,
+    cut-off, low confidence) are settled by the reviewer's decision and don't block."""
+    f = _Findings()
+    present = {"supplier_name": inv.supplier.name, "document_type": inv.document_type}
+    for name in (*REQUIRED_FIELDS, "document_type"):
+        if present.get(name, getattr(inv, name, None)) in (None, ""):
+            f.fail("missing_field", name, f"{name} is needed to post")
+    _sign_check(inv, f)
+    _dates_check(inv, f)
+    start, end = inv.service_period_start, inv.service_period_end
+    if start and end and end < start:
+        f.fail("service_period_inverted", "service_period_end", f"service period ends {end} before it starts {start}")
+    total_reasons, _, tax_mode = totals_check(inv)
+    return f.reasons + total_reasons, tax_mode
 
 
 def _readability_and_kind(inv: CommonInvoice, f: _Findings) -> str | None:
@@ -314,11 +359,30 @@ def _capex_check(inv: CommonInvoice, policy: Policy, f: _Findings) -> None:
 
 def _duplicates_check(duplicates: list[Duplicate], f: _Findings) -> None:
     """Possible duplicate: same supplier + document type + number, different file."""
-    f.checks["duplicate"] = {"passed": not duplicates, "matches": [d.invoice_id for d in duplicates]}
+    f.checks["duplicate"] = {
+        "passed": not duplicates,
+        "matches": [d.invoice_id for d in duplicates],
+        "rules": [d.rule for d in duplicates],
+    }
     for d in duplicates:
-        f.fail(
-            "possible_duplicate", "invoice_number", f"same supplier and number as invoice {d.invoice_id} ({d.status})"
-        )
+        message = DUPLICATE_RULES[d.rule].format(id=d.invoice_id, status=d.status, days=DUPLICATE_DATE_WINDOW_DAYS)
+        f.fail("possible_duplicate", "invoice_number" if d.rule == "same_number" else "total", message)
+
+
+def _supplier_check(inv: CommonInvoice, supplier: SupplierStatus | None, f: _Findings) -> None:
+    """Supplier onboarding control and expense coding. A supplier's first invoice is always seen by
+    a person (genuine supplier?); invoices are posted only to an account a person chose."""
+    if supplier is None or not inv.supplier.name:
+        return  # no supplier name: already a missing_field
+    f.checks["supplier"] = {
+        "known": supplier.known,
+        "basis": supplier.basis,
+        "default_account_id": supplier.default_account_id,
+    }
+    if not supplier.known:
+        f.fail("new_vendor", "supplier_name", "first invoice from this supplier: check that it is a genuine supplier")
+    if supplier.default_account_id is None:
+        f.fail("expense_account_missing", "expense_account", "no default account for this supplier: choose one")
 
 
 def _confidence_check(

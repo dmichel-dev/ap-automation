@@ -10,7 +10,7 @@ from app.processing import Config
 from app.providers.base import ProviderError, ProviderResult
 from fastapi.testclient import TestClient
 
-from .conftest import AUTH, OCR_TEXT, base_annotation, query
+from .conftest import AUTH, OCR_TEXT, base_annotation, known_supplier, query
 
 
 class FakeProvider:
@@ -36,6 +36,7 @@ class FakeProvider:
 
 @pytest.fixture
 def env(clean_db, tmp_path):
+    known_supplier(clean_db)  # the test supplier already has a default account (unless a test removes it)
     cfg = Config(database_url=clean_db, storage_dir=tmp_path, retention_days=30, confidence_threshold=0.85)
     state = {"provider": FakeProvider()}
     app.dependency_overrides[get_processing_config] = lambda: cfg
