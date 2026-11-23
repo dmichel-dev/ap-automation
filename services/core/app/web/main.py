@@ -61,6 +61,14 @@ DONE = {
     "correct": "Correction saved. Check the item again, then approve or reject it.",
     "reject": "Rejected. The invoice won't be posted and its stored file was deleted.",
 }
+# Account picker groups, in this order (labels for a reviewer); a type not listed here comes last
+ACCOUNT_GROUPS = {
+    "Expense": "Expenses",
+    "Other Expense": "Other expenses",
+    "Cost of Goods Sold": "Cost of goods sold",
+    "Fixed Asset": "Fixed assets (capitalised)",
+    "Other Current Asset": "Other current assets (e.g. prepaid)",
+}
 ListStatus = Literal["open", "approved", "corrected", "verified", "rejected", "written_off", "all"]
 
 router = APIRouter()
@@ -323,18 +331,35 @@ def _page_count(s: WebSettings, conn: db.Conn, data: dict[str, Any]) -> int | No
         return None
 
 
+def account_groups(accounts: list[db.Row], default_id: str | None) -> list[tuple[str, list[db.Row]]]:
+    """The picker: the supplier's default first (its own group), then every account by type, the
+    default not repeated. Accounts keep the order they come in (by name within a type)."""
+    default = [a for a in accounts if a["id"] == default_id]
+    groups: dict[str, list[db.Row]] = {}
+    for a in accounts:
+        if a["id"] != default_id:
+            groups.setdefault(a["type"], []).append(a)
+    order = list(ACCOUNT_GROUPS)
+    by_type = sorted(groups.items(), key=lambda g: order.index(g[0]) if g[0] in order else len(order))
+    named = [(ACCOUNT_GROUPS.get(kind, kind), rows) for kind, rows in by_type]
+    return ([("Supplier's default", default)] if default else []) + named
+
+
 def _item_page(
     s: WebSettings, conn: db.Conn, viewer: Viewer, review_id: int, status: int = 200, **message: str | None
 ) -> HTMLResponse:
     data = review.detail(conn, review_id, viewer.scope)
     deciding = bool({"approve", "verify"} & set(data["actions"]))
+    default = data["supplier_default_account"]
     return _page(
         "item.html",
         status,
         viewer=viewer,
         item=data,
         inv=data["invoice"],
-        accounts=qbo_reference.coding_accounts(conn) if deciding else [],
+        account_groups=account_groups(qbo_reference.coding_accounts(conn), default and default["id"])
+        if deciding
+        else [],
         pages=_page_count(s, conn, data),
         correctable=forms.CORRECTABLE,
         error=message.get("error"),

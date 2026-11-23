@@ -122,8 +122,12 @@
       <input type="search" class="filter" data-filter-for="account_id" placeholder="Type to filter the accounts" aria-label="Filter the accounts">
       <select name="account_id" id="account_id">
         {% set chosen = inv.expense_account_id or (item.supplier_default_account.id if item.supplier_default_account else "") %}
-        <option value="" {% if not chosen %}selected{% endif %}>{{ "Use the supplier's default" if item.supplier_default_account else "Choose an account" }}</option>
-        {% for a in accounts %}<option value="{{ a.id }}" {% if a.id == chosen %}selected{% endif %}>{{ a.name }} · {{ a.type }}</option>{% endfor %}
+        {% if not chosen %}<option value="" selected>Choose an account</option>{% endif %}
+        {% for label, group in account_groups %}
+        <optgroup label="{{ label }}">
+          {% for a in group %}<option value="{{ a.id }}" {% if a.id == chosen %}selected{% endif %}>{{ a.name }}</option>{% endfor %}
+        </optgroup>
+        {% endfor %}
       </select>
     </label>
     <fieldset>

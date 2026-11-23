@@ -60,7 +60,7 @@ A separate web process (`review-web` container) with only the browser routes. Ho
   - lines and taxes;
   - every correction (who, when, before → after);
   - the decision, once made.
-- **Approve** (or **Verified with supplier** for fraud items): an account picker over the QuickBooks chart of accounts, with a filter. Choose whether the account becomes the supplier's default ("save as default" on a first invoice, "make it the new default" later). Tick **accept the suggested dates** when the dates were ambiguous. A note is optional, and required for verification.
+- **Approve** (or **Verified with supplier** for fraud items): an account picker over the QuickBooks chart of accounts, with a filter. The supplier's default account comes first, pre-selected. The other accounts are grouped by type: expenses, other expenses, cost of goods sold, fixed assets, other current assets. Choose whether the account becomes the supplier's default ("save as default" on a first invoice, "make it the new default" later). Tick **accept the suggested dates** when the dates were ambiguous. A note is optional, and required for verification.
 - **Correct:** the header fields, pre-filled; only the fields actually changed are sent and recorded.
 - **Reject:** a reason is required, and the page asks for confirmation.
 - A refused decision (e.g. a non-expense account, totals still wrong) shows the core's reason, and nothing is changed.

@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 from pydantic import ValidationError
 
-from .conftest import FIXTURES, query, seed_accounts
+from .conftest import FIXTURES, known_supplier, query, seed_accounts
 from .test_processing import FakeProvider, env, post  # noqa: F401  (env is a fixture)
 
 INTERNAL = "https://localhost:8081"
@@ -434,6 +434,26 @@ def test_approving_records_the_signed_in_person(items):
     assert row["status"] == "approved" and row["reviewer"] == f"Rita Reviewer (review user {user_id})"
     assert row["decision"]["account_id"] == "20" and row["decision"]["supplier_default"] == "created"
     assert "Approved. The invoice is ready" in c.get(r.headers["location"]).text
+
+
+def test_the_picker_shows_the_supplier_default_first_then_accounts_by_type(items):
+    c, url, live, _demo = items
+    known_supplier(url, account="20")  # the supplier's default account is Supplies (20)
+    html = c.get(f"/items/{live}").text
+    select = html[
+        html.index('<select name="account_id"') : html.index("</select>", html.index('<select name="account_id"'))
+    ]
+    groups = re.findall(r'<optgroup label="([^"]+)">(.*?)</optgroup>', select, re.S)
+    assert [label for label, _ in groups] == ["Supplier&#39;s default", "Expenses", "Fixed assets (capitalised)"]
+    values = [re.findall(r'<option value="(\w+)"( selected)?', body) for _, body in groups]
+    assert values == [[("20", " selected")], [("7", "")], [("40", "")]]  # the default once; no income account
+    assert 'value=""' not in select  # nothing to choose when the default is there
+
+
+def test_without_a_default_the_reviewer_must_choose(items):
+    c, _url, live, _demo = items
+    html = c.get(f"/items/{live}").text
+    assert '<option value="" selected>Choose an account</option>' in html and "Supplier&#39;s default" not in html
 
 
 def test_a_reviewer_name_typed_into_the_form_is_ignored(items):

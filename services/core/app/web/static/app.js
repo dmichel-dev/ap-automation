@@ -12,6 +12,9 @@ document.addEventListener("DOMContentLoaded", () => {
         const text = option.textContent.toLowerCase();
         option.hidden = !words.every((w) => text.includes(w));
       }
+      for (const group of select.querySelectorAll("optgroup")) {
+        group.hidden = ![...group.children].some((o) => !o.hidden);
+      }
     });
   }
   // Irreversible actions ask first
