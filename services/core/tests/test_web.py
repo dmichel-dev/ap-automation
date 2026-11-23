@@ -571,6 +571,14 @@ def test_pages_have_no_inline_script_or_style(items):
         assert "<style" not in html and " style=" not in html and " on" + "click=" not in html
 
 
+def test_every_page_has_the_copyright_footer(items):
+    c, url, live, _demo = items
+    signed_out = browser(settings(url, "/tmp"), INTERNAL, peer="10.1.2.7")
+    pages = (signed_out.get("/login"), c.get("/items"), c.get(f"/items/{live}"), c.get("/items/999999"))
+    for r in pages:
+        assert '<a href="https://davidmichel.dev">© David Michel</a>' in r.text, r.request.url.path
+
+
 def test_no_api_docs_and_no_machine_api(web):
     c, _url = web
     for path in ("/docs", "/redoc", "/openapi.json", "/invoices/process", "/postings/claim"):
