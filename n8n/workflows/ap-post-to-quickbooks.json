@@ -17,7 +17,7 @@
         [
           {
             "index": 0,
-            "node": "Claim postings (core)",
+            "node": "QuickBooks target (core)",
             "type": "main"
           }
         ]
@@ -112,7 +112,7 @@
         [
           {
             "index": 0,
-            "node": "Claim postings (core)",
+            "node": "QuickBooks target (core)",
             "type": "main"
           }
         ]
@@ -232,7 +232,7 @@
         [
           {
             "index": 0,
-            "node": "Claim postings (core)",
+            "node": "QuickBooks target (core)",
             "type": "main"
           }
         ]
@@ -268,12 +268,34 @@
         ]
       ]
     },
+    "Preferences (QBO)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Claim postings (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
     "Prepare upload": {
       "main": [
         [
           {
             "index": 0,
             "node": "Upload attachment (QBO)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "QuickBooks target (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Preferences (QBO)",
             "type": "main"
           }
         ]
@@ -560,11 +582,103 @@
         }
       },
       "executeOnce": true,
+      "id": "quickbooks-target-core",
+      "maxTries": 3,
+      "name": "QuickBooks target (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "method": "GET",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "url": "http://core:8000/accounting/target"
+      },
+      "position": [
+        240,
+        400
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "name": "QuickBooks – Sandbox US"
+        }
+      },
+      "id": "preferences-qbo",
+      "maxTries": 3,
+      "name": "Preferences (QBO)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "method": "GET",
+        "nodeCredentialType": "quickBooksOAuth2Api",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchInterval": 300,
+              "batchSize": 1
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "minorversion",
+              "value": "={{ $('QuickBooks target (core)').first().json.body.minorversion }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "sendQuery": true,
+        "url": "={{ $json.body.qbo_base }}/preferences"
+      },
+      "position": [
+        460,
+        400
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "executeOnce": true,
       "id": "claim-postings-core",
       "name": "Claim postings (core)",
       "parameters": {
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ preferences: { status_code: $json.statusCode ?? 0, body: $json.body ?? null } }) }}",
         "method": "POST",
         "options": {},
         "queryParameters": {
@@ -575,11 +689,13 @@
             }
           ]
         },
+        "sendBody": true,
         "sendQuery": true,
+        "specifyBody": "json",
         "url": "http://core:8000/postings/claim"
       },
       "position": [
-        240,
+        680,
         400
       ],
       "type": "n8n-nodes-base.httpRequest",
@@ -593,7 +709,7 @@
         "options": {}
       },
       "position": [
-        460,
+        900,
         400
       ],
       "type": "n8n-nodes-base.splitOut",
@@ -607,7 +723,7 @@
         "options": {}
       },
       "position": [
-        680,
+        1120,
         400
       ],
       "type": "n8n-nodes-base.splitInBatches",
@@ -674,7 +790,7 @@
         }
       },
       "position": [
-        900,
+        1340,
         420
       ],
       "type": "n8n-nodes-base.switch",
@@ -708,7 +824,7 @@
         "options": {}
       },
       "position": [
-        1120,
+        1560,
         200
       ],
       "type": "n8n-nodes-base.if",
@@ -767,7 +883,7 @@
         "url": "={{ $('Claim postings (core)').first().json.qbo_base }}/query"
       },
       "position": [
-        1340,
+        1780,
         300
       ],
       "retryOnFail": true,
@@ -803,7 +919,7 @@
         "url": "=http://core:8000/postings/{{ $('One at a time').first().json.invoice_id }}/lookup/vendor"
       },
       "position": [
-        1560,
+        2000,
         300
       ],
       "retryOnFail": true,
@@ -925,7 +1041,7 @@
         }
       },
       "position": [
-        1780,
+        2220,
         300
       ],
       "type": "n8n-nodes-base.switch",
@@ -987,7 +1103,7 @@
         "url": "={{ $('Claim postings (core)').first().json.qbo_base }}/vendor"
       },
       "position": [
-        2000,
+        2440,
         320
       ],
       "retryOnFail": true,
@@ -1023,7 +1139,7 @@
         "options": {}
       },
       "position": [
-        2220,
+        2660,
         320
       ],
       "type": "n8n-nodes-base.if",
@@ -1057,7 +1173,7 @@
         "url": "=http://core:8000/vendor-links"
       },
       "position": [
-        2440,
+        2880,
         220
       ],
       "retryOnFail": true,
@@ -1093,7 +1209,7 @@
         "options": {}
       },
       "position": [
-        2660,
+        3100,
         220
       ],
       "type": "n8n-nodes-base.if",
@@ -1118,7 +1234,7 @@
         "options": {}
       },
       "position": [
-        2880,
+        3320,
         120
       ],
       "type": "n8n-nodes-base.set",
@@ -1152,7 +1268,7 @@
         "options": {}
       },
       "position": [
-        3100,
+        3540,
         120
       ],
       "type": "n8n-nodes-base.if",
@@ -1215,7 +1331,7 @@
         "url": "={{ $('Claim postings (core)').first().json.qbo_base }}/exchangerate"
       },
       "position": [
-        3320,
+        3760,
         20
       ],
       "retryOnFail": true,
@@ -1251,7 +1367,7 @@
         "options": {}
       },
       "position": [
-        3540,
+        3980,
         20
       ],
       "type": "n8n-nodes-base.if",
@@ -1282,7 +1398,7 @@
         "options": {}
       },
       "position": [
-        3760,
+        4200,
         120
       ],
       "type": "n8n-nodes-base.set",
@@ -1341,7 +1457,7 @@
         "url": "={{ $('Claim postings (core)').first().json.qbo_base }}/query"
       },
       "position": [
-        3980,
+        4420,
         120
       ],
       "retryOnFail": true,
@@ -1377,7 +1493,7 @@
         "url": "=http://core:8000/postings/{{ $('One at a time').first().json.invoice_id }}/lookup/document"
       },
       "position": [
-        4200,
+        4640,
         120
       ],
       "retryOnFail": true,
@@ -1499,7 +1615,7 @@
         }
       },
       "position": [
-        4420,
+        4860,
         120
       ],
       "type": "n8n-nodes-base.switch",
@@ -1561,7 +1677,7 @@
         "url": "={{ $('Claim postings (core)').first().json.qbo_base + '/' + $('One at a time').first().json.endpoint }}"
       },
       "position": [
-        4640,
+        5080,
         40
       ],
       "retryOnFail": true,
@@ -1597,7 +1713,7 @@
         "options": {}
       },
       "position": [
-        4860,
+        5300,
         40
       ],
       "type": "n8n-nodes-base.if",
@@ -1622,7 +1738,7 @@
         "options": {}
       },
       "position": [
-        5080,
+        5520,
         120
       ],
       "type": "n8n-nodes-base.set",
@@ -1656,7 +1772,7 @@
         "options": {}
       },
       "position": [
-        5300,
+        5740,
         120
       ],
       "type": "n8n-nodes-base.if",
@@ -1689,7 +1805,7 @@
         "url": "=http://core:8000{{ $('One at a time').first().json.file.path }}"
       },
       "position": [
-        5520,
+        5960,
         40
       ],
       "retryOnFail": true,
@@ -1725,7 +1841,7 @@
         "options": {}
       },
       "position": [
-        5740,
+        6180,
         40
       ],
       "type": "n8n-nodes-base.if",
@@ -1740,7 +1856,7 @@
         "mode": "runOnceForAllItems"
       },
       "position": [
-        5960,
+        6400,
         -40
       ],
       "type": "n8n-nodes-base.code",
@@ -1805,7 +1921,7 @@
         "url": "={{ $('Claim postings (core)').first().json.qbo_base }}/upload"
       },
       "position": [
-        6180,
+        6620,
         -40
       ],
       "retryOnFail": true,
@@ -1822,7 +1938,7 @@
         "mode": "runOnceForAllItems"
       },
       "position": [
-        6400,
+        6840,
         -40
       ],
       "type": "n8n-nodes-base.code",
@@ -1837,7 +1953,7 @@
         "mode": "runOnceForAllItems"
       },
       "position": [
-        6620,
+        7060,
         120
       ],
       "type": "n8n-nodes-base.code",
@@ -1852,7 +1968,7 @@
         "mode": "runOnceForAllItems"
       },
       "position": [
-        5960,
+        6400,
         560
       ],
       "type": "n8n-nodes-base.code",
@@ -1886,7 +2002,7 @@
         "url": "=http://core:8000/postings/{{ $json.invoice_id }}/result"
       },
       "position": [
-        6840,
+        7280,
         400
       ],
       "retryOnFail": true,

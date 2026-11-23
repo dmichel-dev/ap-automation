@@ -24,6 +24,17 @@ MIN_READABLE_CHARS = 20
 INFO_ISSUES = {"currency_from_country", "adjustment_repeats_tax"}
 
 
+@dataclass(frozen=True)
+class Policy:
+    """Company accounting policy settings (configurable, see docs/validation.md)."""
+
+    home_currency: str = "USD"
+    # Cut-off: a prior-period service goes to review only at or above this amount (home currency)
+    cutoff_materiality: Decimal = Decimal("1000")
+    # Capitalisation policy: an item at or above this amount may be an asset; a person decides
+    capex_threshold: Decimal = Decimal("2500")
+
+
 @dataclass
 class Duplicate:
     invoice_id: str
@@ -166,7 +177,11 @@ def _grand_total_check(inv: CommonInvoice, unit: Decimal, tax_sum: Decimal | Non
 
 
 def validate(
-    inv: CommonInvoice, *, confidence_threshold: float, duplicates: list[Duplicate] | None = None
+    inv: CommonInvoice,
+    *,
+    confidence_threshold: float,
+    duplicates: list[Duplicate] | None = None,
+    policy: Policy | None = None,
 ) -> Validation:
     f = _Findings()
     # Confidence = OCR page-average confidence × required-field completeness (both stored)
@@ -188,6 +203,8 @@ def validate(
     _required_fields_check(inv, f)
     _sign_check(inv, f)
     _dates_check(inv, f)
+    _cutoff_check(inv, policy or Policy(), f)
+    _capex_check(inv, policy or Policy(), f)
     total_reasons, f.checks["totals"], tax_mode = totals_check(inv)
     f.reasons += total_reasons
     _duplicates_check(duplicates or [], f)
@@ -246,6 +263,53 @@ def _dates_check(inv: CommonInvoice, f: _Findings) -> None:
             "due_date",
             f"due date {inv.due_date} is before invoice date {inv.invoice_date}",
         )
+
+
+def _cutoff_check(inv: CommonInvoice, policy: Policy, f: _Findings) -> None:
+    """Service period ending before the accounting period (calendar month) of the invoice date.
+    Usual for invoices received early in a month: listed for month-end accruals, and sent to review
+    only when material. Closed periods (QuickBooks book close date) are checked at posting."""
+    start, end = inv.service_period_start, inv.service_period_end
+    if start and end and end < start:
+        f.fail("service_period_inverted", "service_period_end", f"service period ends {end} before it starts {start}")
+    if not (end and inv.invoice_date) or end >= inv.invoice_date.replace(day=1):
+        return
+    message = f"service period ends {end}, before the accounting period of the invoice ({inv.invoice_date:%Y-%m})"
+    material, basis = _material(inv, policy)
+    f.checks["cutoff"] = {"prior_period": True, "service_period_end": str(end), "material": material, "basis": basis}
+    target = f.reasons if material else f.info
+    target.append(_issue("cutoff_prior_period", "service_period_end", f"{message}; {basis}"))
+
+
+def _material(inv: CommonInvoice, policy: Policy) -> tuple[bool, str]:
+    if inv.currency != policy.home_currency or inv.total is None:
+        # No home-currency amount before FX conversion (Day 4): a person looks at it
+        return True, "amount in the home currency not known yet"
+    if abs(inv.total) >= policy.cutoff_materiality:
+        return True, f"amount at or above the materiality of {policy.cutoff_materiality} {policy.home_currency}"
+    return False, f"below the materiality of {policy.cutoff_materiality} {policy.home_currency}"
+
+
+def _capex_check(inv: CommonInvoice, policy: Policy, f: _Findings) -> None:
+    """Capitalisation policy: an item whose cost (unit price when printed, otherwise the line amount)
+    reaches the threshold may be an asset rather than an expense. Never decided here."""
+    if inv.document_type != "invoice":
+        return
+    if inv.currency != policy.home_currency:
+        f.checks["capex"] = {"checked": False, "why": "foreign currency: checked once converted (Day 4)"}
+        return
+    found = []
+    for li in inv.lines:
+        cost = li.unit_price if li.unit_price is not None and li.quantity else li.amount
+        if li.kind == "item" and cost is not None and cost >= policy.capex_threshold:
+            found.append(li.line_no)
+            f.fail(
+                "possible_capex",
+                "lines",
+                f"line {li.line_no}: item cost {cost} {inv.currency} reaches the capitalisation threshold "
+                f"{policy.capex_threshold}; decide expense or fixed asset",
+            )
+    f.checks["capex"] = {"checked": True, "threshold": str(policy.capex_threshold), "lines": found}
 
 
 def _duplicates_check(duplicates: list[Duplicate], f: _Findings) -> None:

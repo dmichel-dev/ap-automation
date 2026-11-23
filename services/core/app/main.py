@@ -39,11 +39,13 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
-from . import accounting, db, files, intake, matching, processing
+from . import accounting, db, files, intake, matching, postings, processing
 from .config import get_settings
 from .extraction import build_common_invoice
 from .models import CommonInvoice
 from .providers import ExtractionProvider, MistralOcrProvider, ProviderError
+from .tax_treatment import TaxTreatment
+from .validation import Policy
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -99,6 +101,11 @@ def get_processing_config() -> processing.Config:
         storage_dir=Path(s.file_storage_dir),
         retention_days=s.file_retention_days,
         confidence_threshold=s.confidence_threshold,
+        policy=Policy(
+            home_currency=s.home_currency,
+            cutoff_materiality=Decimal(s.cutoff_materiality),
+            capex_threshold=Decimal(s.capex_threshold),
+        ),
     )
 
 
@@ -146,7 +153,9 @@ def get_accounting_config() -> accounting.AccountingConfig:
         storage_dir=Path(s.file_storage_dir),
         home_currency=s.home_currency,
         expense_account_id=s.qbo_expense_account_id,
-        tax_account_id=s.qbo_tax_account_id,
+        withholding_account_id=s.qbo_withholding_account_id,
+        tax_recoverable_account_id=s.qbo_tax_recoverable_account_id,
+        tax_treatment=TaxTreatment.load(Path(s.tax_treatment_file) if s.tax_treatment_file else None),
         bank_account_id=s.qbo_bank_account_id,
         max_attempts=s.posting_max_attempts,
         lease_minutes=s.posting_lease_minutes,
@@ -218,11 +227,38 @@ def _qbo_target(cfg: accounting.AccountingConfig) -> JsonDict:
     return {"qbo_base": cfg.qbo_base, "minorversion": QBO_MINOR_VERSION}
 
 
+@app.get("/accounting/target", dependencies=Auth)
+def accounting_target(cfg: AcctCfg) -> JsonDict:
+    """Where the workflow sends QuickBooks calls, needed before the first one (preferences)."""
+    return _qbo_target(cfg)
+
+
+class Lookup(BaseModel):
+    """A QuickBooks search response, passed through unchanged by the workflow."""
+
+    status_code: int = Field(ge=0, le=599)
+    body: Any = None
+    vendor_id: str | None = Field(default=None, max_length=50)  # document lookups only
+
+
+class Claim(BaseModel):
+    preferences: Lookup  # QuickBooks GET /preferences response, passed through unchanged
+
+
 @app.post("/postings/claim", dependencies=Auth)
-def claim_postings(cfg: AcctCfg, limit: int = 10) -> JsonDict:
+def claim_postings(body: Claim, cfg: AcctCfg, limit: int = 10) -> JsonDict:
+    close = postings.book_close(body.preferences.status_code, body.preferences.body)
     with db.connect(cfg.database_url) as conn:
-        items = accounting.claim_postings(conn, cfg, max(1, min(limit, 50)))
-    return {"count": len(items), **_qbo_target(cfg), "items": items}
+        items = accounting.claim_postings(conn, cfg, close, max(1, min(limit, 50)))
+    return {
+        "count": len(items),
+        **_qbo_target(cfg),
+        "book_close": {
+            "known": close.known,
+            "closed_through": close.closed_through.isoformat() if close.closed_through else None,
+        },
+        "items": items,
+    }
 
 
 class FailureFacts(BaseModel):
@@ -279,14 +315,6 @@ def screen_email(body: EmailToScreen) -> JsonDict:
         get_settings().intake_email_alias,
     )
     return asdict(screening)
-
-
-class Lookup(BaseModel):
-    """A QuickBooks search response, passed through unchanged by the workflow."""
-
-    status_code: int = Field(ge=0, le=599)
-    body: Any = None
-    vendor_id: str | None = Field(default=None, max_length=50)  # document lookups only
 
 
 @app.post("/postings/{invoice_id}/lookup/{kind}", dependencies=Auth)

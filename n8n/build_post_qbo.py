@@ -29,6 +29,7 @@ from nodes import (
     core_call,
     describe_failure_js,
     if_node,
+    json_body,
     main,
     qbo_call,
     qbo_send,
@@ -129,11 +130,20 @@ def _trigger_nodes() -> list[Node]:
             "position": [0, 600],
             "parameters": {},
         },
+        {**core_call("QuickBooks target (core)", [240, 400], "GET", f"{CORE}/accounting/target"), "executeOnce": True},
+        # The book close date: the core posts nothing on or before it (and nothing while it is unknown)
+        qbo_call(
+            "Preferences (QBO)",
+            [460, 400],
+            "GET",
+            "={{ $json.body.qbo_base }}/preferences",
+            "$('QuickBooks target (core)').first().json.body.minorversion",
+        ),
         {
             "name": "Claim postings (core)",
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.2,
-            "position": [240, 400],
+            "position": [680, 400],
             "executeOnce": True,
             "parameters": {
                 "method": "POST",
@@ -142,6 +152,9 @@ def _trigger_nodes() -> list[Node]:
                 "genericAuthType": "httpHeaderAuth",
                 "sendQuery": True,
                 "queryParameters": {"parameters": [{"name": "limit", "value": "10"}]},
+                **json_body(
+                    "JSON.stringify({ preferences: { status_code: $json.statusCode ?? 0, body: $json.body ?? null } })"
+                ),
                 "options": {},
             },
             "credentials": {"httpHeaderAuth": "CORE"},
@@ -340,9 +353,11 @@ def _report_nodes() -> list[Node]:
 
 FAIL = [("Describe failure", 0)]
 CONNECTIONS: Connections = {
-    "Every 15 minutes": [[("Claim postings (core)", 0)]],
-    "Called by intake": [[("Claim postings (core)", 0)]],
-    "Manual run": [[("Claim postings (core)", 0)]],
+    "Every 15 minutes": [[("QuickBooks target (core)", 0)]],
+    "Called by intake": [[("QuickBooks target (core)", 0)]],
+    "Manual run": [[("QuickBooks target (core)", 0)]],
+    "QuickBooks target (core)": [[("Preferences (QBO)", 0)]],
+    "Preferences (QBO)": [[("Claim postings (core)", 0)]],
     "Claim postings (core)": [[("Split postings", 0)]],
     "Split postings": [[("One at a time", 0)]],
     "One at a time": [[], [("Route action", 0)]],  # 0 = done, 1 = next item
@@ -382,6 +397,9 @@ def build(cred_ids: dict[str, str] | None) -> dict[str, Any]:
     nodes = (
         _trigger_nodes() + _vendor_nodes() + _rate_nodes() + _document_nodes() + _attachment_nodes() + _report_nodes()
     )
+    for node in nodes:  # room for the two nodes added before the claim (Day 3)
+        if node["position"][0] >= 460 and node["name"] not in ("Preferences (QBO)", "Claim postings (core)"):
+            node["position"] = [node["position"][0] + 440, node["position"][1]]
     return workflow("AP – Post to QuickBooks", nodes, CONNECTIONS, cred_ids)
 
 

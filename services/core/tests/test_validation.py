@@ -1,12 +1,14 @@
+from decimal import Decimal
+
 import pytest
 from app.extraction import build_common_invoice
 from app.providers.base import ProviderResult
-from app.validation import Duplicate, validate
+from app.validation import Duplicate, Policy, validate
 
 from .conftest import OCR_TEXT, base_annotation
 
 
-def check(ocr_avg=0.98, ocr_text=OCR_TEXT, duplicates=None, threshold=0.85, **overrides):
+def check(ocr_avg=0.98, ocr_text=OCR_TEXT, duplicates=None, threshold=0.85, policy=None, **overrides):
     result = ProviderResult(
         annotation=base_annotation(**overrides),
         ocr_text=ocr_text,
@@ -15,7 +17,7 @@ def check(ocr_avg=0.98, ocr_text=OCR_TEXT, duplicates=None, threshold=0.85, **ov
         ocr_confidence_min=0.4,
     )
     inv = build_common_invoice(result, "test")
-    return validate(inv, confidence_threshold=threshold, duplicates=duplicates)
+    return validate(inv, confidence_threshold=threshold, duplicates=duplicates, policy=policy)
 
 
 def codes(v):
@@ -368,3 +370,73 @@ def test_shipping_equal_to_a_tax_amount_is_kept():
         total="USD 691.48",
     )
     assert v.status == "ready" and v.info == [], (v.reasons, v.info)
+
+
+# --- cut-off: service period in an earlier accounting period -------------------------------
+def info_codes(v):
+    return [i.code for i in v.info]
+
+
+def test_service_period_in_the_invoice_month_is_fine():
+    v = check(service_period_start="11/01/2026", service_period_end="11/30/2026")
+    assert v.status == "ready" and "cutoff_prior_period" not in info_codes(v) and "cutoff" not in v.checks
+
+
+def test_prior_period_service_below_materiality_is_information_only():
+    """Usual case (October services invoiced in November): posted, listed for month-end accruals."""
+    v = check(service_period_start="10/01/2026", service_period_end="10/31/2026")
+    assert v.status == "ready" and info_codes(v) == ["cutoff_prior_period"]
+    assert v.checks["cutoff"]["material"] is False
+
+
+def test_prior_period_service_at_materiality_goes_to_review():
+    v = check(
+        service_period_start="10/01/2026",
+        service_period_end="10/31/2026",
+        policy=Policy(cutoff_materiality=Decimal("641.24")),
+    )
+    assert v.status == "needs_review" and codes(v) == ["cutoff_prior_period"]
+
+
+def test_prior_period_service_in_a_foreign_currency_goes_to_review():
+    """No home-currency amount before FX conversion (Day 4): a person checks it."""
+    v = check(
+        service_period_start="01/10/2026",
+        service_period_end="31/10/2026",
+        invoice_date="18/11/2026",
+        due_date="18/12/2026",
+        supplier_country_code="FR",
+        currency="EUR",
+        total="641,24 €",
+    )
+    assert "cutoff_prior_period" in codes(v)
+
+
+def test_inverted_service_period_is_flagged():
+    v = check(service_period_start="11/30/2026", service_period_end="11/01/2026")
+    assert "service_period_inverted" in codes(v)
+
+
+# --- capitalisation policy: possible fixed asset --------------------------------------------
+def test_item_at_the_capex_threshold_goes_to_review():
+    v = check(policy=Policy(capex_threshold=Decimal("85.50")))  # the toner's unit price
+    assert v.status == "needs_review" and codes(v) == ["possible_capex"]
+    assert v.checks["capex"]["lines"] == [2]
+
+
+def test_capex_uses_the_unit_price_not_the_line_amount():
+    """10 boxes at $42.00 = $420.00: each item costs $42, below a $100 threshold."""
+    v = check(policy=Policy(capex_threshold=Decimal("100")))
+    assert v.status == "ready" and v.checks["capex"]["lines"] == []
+
+
+def test_capex_not_checked_on_a_foreign_currency_invoice_yet():
+    v = check(
+        invoice_date="18/11/2026",
+        due_date="18/12/2026",
+        supplier_country_code="FR",
+        currency="EUR",
+        total="641,24 €",
+        policy=Policy(capex_threshold=Decimal("1")),
+    )
+    assert "possible_capex" not in codes(v) and v.checks["capex"]["checked"] is False

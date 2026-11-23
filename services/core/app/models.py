@@ -87,6 +87,16 @@ class ExtractionResult(_Strict):
     due_date: str | None = Field(
         description="Payment due date exactly as printed, do not reformat; null if not printed"
     )
+    # Default None: responses stored before these fields existed still validate
+    service_period_start: str | None = Field(
+        default=None,
+        description="First day of the service or delivery period the invoice covers (e.g. 'Service period', "
+        "'Période', 'Leistungszeitraum', 'billing period'), exactly as printed; null if not printed",
+    )
+    service_period_end: str | None = Field(
+        default=None,
+        description="Last day of that service or delivery period, exactly as printed; null if not printed",
+    )
     currency: str | None = Field(description="Currency code or symbol exactly as printed, e.g. 'EUR', '€', 'US$', '円'")
     line_items: list[ExtractedLine] = Field(description="Every row of the line item table, in document order")
     adjustments: list[ExtractedAdjustment] = Field(
@@ -174,11 +184,15 @@ class TaxLine(BaseModel):
 class DateInfo(BaseModel):
     invoice_date_raw: str | None = None
     due_date_raw: str | None = None
+    service_period_start_raw: str | None = None
+    service_period_end_raw: str | None = None
     ambiguous: bool = False
     # Only when ambiguous: proposal based on the supplier country, for one-click confirmation
     suggested_order: Literal["DMY", "MDY"] | None = None
     suggested_invoice_date: date | None = None
     suggested_due_date: date | None = None
+    suggested_service_period_start: date | None = None
+    suggested_service_period_end: date | None = None
     suggestion_basis: str | None = None
 
 
@@ -207,6 +221,8 @@ class CommonInvoice(BaseModel):
     related_invoice_number: str | None = None
     invoice_date: date | None = None  # null when missing or ambiguous
     due_date: date | None = None
+    service_period_start: date | None = None  # when printed (cut-off check)
+    service_period_end: date | None = None
     dates: DateInfo
     currency: str | None = None  # ISO 4217
     lines: list[InvoiceLine]

@@ -51,33 +51,50 @@ def fetch_log(conn, message: str, since: datetime) -> int:
     ).fetchone()["n"]
 
 
-def compare(e: dict, row: dict) -> list[str]:
-    exp, diffs = e["expect"], []
+TEXT_KEYS = ("document_type", "invoice_number", "currency", "supplier_country", "related_invoice_number")
+DATE_KEYS = ("invoice_date", "due_date", "service_period_start", "service_period_end")
 
-    def check(name, actual, expected):
-        if actual != expected:
-            diffs.append(f"{name}: expected {expected!r}, got {actual!r}")
 
-    check("status", row["status"], exp["status"])
-    check("reasons", sorted(r["code"] for r in row["status_reasons"]), sorted(exp["reasons"]))
-    for key in ("document_type", "invoice_number", "currency", "supplier_country", "related_invoice_number"):
-        if key in exp:
-            check(key, (row[key] or "").strip() or None if isinstance(row[key], str) else row[key], exp[key])
+def _iso(value):
+    return value.isoformat() if value else None
+
+
+def actual_values(row: dict) -> dict:
+    """Every value an expected result can name, read from the invoice row in comparable form."""
+    out = {key: (row[key] or "").strip() or None if isinstance(row[key], str) else row[key] for key in TEXT_KEYS}
+    out.update({key: _iso(row[key]) for key in DATE_KEYS})
+    out["status"] = row["status"]
+    out["reasons"] = sorted(r["code"] for r in row["status_reasons"])
+    # information-only flags (posted anyway), e.g. cutoff_prior_period
+    out["info"] = sorted(i["code"] for i in (row["checks"] or {}).get("info", []))
+    out["total"] = row["total"]
+    out["suggested order"] = row["date_order_suggested"]
+    out["suggested invoice date"] = _iso(row["invoice_date_suggested"])
+    return out
+
+
+def expected_values(exp: dict) -> dict:
+    out = {k: v for k, v in exp.items() if k in (*TEXT_KEYS, *DATE_KEYS, "status")}
+    out["reasons"] = sorted(exp["reasons"])
+    if "info" in exp:
+        out["info"] = sorted(exp["info"])
     if "total" in exp:
-        check("total", row["total"], Decimal(exp["total"]) if exp["total"] is not None else None)
-    for key in ("invoice_date", "due_date"):
-        if key in exp:
-            check(key, row[key].isoformat() if row[key] else None, exp[key])
+        out["total"] = Decimal(exp["total"]) if exp["total"] is not None else None
+    if "suggested_dates" in exp:
+        out["suggested order"] = exp["suggested_dates"]["order"]
+        out["suggested invoice date"] = exp["suggested_dates"]["invoice_date"]
+    return out
+
+
+def compare(e: dict, row: dict) -> list[str]:
+    exp, actual = e["expect"], actual_values(row)
+    diffs = [
+        f"{name}: expected {expected!r}, got {actual[name]!r}"
+        for name, expected in expected_values(exp).items()
+        if actual[name] != expected
+    ]
     if "min_lines" in exp and row["line_count"] < exp["min_lines"]:
         diffs.append(f"lines: expected at least {exp['min_lines']}, got {row['line_count']}")
-    if "suggested_dates" in exp:
-        s = exp["suggested_dates"]
-        check("suggested order", row["date_order_suggested"], s["order"])
-        check(
-            "suggested invoice date",
-            row["invoice_date_suggested"].isoformat() if row["invoice_date_suggested"] else None,
-            s["invoice_date"],
-        )
     return diffs
 
 

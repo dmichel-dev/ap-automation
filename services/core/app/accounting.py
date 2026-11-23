@@ -11,7 +11,7 @@ n8n makes every external call (QuickBooks, Plaid). The core keeps the state and 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -21,6 +21,7 @@ from psycopg.types.json import Jsonb
 
 from . import db, matching, postings
 from .db import Conn, Row
+from .tax_treatment import TaxTreatment
 
 
 class LogContext(TypedDict):
@@ -45,8 +46,10 @@ class AccountingConfig:
     storage_dir: Path
     home_currency: str
     expense_account_id: str
-    tax_account_id: str
     bank_account_id: str
+    withholding_account_id: str = ""  # liability: tax withheld at source, owed to the tax office
+    tax_recoverable_account_id: str = ""  # receivable; only needed if a tax rule says "recoverable"
+    tax_treatment: TaxTreatment = field(default_factory=TaxTreatment.load)
     qbo_base: str = ""  # https://…/v3/company/<realm>
     max_attempts: int = 5
     lease_minutes: int = 10
@@ -74,14 +77,27 @@ def _object_type(inv: Row) -> str:
     return "vendor_credit" if inv["document_type"] == "credit_note" else "bill"
 
 
+def _accounts(cfg: AccountingConfig, used: set[str]) -> dict[str, str]:
+    accounts = {
+        "expense": cfg.expense_account_id,
+        "withholding": cfg.withholding_account_id,
+        "tax_recoverable": cfg.tax_recoverable_account_id,
+    }
+    missing = sorted(k for k in used if not accounts[k])
+    if missing:
+        raise postings.PostingError("account_not_configured", f"no accounting account configured for: {missing}")
+    return accounts
+
+
 def _build_document(conn: Conn, inv: Row, cfg: AccountingConfig) -> Row:
     """QuickBooks body without VendorRef/ExchangeRate (the workflow adds those)."""
     lines = conn.execute(
-        "SELECT line_no, kind, description, amount FROM invoice_lines WHERE invoice_id = %s ORDER BY line_no",
+        "SELECT line_no, kind, tax_stage, description, amount, tax_rate FROM invoice_lines "
+        "WHERE invoice_id = %s ORDER BY line_no",
         (inv["id"],),
     ).fetchall()
     taxes = conn.execute(
-        "SELECT tax_type, label, amount FROM invoice_tax_lines WHERE invoice_id = %s ORDER BY id", (inv["id"],)
+        "SELECT tax_type, label, rate, amount FROM invoice_tax_lines WHERE invoice_id = %s ORDER BY id", (inv["id"],)
     ).fetchall()
     doc_lines = postings.document_lines(
         lines=lines,
@@ -90,8 +106,9 @@ def _build_document(conn: Conn, inv: Row, cfg: AccountingConfig) -> Row:
         total=inv["total"],
         currency=inv["currency"],
         is_credit_note=inv["document_type"] == "credit_note",
+        treatment=lambda tax_type: cfg.tax_treatment.treatment(tax_type, inv["supplier_country"]),
     )
-    accounts = {"expense": cfg.expense_account_id, "tax": cfg.tax_account_id}
+    accounts = _accounts(cfg, {ln.account for ln in doc_lines})
     body: dict[str, Any] = {
         "CurrencyRef": {"value": inv["currency"]},
         "DocNumber": postings.doc_number(inv["invoice_number"]),
@@ -160,8 +177,13 @@ def _create_missing_postings(conn: Conn, cfg: AccountingConfig, limit: int) -> N
         )
 
 
-def claim_postings(conn: Conn, cfg: AccountingConfig, limit: int = 10) -> list[Row]:
-    """Returns up to `limit` postings to work on now, each leased for `lease_minutes`."""
+def claim_postings(conn: Conn, cfg: AccountingConfig, close: postings.BookClose, limit: int = 10) -> list[Row]:
+    """Returns up to `limit` postings to work on now, each leased for `lease_minutes`.
+    Nothing is claimed while the book close date is unknown; a document dated in a closed period
+    (invoice date or end of service period) goes to review instead of being posted."""
+    if not close.known:
+        db.log(conn, step="post", level="warning", message="posting paused: book close date unavailable")
+        return []
     _create_missing_postings(conn, cfg, limit)
     due = conn.execute(
         """SELECT p.*, i.file_path FROM accounting_postings p JOIN invoices i ON i.id = p.invoice_id
@@ -175,6 +197,8 @@ def claim_postings(conn: Conn, cfg: AccountingConfig, limit: int = 10) -> list[R
     ).fetchall()
     out = []
     for p in due:
+        if p["status"] != "posted" and _in_closed_period(conn, cfg, p, close):
+            continue
         conn.execute(
             """UPDATE accounting_postings
                   SET claimed_until = now() + make_interval(mins => %(lease)s), attempts = attempts + 1,
@@ -184,6 +208,18 @@ def claim_postings(conn: Conn, cfg: AccountingConfig, limit: int = 10) -> list[R
         )
         out.append(_work_item(conn, cfg, p))
     return out
+
+
+def _in_closed_period(conn: Conn, cfg: AccountingConfig, p: Row, close: postings.BookClose) -> bool:
+    inv = db.one(conn, "SELECT invoice_date, service_period_end FROM invoices WHERE id = %s", (p["invoice_id"],))
+    if not close.closes(inv["invoice_date"], inv["service_period_end"]):
+        return False
+    message = f"books closed through {close.closed_through}; invoice dated {inv['invoice_date']}" + (
+        f", service period ending {inv['service_period_end']}" if inv["service_period_end"] else ""
+    )
+    ctx = LogContext(invoice_id=str(p["invoice_id"]), execution_id=None)
+    _record_failed(conn, cfg, p, {"error_code": "period_closed", "error_message": message}, ctx)
+    return True
 
 
 def _work_item(conn: Conn, cfg: AccountingConfig, p: Row) -> Row:
@@ -345,6 +381,10 @@ REVIEW_ERRORS = {
         "vendor currencies are fixed, so a different vendor must be chosen or created.",
     ),
     "vendor_inactive": ("supplier_name", "The matching vendor in the accounting system is inactive."),
+    "period_closed": (
+        "invoice_date",
+        "The books are closed for this date: choose the posting date (open period) or reopen the period.",
+    ),
     "duplicate_in_accounting": (
         "invoice_number",
         "Several documents with this number already exist for this vendor in the accounting system.",

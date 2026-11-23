@@ -17,7 +17,8 @@ So the model never decides what a number, a date or a currency *means*: that is 
 | `supplier` / `buyer` | name, tax ID, `country` (ISO 3166-1 alpha-2: from the address, or from an EU VAT prefix) |
 | `invoice_number`, `related_invoice_number` | the related number is the invoice a credit note cancels |
 | `invoice_date`, `due_date` | ISO 8601; **null if ambiguous** (see below) |
-| `dates` | printed values, `ambiguous`, suggestion (`suggested_order`, `suggested_invoice_date`, `suggested_due_date`, `suggestion_basis`) |
+| `service_period_start`, `service_period_end` | ISO 8601, only when a service or delivery period is printed; **null if ambiguous**. One date convention per document: a service date like `31/10/2026` also settles an ambiguous invoice date |
+| `dates` | printed values, `ambiguous`, suggestion (`suggested_order`, `suggested_invoice_date`, `suggested_due_date`, `suggested_service_period_start` / `_end`, `suggestion_basis`) |
 | `currency` | ISO 4217 |
 | `lines[]`, `taxes[]` | taxes are generic: `vat`, `gst`, `sales_tax`, `withholding`, `other`, `none` |
 | `subtotal`, `tax_total`, `total` | **decimal strings** (exact precision); **credit notes are negative** |

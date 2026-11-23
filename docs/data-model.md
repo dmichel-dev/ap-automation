@@ -18,6 +18,7 @@ Defined in [`db/migrations/`](../db/migrations). Migrations run as the `ap_app` 
 ## Conventions
 
 - **Amounts** are `numeric(18,4)` in the document currency. **Credit notes are signed** (`total <= 0`), even when the PDF prints positive amounts; invoices have `total >= 0`. Individual lines may be negative (discounts).
+- **Service period** (`service_period_start` / `_end`): printed dates of the service or delivery the invoice covers, parsed like the other dates (raw text and suggested readings kept); used by the cut-off check.
 - **Duplicate key:** `supplier_key` (normalized tax ID: printed labels such as `EIN`, `VAT`, `USt-IdNr.` removed, letters and digits only; otherwise the normalized name. The tax ID as printed is kept in `supplier_tax_id`) + `document_type` + `invoice_number_norm`.
   Same `file_sha256` → `rejected`; same key with a different file → `needs_review`.
 - **Idempotency:** `(channel, source_ref)` is unique, so re-running an intake never creates a second row for the same attachment.

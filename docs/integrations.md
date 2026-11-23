@@ -39,8 +39,10 @@ Company: multicurrency **ON**, home currency **USD** (read from `Preferences.Cur
 | `POST /upload` with the metadata part as `text/plain` fails **with HTTP 200** and a `Fault` body | Live | Upload results are checked for `Fault`, not only for the status code |
 | `POST /upload` works when `file_metadata_0` is sent as an `application/json` part (n8n: a binary field typed `application/json`) | Live (file linked to the bill, size identical) | This is how the workflow attaches the PDF |
 | The upload response contains a temporary signed download URL | Live | Only the attachment ID is stored; the raw response is never logged |
+| `GET /preferences`: `AccountingInfoPrefs.BookCloseDate` is **absent** when no closing date is set | Live (2026-11-23) | Absent = no closed period; an unreadable response = unknown, nothing is posted |
+| The closing date **can't be set through the API** in the demo company: a sparse preferences update is validated as a whole and fails on unrelated inventory settings (Fault 6000-range business validation) | Live | It is set in the QuickBooks UI (*Settings → Account and settings → Advanced → Close the books*) |
 
-Accounts used by default (sandbox IDs, configurable): expense **Supplies** (20), taxes **Taxes & Licenses** (21), bank **Checking** (35), A/P (33).
+Accounts used by default (sandbox IDs, configurable): expense **Supplies** (20), bank **Checking** (35), A/P (33), and **Withholding Tax Payable** (`QBO_WITHHOLDING_ACCOUNT_ID`, an *Other Current Liability* created through the API on 2026-11-23, since the demo company had none). Until Day 3, all taxes went to **Taxes & Licenses** (21); now non-recoverable tax is part of the expense lines and withholding goes to the liability account.
 
 ## n8n
 

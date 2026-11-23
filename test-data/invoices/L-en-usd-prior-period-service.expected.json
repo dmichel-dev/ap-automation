@@ -1,0 +1,26 @@
+{
+  "id": "L-en-usd-prior-period-service",
+  "file": "L-en-usd-prior-period-service.pdf",
+  "email": {
+    "subject": "Invoice WH-30117 – Wrenfold Hosting LLC",
+    "body": "Hello,\n\nplease find attached invoice WH-30117 for USD 520.80, due 12/05/2026.\n\nBest regards,\nWrenfold Hosting LLC (fictional test supplier)"
+  },
+  "expect": {
+    "status": "ready",
+    "reasons": [],
+    "document_type": "invoice",
+    "invoice_number": "WH-30117",
+    "currency": "USD",
+    "total": "520.80",
+    "invoice_date": "2026-11-05",
+    "due_date": "2026-12-05",
+    "supplier_country": "US",
+    "min_lines": 2,
+    "service_period_start": "2026-10-01",
+    "service_period_end": "2026-10-31",
+    "info": [
+      "cutoff_prior_period"
+    ]
+  },
+  "note": "October hosting invoiced on 5 November, $520.80: below the $1,000 cut-off materiality, so it is posted and only listed for the month-end accruals (cutoff_prior_period as information)."
+}

@@ -1,0 +1,23 @@
+{
+  "id": "M-en-usd-possible-capex",
+  "file": "M-en-usd-possible-capex.pdf",
+  "email": {
+    "subject": "Invoice PMW-8841 – Pellingham Machine Works Inc.",
+    "body": "Hello,\n\nplease find attached invoice PMW-8841 for USD 5,587.75, due 12/19/2026.\n\nBest regards,\nPellingham Machine Works Inc. (fictional test supplier)"
+  },
+  "expect": {
+    "status": "needs_review",
+    "reasons": [
+      "possible_capex"
+    ],
+    "document_type": "invoice",
+    "invoice_number": "PMW-8841",
+    "currency": "USD",
+    "total": "5587.75",
+    "invoice_date": "2026-11-19",
+    "due_date": "2026-12-19",
+    "supplier_country": "US",
+    "min_lines": 2
+  },
+  "note": "A $4,800 machine reaches the $2,500 capitalisation threshold: a person decides expense or fixed asset."
+}

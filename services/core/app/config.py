@@ -16,12 +16,17 @@ class Settings(BaseSettings):
     intake_email_alias: str = "invoices@davidmichel.dev"  # only emails to this address are processed
     file_storage_dir: str = "/data/files"
     file_retention_days: int = 30
+    # Company accounting policy (docs/validation.md): amounts in the home currency
+    cutoff_materiality: str = "1000"  # prior-period service at or above this → review
+    capex_threshold: str = "2500"  # item cost at or above this → possible fixed asset, review
 
     # Accounting (QuickBooks Online). Account IDs are the sandbox defaults; see docs/integrations.md
     qbo_api_host: str = "https://sandbox-quickbooks.api.intuit.com"
     qbo_realm_id: str = ""  # QuickBooks company ID (not a secret, but kept out of git)
     qbo_expense_account_id: str = "20"  # Supplies
-    qbo_tax_account_id: str = "21"  # Taxes & Licenses
+    qbo_withholding_account_id: str = ""  # liability for taxes withheld at source (e.g. IRPF)
+    qbo_tax_recoverable_account_id: str = ""  # only if a tax rule is "recoverable"
+    tax_treatment_file: str = ""  # default: app/tax_treatment.json
     qbo_bank_account_id: str = "35"  # Checking (mapped to the Plaid account)
     posting_max_attempts: int = 5
     posting_lease_minutes: int = 10

@@ -27,8 +27,27 @@ All checks are deterministic Python ([`validation.py`](../services/core/app/vali
 | Totals (below) | `lines_mismatch`, `tax_mismatch`, `total_mismatch` | review |
 | Same supplier + document type + number, different file | `possible_duplicate` | review |
 | Confidence below the threshold | `low_confidence`, `no_ocr_confidence` | review |
+| Service period ends before it starts | `service_period_inverted` | review |
+| Service period ends before the month of the invoice date (cut-off), material | `cutoff_prior_period` | review |
+| … not material | `cutoff_prior_period` | information only (posted; listed for month-end accruals) |
+| An item reaches the capitalisation threshold | `possible_capex` | review (expense or fixed asset: a person decides) |
+| At posting: invoice date or end of service period on or before the book close date | `period_closed` | posting review (nothing is posted into a closed period) |
 
-`currency_from_country` (e.g. `$` read as USD for a US supplier) is information only, stored in `checks.info`.
+`currency_from_country` (e.g. `$` read as USD for a US supplier) and a non-material `cutoff_prior_period` are information only, stored in `checks.info`.
+
+## Company accounting policy settings
+
+These are company policies, not accounting rules, so they are settings (`.env`), in the home currency:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `CUTOFF_MATERIALITY` | 1000 | A service period ending in an earlier month (calendar months) goes to review at or above this total; below it, the invoice is posted and only listed for the month-end accruals. |
+| `CAPEX_THRESHOLD` | 2500 | **Capitalisation policy:** an item whose cost (unit price when printed, otherwise the line amount, before tax) reaches this amount may be a fixed asset, so a person decides. $2,500 is a common anchor (the IRS de minimis safe harbor for businesses without audited financial statements), not a GAAP rule; each company sets its own. |
+| `app/tax_treatment.json` | non-recoverable | How each tax is booked, by tax type and supplier country (see the README, *Accounting considerations*). |
+
+**Foreign-currency invoices, until FX conversion exists (Day 4):** their amount in the home currency isn't known at validation. A prior-period service period therefore always goes to review (conservative), and the capitalisation check is skipped and marked `checked: false` in `checks.capex`, because comparing yen or euros with a dollar threshold would be wrong.
+
+**Closed periods:** QuickBooks' book close date (`Preferences.AccountingInfoPrefs.BookCloseDate`) is read by the posting workflow before each claim. The core posts nothing on or before it, and nothing at all while it can't be read.
 
 ## Totals: lines, discounts, shipping, rounding, tax
 

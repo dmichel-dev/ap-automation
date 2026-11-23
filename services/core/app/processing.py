@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -22,7 +22,7 @@ from . import db, files
 from .extraction import build_common_invoice
 from .models import CommonInvoice, Issue
 from .providers.base import ExtractionProvider, ProviderError
-from .validation import Validation, validate
+from .validation import Policy, Validation, validate
 
 log = logging.getLogger(__name__)
 
@@ -64,6 +64,7 @@ class Config:
     storage_dir: Path
     retention_days: int
     confidence_threshold: float
+    policy: Policy = field(default_factory=Policy)
 
 
 def _ctx(req: ProcessRequest) -> dict[str, Any]:
@@ -140,7 +141,7 @@ def process(req: ProcessRequest, provider: ExtractionProvider, cfg: Config) -> P
             return _reject_duplicate_file(conn, req, prepared, sha256, received_at, same, cfg)
 
         duplicates = db.find_possible_duplicates(conn, inv)
-        v = validate(inv, confidence_threshold=cfg.confidence_threshold, duplicates=duplicates)
+        v = validate(inv, confidence_threshold=cfg.confidence_threshold, duplicates=duplicates, policy=cfg.policy)
         v.checks["info"] = [i.model_dump() for i in v.info]
         invoice_id = str(uuid.uuid4())
 

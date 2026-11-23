@@ -112,7 +112,7 @@ def cfg(clean_db, tmp_path):
         storage_dir=tmp_path,
         home_currency="USD",
         expense_account_id="20",
-        tax_account_id="21",
+        withholding_account_id="91",
         bank_account_id="35",
         max_attempts=3,
         lease_minutes=10,

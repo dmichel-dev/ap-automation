@@ -197,3 +197,44 @@ def test_tax_id_label_removed_from_the_normalized_copy_only():
     inv = build(supplier_tax_id="EIN 00-0000000")
     assert inv.supplier.tax_id == "EIN 00-0000000"
     assert inv.normalized.supplier_tax_id == "000000000"
+
+
+def test_service_period_is_parsed_like_the_other_dates():
+    inv = build(service_period_start="10/01/2026", service_period_end="10/31/2026")
+    assert (str(inv.service_period_start), str(inv.service_period_end)) == ("2026-10-01", "2026-10-31")
+    assert inv.dates.service_period_start_raw == "10/01/2026"
+
+
+def test_service_period_date_proves_the_order_of_an_ambiguous_invoice_date():
+    """31/10/2026 can only be day first, so 05/11/2026 is 5 November."""
+    inv = build(
+        invoice_date="05/11/2026",
+        due_date=None,
+        service_period_start="01/10/2026",
+        service_period_end="31/10/2026",
+        supplier_country_code="FR",
+    )
+    assert str(inv.invoice_date) == "2026-11-05" and not inv.dates.ambiguous
+
+
+def test_ambiguous_service_period_gets_a_suggested_reading():
+    inv = build(
+        invoice_date="05/11/2026",
+        due_date=None,
+        service_period_start="01/10/2026",
+        service_period_end="02/10/2026",
+        supplier_country_code="FR",
+    )
+    assert inv.service_period_end is None and inv.dates.ambiguous
+    assert str(inv.dates.suggested_service_period_end) == "2026-10-02"
+    assert "service_period_end" in [i.field for i in inv.issues if i.code == "ambiguous_date"]
+
+
+def test_response_stored_before_the_service_period_existed_still_validates():
+    from .conftest import base_annotation
+
+    annotation = base_annotation()
+    annotation.pop("service_period_start", None)
+    annotation.pop("service_period_end", None)
+    inv = build_common_invoice(ProviderResult(annotation=annotation, ocr_text="Total due: USD 641.24", pages=1), "test")
+    assert inv.is_invoice and inv.service_period_start is None

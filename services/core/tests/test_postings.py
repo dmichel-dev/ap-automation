@@ -5,14 +5,21 @@ from decimal import Decimal as D
 import pytest
 from app import postings as p
 from app.postings import PostingError, doc_number, document_lines, qbo_quote, vendor_display_name
+from app.tax_treatment import TaxRule, TaxTreatment
 
 
-def line(no, amount, kind="item", description=None):
-    return {"line_no": no, "kind": kind, "description": description, "amount": D(amount) if amount else None}
+def line(no, amount, kind="item", description=None, rate=None):
+    return {
+        "line_no": no,
+        "kind": kind,
+        "description": description,
+        "amount": D(amount) if amount else None,
+        "tax_rate": D(rate) if rate else None,
+    }
 
 
-def tax(amount, tax_type="vat", label=None):
-    return {"tax_type": tax_type, "label": label, "amount": D(amount)}
+def tax(amount, tax_type="vat", label=None, rate=None):
+    return {"tax_type": tax_type, "label": label, "amount": D(amount), "rate": D(rate) if rate else None}
 
 
 # --- document number, vendor name, query escaping -----------------------------------
@@ -44,102 +51,135 @@ def test_qbo_quote():
 
 
 # --- lines --------------------------------------------------------------------------
+POLICY = TaxTreatment()  # default: every tax non-recoverable, withholding always separate
+RECOVERABLE = TaxTreatment(default="recoverable")
+
+
+def build(lines, taxes, total, currency="USD", tax_mode="exclusive", credit=False, policy=POLICY, country="US"):
+    return document_lines(
+        lines=lines,
+        taxes=taxes,
+        tax_mode=tax_mode,
+        total=D(total),
+        currency=currency,
+        is_credit_note=credit,
+        treatment=lambda tax_type: policy.treatment(tax_type, country),
+    )
+
+
 def total_of(lines):
     return sum(ln.amount for ln in lines)
 
 
-def test_tax_exclusive_invoice_lines_sum_to_total():
-    out = document_lines(
-        lines=[line(1, "420.00"), line(2, "171.00")],
-        taxes=[tax("50.24", "sales_tax", "Sales tax")],
-        tax_mode="exclusive",
-        total=D("641.24"),
-        currency="USD",
-        is_credit_note=False,
+def amounts(lines):
+    return [(ln.amount, ln.account) for ln in lines]
+
+
+def test_non_recoverable_tax_is_part_of_each_expense_line():
+    """US sales tax: no separate tax line; spread over the lines in proportion to their amounts."""
+    out = build([line(1, "420.00", description="Copy paper"), line(2, "171.00")], [tax("50.24", "sales_tax")], "641.24")
+    assert amounts(out) == [(D("455.70"), "expense"), (D("185.54"), "expense")]
+    assert out[0].description == "Copy paper (incl. tax 35.70)"
+
+
+def test_tax_follows_the_lines_with_the_same_rate():
+    """Japanese invoice, 10 % and reduced 8 %: each tax goes to the lines it was computed on."""
+    out = build(
+        [line(1, "6000", rate="10"), line(2, "7600", rate="10"), line(3, "2940", rate="8")],
+        [tax("1360", rate="10"), tax("235", rate="8")],
+        "18135",
+        currency="JPY",
+        country="JP",
     )
-    assert total_of(out) == D("641.24") and [ln.account for ln in out] == ["expense", "expense", "tax"]
+    assert [ln.amount for ln in out] == [D("6600"), D("8360"), D("3175")] and total_of(out) == D("18135")
 
 
-def test_discount_and_withholding_are_negative_lines():
-    out = document_lines(
-        lines=[line(1, "1560.00"), line(2, "-78.00", "discount")],
-        taxes=[tax("311.22", label="IVA 21 %"), tax("-222.30", "withholding", "IRPF 15 %")],
-        tax_mode="exclusive",
-        total=D("1570.92"),
+def test_zero_decimal_currency_allocation_stays_in_whole_units():
+    out = build([line(1, "6000"), line(2, "7600"), line(3, "2940")], [tax("1360"), tax("235")], "18135", "JPY")
+    assert all(ln.amount == ln.amount.to_integral_value() for ln in out) and total_of(out) == D("18135")
+
+
+def test_allocation_remainder_goes_to_the_largest_line():
+    out = build([line(1, "10.00"), line(2, "10.00"), line(3, "10.00")], [tax("1.00")], "31.00")
+    assert [ln.amount for ln in out] == [D("10.34"), D("10.33"), D("10.33")]
+
+
+def test_withholding_is_always_a_separate_liability_line():
+    """Spanish invoice: IVA non-recoverable (in the cost), IRPF withheld (owed to the tax office)."""
+    out = build(
+        [line(1, "1560.00"), line(2, "-78.00", "discount")],
+        [tax("311.22", label="IVA 21 %"), tax("-222.30", "withholding", "IRPF 15 %")],
+        "1570.92",
         currency="EUR",
-        is_credit_note=False,
+        country="ES",
     )
-    assert [ln.amount for ln in out] == [D("1560.00"), D("-78.00"), D("311.22"), D("-222.30")]
-    assert total_of(out) == D("1570.92")
+    assert amounts(out) == [(D("1871.22"), "expense"), (D("-78.00"), "expense"), (D("-222.30"), "withholding")]
+
+
+def test_recoverable_tax_is_a_separate_receivable_line():
+    out = build([line(1, "420.00"), line(2, "171.00")], [tax("50.24")], "641.24", policy=RECOVERABLE)
+    assert amounts(out) == [(D("420.00"), "expense"), (D("171.00"), "expense"), (D("50.24"), "tax_recoverable")]
 
 
 def test_tax_inclusive_invoice_does_not_add_tax_again():
-    out = document_lines(
-        lines=[line(1, "11000")],
-        taxes=[tax("1000", label="内消費税")],
-        tax_mode="inclusive",
-        total=D("11000"),
-        currency="JPY",
-        is_credit_note=False,
-    )
-    assert [(ln.amount, ln.account) for ln in out] == [(D("11000"), "expense")]
+    out = build([line(1, "11000")], [tax("1000", label="内消費税")], "11000", "JPY", "inclusive", country="JP")
+    assert amounts(out) == [(D("11000"), "expense")]
+
+
+def test_recoverable_tax_is_taken_out_of_an_inclusive_invoice():
+    out = build([line(1, "11000")], [tax("1000")], "11000", "JPY", "inclusive", policy=RECOVERABLE, country="JP")
+    assert amounts(out) == [(D("10000"), "expense"), (D("1000"), "tax_recoverable")]
 
 
 def test_credit_note_lines_are_positive():
-    out = document_lines(
-        lines=[line(1, "-69.00"), line(2, "-58.00")],
-        taxes=[tax("-25.40")],
-        tax_mode="exclusive",
-        total=D("-152.40"),
-        currency="GBP",
-        is_credit_note=True,
-    )
-    assert total_of(out) == D("152.40") and all(ln.amount > 0 for ln in out)
+    out = build([line(1, "-69.00"), line(2, "-58.00")], [tax("-25.40")], "-152.40", "GBP", credit=True, country="GB")
+    assert [ln.amount for ln in out] == [D("82.80"), D("69.60")]
 
 
 def test_rounding_residual_within_tolerance_becomes_a_line():
-    out = document_lines(
-        lines=[line(1, "10.00"), line(2, "10.00")],
-        taxes=[tax("4.00")],
-        tax_mode="exclusive",
-        total=D("24.01"),
-        currency="EUR",
-        is_credit_note=False,
-    )
+    out = build([line(1, "10.00"), line(2, "10.00")], [tax("4.00")], "24.01", "EUR")
     assert out[-1].description == "Rounding difference" and out[-1].amount == D("0.01")
     assert total_of(out) == D("24.01")
 
 
 def test_large_residual_is_refused():
     with pytest.raises(PostingError) as e:
-        document_lines(
-            lines=[line(1, "10.00")],
-            taxes=[],
-            tax_mode="exclusive",
-            total=D("12.00"),
-            currency="EUR",
-            is_credit_note=False,
-        )
+        build([line(1, "10.00")], [], "12.00", "EUR")
     assert e.value.code == "lines_do_not_sum_to_total"
 
 
 def test_missing_amount_is_refused():
     with pytest.raises(PostingError):
-        document_lines(
-            lines=[line(1, None)], taxes=[], tax_mode="exclusive", total=D("10"), currency="EUR", is_credit_note=False
-        )
+        build([line(1, None)], [], "10", "EUR")
 
 
-def test_zero_decimal_currency_amounts_are_integers():
-    out = document_lines(
-        lines=[line(1, "6000"), line(2, "7600"), line(3, "2940")],
-        taxes=[tax("1360"), tax("235")],
-        tax_mode="exclusive",
-        total=D("18135"),
-        currency="JPY",
-        is_credit_note=False,
+# --- tax treatment policy ----------------------------------------------------------------
+def test_most_specific_rule_wins_and_withholding_is_fixed():
+    policy = TaxTreatment(
+        default="non_recoverable",
+        rules=(
+            TaxRule(tax_type="vat", treatment="non_recoverable"),
+            TaxRule(tax_type="vat", country="FR", treatment="recoverable"),
+            TaxRule(country="DE", treatment="recoverable"),
+        ),
     )
-    assert all(ln.amount == ln.amount.to_integral_value() for ln in out) and total_of(out) == D("18135")
+    assert policy.treatment("vat", "FR") == "recoverable"
+    assert policy.treatment("vat", "ES") == "non_recoverable"
+    assert policy.treatment("vat", "DE") == "non_recoverable"  # tax type + country beats country alone
+    assert policy.treatment("gst", "DE") == "recoverable"
+    assert policy.treatment("withholding", "FR") == "withholding"
+
+
+def test_committed_policy_is_valid_and_non_recoverable_for_the_us_company():
+    policy = TaxTreatment.load()
+    assert {policy.treatment(t, c) for t in ("vat", "gst", "sales_tax", "other") for c in ("US", "FR", "JP")} == {
+        "non_recoverable"
+    }
+
+
+def test_unknown_key_in_the_policy_file_is_refused():
+    with pytest.raises(ValueError):
+        TaxTreatment.model_validate({"default": "non_recoverable", "rules": [{"treatment": "maybe"}]})
 
 
 # --- decisions on QuickBooks answers ----------------------------------------------------

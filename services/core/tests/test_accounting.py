@@ -8,7 +8,7 @@ from decimal import Decimal as D
 
 import psycopg
 import pytest
-from app import accounting, db
+from app import accounting, db, postings
 from app.main import app, get_accounting_config
 from app.matching import Rules
 from fastapi.testclient import TestClient
@@ -85,9 +85,12 @@ def make_invoice(
     return inv_id
 
 
-def claim(cfg, limit=10):
+OPEN_BOOKS = postings.BookClose(known=True)  # no closing date set
+
+
+def claim(cfg, limit=10, close=OPEN_BOOKS):
     with db.connect(cfg.database_url) as conn:
-        return accounting.claim_postings(conn, cfg, limit)
+        return accounting.claim_postings(conn, cfg, close, limit)
 
 
 def result(cfg, invoice_id, **body):
@@ -498,7 +501,9 @@ def test_claim_returns_the_api_base(cfg):
     app.dependency_overrides[get_accounting_config] = lambda: accounting.AccountingConfig(
         **{**cfg.__dict__, "qbo_base": "https://sandbox.example/v3/company/123"}
     )
-    r = TestClient(app).post("/postings/claim", headers=AUTH)
+    c = TestClient(app)
+    assert c.get("/accounting/target", headers=AUTH).json()["qbo_base"] == "https://sandbox.example/v3/company/123"
+    r = c.post("/postings/claim", headers=AUTH, json={"preferences": {"status_code": 200, "body": {"Preferences": {}}}})
     assert r.json()["qbo_base"] == "https://sandbox.example/v3/company/123" and r.json()["count"] == 1
 
 
@@ -614,3 +619,56 @@ def test_payment_failure_retryable_or_not(cfg):
     assert r.json()["payment_attempts"] == cfg.max_attempts and r.json()["payment_last_error"].startswith("qbo_6000")
     assert run(cfg)["payments_due"] == []  # stopped: a person looks at it
     assert posting(cfg, inv)["payment_status"] == "unpaid"
+
+
+# =====================================================================================
+# Closed periods (QuickBooks book close date)
+# =====================================================================================
+def test_nothing_is_claimed_while_the_book_close_date_is_unknown(cfg):
+    make_invoice(cfg)
+    assert claim(cfg, close=postings.BookClose(known=False)) == []
+    assert (
+        sql(cfg, "SELECT message FROM ap.processing_log")[-1]["message"]
+        == "posting paused: book close date unavailable"
+    )
+    assert len(claim(cfg)) == 1  # posted once the date is known again
+
+
+def test_invoice_dated_in_a_closed_period_goes_to_review(cfg):
+    inv = make_invoice(cfg, day=date(2026, 10, 30), due=date(2026, 11, 30))
+    assert claim(cfg, close=postings.BookClose(known=True, closed_through=date(2026, 10, 31))) == []
+    p = posting(cfg, inv)
+    assert p["status"] == "failed" and p["attempts"] == cfg.max_attempts and p["last_error"].startswith("period_closed")
+    review = sql(cfg, "SELECT stage, reasons FROM ap.review_queue WHERE invoice_id = %s", inv)
+    assert [(r["stage"], r["reasons"][0]["code"]) for r in review] == [("posting", "period_closed")]
+
+
+def test_service_period_in_a_closed_period_goes_to_review(cfg):
+    inv = make_invoice(cfg)  # invoice dated 2026-11-18, in an open period
+    sql(cfg, "UPDATE ap.invoices SET service_period_end = '2026-10-31' WHERE id = %s", inv)
+    assert claim(cfg, close=postings.BookClose(known=True, closed_through=date(2026, 10, 31))) == []
+    assert "service period ending 2026-10-31" in posting(cfg, inv)["last_error"]
+
+
+def test_open_period_is_posted_normally(cfg):
+    make_invoice(cfg)
+    assert len(claim(cfg, close=postings.BookClose(known=True, closed_through=date(2026, 10, 31)))) == 1
+
+
+def test_book_close_date_read_from_the_preferences():
+    prefs = {"Preferences": {"AccountingInfoPrefs": {"BookCloseDate": "2026-10-31"}}}
+    assert postings.book_close(200, prefs) == postings.BookClose(True, date(2026, 10, 31))
+    assert postings.book_close(200, {"Preferences": {"AccountingInfoPrefs": {}}}) == postings.BookClose(True, None)
+    assert postings.book_close(401, {"Fault": {}}) == postings.BookClose(False)
+    assert postings.book_close(200, {"Preferences": {"AccountingInfoPrefs": {"BookCloseDate": "soon"}}}).known is False
+
+
+def test_claim_endpoint_reads_the_preferences(cfg):
+    make_invoice(cfg)
+    c = TestClient(app)
+    unknown = c.post("/postings/claim", headers=AUTH, json={"preferences": {"status_code": 503, "body": None}})
+    assert unknown.json()["count"] == 0 and unknown.json()["book_close"] == {"known": False, "closed_through": None}
+    ok = c.post(
+        "/postings/claim", headers=AUTH, json={"preferences": {"status_code": 200, "body": {"Preferences": {}}}}
+    )
+    assert ok.json()["count"] == 1

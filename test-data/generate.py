@@ -105,8 +105,11 @@ def save_expected(doc_id: str, file: str, email: dict, expect: dict, note: str =
 US_TAX = D("0.085")
 
 
-def us_invoice(supplier: tuple[str, str, str], number: str, dates: tuple[str, str], lines: list) -> tuple[bytes, D]:
-    """supplier = (name, address, tax ID and contact line); dates = (invoice, due) as MM/DD/YYYY."""
+def us_invoice(
+    supplier: tuple[str, str, str], number: str, dates: tuple[str, str], lines: list, extra: str | None = None
+) -> tuple[bytes, D]:
+    """supplier = (name, address, tax ID and contact line); dates = (invoice, due) as MM/DD/YYYY;
+    extra = one more header line (e.g. the service period)."""
     subtotal = sum((qty * price for _, qty, price in lines), D(0))
     tax = q(subtotal * US_TAX)
     total = subtotal + tax
@@ -117,6 +120,8 @@ def us_invoice(supplier: tuple[str, str, str], number: str, dates: tuple[str, st
     pdf.ln(6)
     pdf.text_line(f"INVOICE  No. {number}", 14, bold=True, h=8)
     pdf.text_line(f"Invoice date: {dates[0]}        Due date: {dates[1]}")
+    if extra:
+        pdf.text_line(extra)
     pdf.text_line(f"Bill to: {BUYER[0]}, {BUYER[1]}")
     pdf.ln(5)
     pdf.table(
@@ -145,6 +150,16 @@ FENWHISTLE = (
     "88 Imaginary Road, Eugene, OR 97401, USA",
     "EIN 00-0000001 · (541) 555-0177 · accounts@example.com",
 )
+WRENFOLD = (
+    "Wrenfold Hosting LLC",
+    "77 Example Parkway, Bend, OR 97701, USA",
+    "EIN 00-0000003 · (541) 555-0163 · billing@example.com",
+)
+PELLINGHAM = (
+    "Pellingham Machine Works Inc.",
+    "1200 Sample Industrial Way, Medford, OR 97501, USA",
+    "EIN 00-0000004 · (541) 555-0129 · ar@example.com",
+)
 TARNBROOK = (
     "Tarnbrook Courier Services LLC",
     "5 Placeholder Lane, Salem, OR 97301, USA",
@@ -160,10 +175,12 @@ def us_quillmoor() -> bytes:
     return pdf
 
 
-def us_expected(number: str, total: D, invoice_date: str, due_date: str, min_lines: int) -> dict:
+def us_expected(
+    number: str, total: D, invoice_date: str, due_date: str, min_lines: int, status: str = "ready", reasons=()
+) -> dict:
     return {
-        "status": "ready",
-        "reasons": [],
+        "status": status,
+        "reasons": list(reasons),
         "document_type": "invoice",
         "invoice_number": number,
         "currency": "USD",
@@ -702,6 +719,38 @@ def doc_g_h() -> None:
     )
 
 
+def doc_l_m() -> None:
+    """Accounting policy checks (Day 3): cut-off and capitalisation."""
+    lines = [("Managed hosting plan (October 2026)", 1, D("420.00")), ("Backup storage 500 GB", 1, D("60.00"))]
+    period = ("10/01/2026", "10/31/2026")
+    pdf, total = us_invoice(
+        WRENFOLD, "WH-30117", ("11/05/2026", "12/05/2026"), lines, f"Service period: {period[0]} – {period[1]}"
+    )
+    assert total == D("520.80")
+    (OUT / "L-en-usd-prior-period-service.pdf").write_bytes(pdf)
+    expect = us_expected("WH-30117", total, "2026-11-05", "2026-12-05", 2)
+    expect.update(service_period_start="2026-10-01", service_period_end="2026-10-31", info=["cutoff_prior_period"])
+    save_expected(
+        "L-en-usd-prior-period-service",
+        "L-en-usd-prior-period-service.pdf",
+        us_email("WH-30117", WRENFOLD[0], total, "12/05/2026"),
+        expect,
+        "October hosting invoiced on 5 November, $520.80: below the $1,000 cut-off materiality, so it is "
+        "posted and only listed for the month-end accruals (cutoff_prior_period as information).",
+    )
+    lines = [("Laser engraver LX-40", 1, D("4800.00")), ("Installation and training", 1, D("350.00"))]
+    pdf, total = us_invoice(PELLINGHAM, "PMW-8841", ("11/19/2026", "12/19/2026"), lines)
+    assert total == D("5587.75")
+    (OUT / "M-en-usd-possible-capex.pdf").write_bytes(pdf)
+    save_expected(
+        "M-en-usd-possible-capex",
+        "M-en-usd-possible-capex.pdf",
+        us_email("PMW-8841", PELLINGHAM[0], total, "12/19/2026"),
+        us_expected("PMW-8841", total, "2026-11-19", "2026-12-19", 2, "needs_review", ["possible_capex"]),
+        "A $4,800 machine reaches the $2,500 capitalisation threshold: a person decides expense or fixed asset.",
+    )
+
+
 if __name__ == "__main__":
     OUT.mkdir(exist_ok=True)
     for old in OUT.glob("*"):
@@ -717,5 +766,6 @@ if __name__ == "__main__":
     doc_f()
     doc_g_h()
     doc_i_k(us)
+    doc_l_m()
     for p in sorted(OUT.iterdir()):
         print(f"{p.stat().st_size:>8}  {p.name}")

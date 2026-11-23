@@ -1,0 +1,17 @@
+{
+  "note": "Tax treatment policy of the demo company (US, home currency USD). See app/tax_treatment.py and the README section 'Accounting considerations'. Withholding taxes are always booked as a liability, whatever this file says.",
+  "default": "non_recoverable",
+  "rules": [
+    {
+      "tax_type": "sales_tax",
+      "country": "US",
+      "treatment": "non_recoverable",
+      "note": "US sales tax paid on purchases is part of the cost (no input-tax credit)."
+    },
+    {
+      "tax_type": "vat",
+      "treatment": "non_recoverable",
+      "note": "Foreign VAT, GST and consumption tax: not reclaimed by default. A company that files refund claims sets the countries concerned to recoverable."
+    }
+  ]
+}

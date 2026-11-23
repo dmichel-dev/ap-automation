@@ -13,13 +13,15 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 from typing import Any
 
 from .matching import round_to_currency
 from .reference import minor_units
+from .tax_treatment import Treatment
 
 DOC_NUMBER_MAX = 21
 DISPLAY_NAME_MAX = 100
@@ -54,7 +56,18 @@ class PostingError(Exception):
 class Line:
     description: str
     amount: Decimal
-    account: str  # 'expense' | 'tax'
+    account: str  # 'expense' | 'tax_recoverable' | 'withholding'
+
+
+@dataclass
+class _Cost:
+    """An expense line being built: its tax-allocation keys and the tax added to it."""
+
+    description: str
+    amount: Decimal
+    tax_rate: Decimal | None
+    base: bool  # takes part in tax allocation (before-tax line, not a rounding row)
+    tax: Decimal = Decimal(0)
 
 
 def doc_number(invoice_number: str) -> str:
@@ -87,18 +100,36 @@ def document_lines(
     total: Decimal,
     currency: str,
     is_credit_note: bool,
+    treatment: Callable[[str], Treatment],
 ) -> list[Line]:
     """Lines whose sum equals the absolute invoice total, in the document currency.
 
-    Tax-exclusive invoices: every line + every tax line (withholding is negative).
-    Tax-inclusive invoices: line amounts already contain the tax, so tax lines are not added.
+    Each tax follows the company's tax treatment (tax_treatment.py):
+      non-recoverable  part of the cost: spread over the expense lines it belongs to (by tax
+                       rate when the lines carry one, otherwise in proportion to the amounts)
+      recoverable      a separate line to the receivable account
+      withholding      a separate (negative) line to the liability account
+    Tax-inclusive invoices: line amounts already contain the tax, so only a recoverable tax is
+    taken out of them; withholding is not added (it is outside the inclusive total).
     Credit notes are stored negative; the vendor credit is built from the positive amounts.
     A residual of at most one minor unit per line (the validation tolerance) becomes a rounding line.
     """
     sign = Decimal(-1) if is_credit_note else Decimal(1)
-    out = _expense_lines(lines, sign, currency)
-    if tax_mode != "inclusive":
-        out += _tax_lines(taxes, sign, currency)
+    costs = _costs(lines, sign, currency)
+    separate: list[Line] = []
+    for t in taxes:
+        how = treatment(t["tax_type"])
+        if tax_mode == "inclusive" and how != "recoverable":
+            continue
+        amount = _tax_amount(t, sign, currency)
+        if how == "non_recoverable":
+            _allocate(costs, amount, t.get("rate"), currency)
+            continue
+        if tax_mode == "inclusive":
+            _allocate(costs, -amount, t.get("rate"), currency)  # take it out of the cost
+        label = t.get("label") or TAX_LABELS[t["tax_type"]]
+        separate.append(Line(label[:LINE_DESCRIPTION_MAX], amount, "tax_recoverable" if how == "recoverable" else how))
+    out = [_cost_line(c) for c in costs if c.amount + c.tax] + [ln for ln in separate if ln.amount]
     out += _rounding_line(out, total, currency)
     if not out or _total(out) <= 0:
         raise PostingError("non_positive_total", "the document total must be positive once signed")
@@ -109,26 +140,47 @@ def _total(lines: list[Line]) -> Decimal:
     return sum((ln.amount for ln in lines), Decimal(0))
 
 
-def _expense_lines(lines: list[dict[str, Any]], sign: Decimal, currency: str) -> list[Line]:
+def _costs(lines: list[dict[str, Any]], sign: Decimal, currency: str) -> list[_Cost]:
     out = []
     for li in lines:
         if li["amount"] is None:
             raise PostingError("line_amount_missing", f"line {li['line_no']} has no amount")
-        if amount := round_to_currency(Decimal(li["amount"]) * sign, currency):
-            label = li.get("description") or KIND_LABELS.get(li["kind"], "Item")
-            out.append(Line(label[:LINE_DESCRIPTION_MAX], amount, "expense"))
+        amount = round_to_currency(Decimal(li["amount"]) * sign, currency)
+        label = li.get("description") or KIND_LABELS.get(li["kind"], "Item")
+        base = li.get("tax_stage", "before_tax") == "before_tax" and li["kind"] != "rounding"
+        rate = Decimal(li["tax_rate"]) if li.get("tax_rate") is not None else None
+        out.append(_Cost(label, amount, rate, base))
     return out
 
 
-def _tax_lines(taxes: list[dict[str, Any]], sign: Decimal, currency: str) -> list[Line]:
-    out = []
-    for t in taxes:
-        if t["amount"] is None:
-            raise PostingError("tax_amount_missing", "a tax line has no amount")
-        if amount := round_to_currency(Decimal(t["amount"]) * sign, currency):
-            label = t.get("label") or TAX_LABELS[t["tax_type"]]
-            out.append(Line(label[:LINE_DESCRIPTION_MAX], amount, "tax"))
-    return out
+def _tax_amount(t: dict[str, Any], sign: Decimal, currency: str) -> Decimal:
+    if t["amount"] is None:
+        raise PostingError("tax_amount_missing", "a tax line has no amount")
+    return round_to_currency(Decimal(t["amount"]) * sign, currency)
+
+
+def _allocate(costs: list[_Cost], amount: Decimal, rate: Any, currency: str) -> None:
+    """Spreads a tax amount over the lines it applies to: the lines with the same rate when the
+    rate is known on both sides, else every before-tax line, in proportion to their amounts.
+    The rounding remainder goes to the largest line, so the total is exact."""
+    if not amount:
+        return
+    base = [c for c in costs if c.base and c.amount > 0]
+    same_rate = [c for c in base if rate is not None and c.tax_rate == Decimal(rate)]
+    targets = same_rate or base
+    weight = sum((c.amount for c in targets), Decimal(0))
+    if weight <= 0:
+        costs.append(_Cost("Tax (non-recoverable)", Decimal(0), None, False, amount))
+        return
+    shares = [round_to_currency(amount * c.amount / weight, currency) for c in targets]
+    shares[max(range(len(targets)), key=lambda i: targets[i].amount)] += amount - sum(shares, Decimal(0))
+    for c, share in zip(targets, shares, strict=True):
+        c.tax += share
+
+
+def _cost_line(c: _Cost) -> Line:
+    description = f"{c.description} (incl. tax {c.tax})" if c.tax else c.description
+    return Line(description[:LINE_DESCRIPTION_MAX], c.amount + c.tax, "expense")
 
 
 def _rounding_line(lines: list[Line], total: Decimal, currency: str) -> list[Line]:
@@ -218,6 +270,30 @@ def qbo_fault(body: Any) -> dict[str, Any]:
     errors = (body.get("Fault") or {}).get("Error") or [{}]
     first: dict[str, Any] = errors[0]
     return first
+
+
+@dataclass(frozen=True)
+class BookClose:
+    """The accounting system's closing date: nothing is posted on or before it."""
+
+    known: bool  # False: the preferences could not be read, so nothing is posted this run
+    closed_through: date | None = None  # None: no closing date set
+
+    def closes(self, *days: date | None) -> bool:
+        last = self.closed_through
+        return last is not None and any(d is not None and d <= last for d in days)
+
+
+def book_close(status: int, body: Any) -> BookClose:
+    """From a QuickBooks GET /preferences response (AccountingInfoPrefs.BookCloseDate, absent when unset)."""
+    prefs = body.get("Preferences") if status == 200 and isinstance(body, dict) else None
+    if not isinstance(prefs, dict):
+        return BookClose(known=False)
+    raw = (prefs.get("AccountingInfoPrefs") or {}).get("BookCloseDate")
+    try:
+        return BookClose(known=True, closed_through=date.fromisoformat(raw[:10]) if raw else None)
+    except (TypeError, ValueError):
+        return BookClose(known=False)  # unreadable: treated like an unknown date
 
 
 # Failures named by the workflow (not HTTP errors) that are worth retrying

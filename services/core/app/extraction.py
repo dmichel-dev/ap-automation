@@ -48,34 +48,37 @@ def _date(raw: str | None, field: str, issues: _Issues) -> n.ParsedDate | None:
     return _parsed(n.parse_date, raw, field, issues)
 
 
+DATE_FIELDS = ("invoice_date", "due_date", "service_period_start", "service_period_end")
+
+
 def _resolve_dates(
-    inv: n.ParsedDate | None, due: n.ParsedDate | None, country: str | None, info: DateInfo, issues: _Issues
-) -> tuple[date | None, date | None]:
+    parsed: dict[str, n.ParsedDate | None], country: str | None, info: DateInfo, issues: _Issues
+) -> dict[str, date | None]:
     """A document uses one date convention: if one date proves the order (e.g. 23/11/2026),
-    it resolves the other. If still ambiguous, flag it and suggest an order from the country."""
-    proven = {p.order for p in (inv, due) if p and p.order}
+    it resolves the others. If still ambiguous, flag it and suggest an order from the country."""
+    proven = {p.order for p in parsed.values() if p and p.order}
     if len(proven) == 1:
         proven_order = proven.pop()
-        inv, due = (n.ParsedDate(p.reading(proven_order)) if p and p.ambiguous else p for p in (inv, due))
+        parsed = {k: n.ParsedDate(p.reading(proven_order)) if p and p.ambiguous else p for k, p in parsed.items()}
     elif len(proven) == 2:
-        issues.add("inconsistent_dates", "invoice_date", "the two dates use different day/month orders")
+        issues.add("inconsistent_dates", "invoice_date", "the dates use different day/month orders")
 
-    ambiguous = [(name, p) for name, p in (("invoice_date", inv), ("due_date", due)) if p and p.ambiguous]
+    ambiguous = [(name, p) for name, p in parsed.items() if p and p.ambiguous]
     if ambiguous:
-        _suggest_order(inv, due, country, info)
+        _suggest_order(parsed, country, info)
         for name, p in ambiguous:
             issues.add("ambiguous_date", name, f"{p.dmy} (day first) or {p.mdy} (month first); {info.suggestion_basis}")
-    return (inv.value if inv else None), (due.value if due else None)
+    return {name: p.value if p else None for name, p in parsed.items()}
 
 
-def _suggest_order(inv: n.ParsedDate | None, due: n.ParsedDate | None, country: str | None, info: DateInfo) -> None:
+def _suggest_order(parsed: dict[str, n.ParsedDate | None], country: str | None, info: DateInfo) -> None:
     """Records the order suggested by the supplier country, for one-click confirmation."""
     info.ambiguous = True
     order, info.suggestion_basis = n.date_order_suggestion(country)
     if order:
         info.suggested_order = order
-        info.suggested_invoice_date = inv.reading(order) if inv else None
-        info.suggested_due_date = due.reading(order) if due else None
+        for name, p in parsed.items():
+            setattr(info, f"suggested_{name}", p.reading(order) if p else None)
 
 
 def build_common_invoice(result: ProviderResult, provider_name: str) -> CommonInvoice:
@@ -107,14 +110,9 @@ def build_common_invoice(result: ProviderResult, provider_name: str) -> CommonIn
         issues.add("not_invoice", "document_kind", "the document is not an invoice or a credit note")
     country = n.resolve_country(data.supplier_country_code, data.supplier_tax_id)
     currency = _currency(data, country, result.ocr_text, issues)
-    info = DateInfo(invoice_date_raw=n.clean_text(data.invoice_date), due_date_raw=n.clean_text(data.due_date))
-    invoice_date, due_date = _resolve_dates(
-        _date(data.invoice_date, "invoice_date", issues),
-        _date(data.due_date, "due_date", issues),
-        country,
-        info,
-        issues,
-    )
+    raw = {name: getattr(data, name) for name in DATE_FIELDS}
+    info = DateInfo(**{f"{name}_raw": n.clean_text(value) for name, value in raw.items()})
+    dates = _resolve_dates({name: _date(value, name, issues) for name, value in raw.items()}, country, info, issues)
     lines = _lines(data, currency, issues)
     taxes = _tax_lines(data, currency, issues)
     lines = _drop_taxes_repeated_as_adjustments(lines, taxes, len(data.line_items), issues)
@@ -136,8 +134,10 @@ def build_common_invoice(result: ProviderResult, provider_name: str) -> CommonIn
         buyer=Party(name=n.clean_text(data.buyer_name), tax_id=n.clean_text(data.buyer_tax_id)),
         invoice_number=n.clean_text(data.invoice_number),
         related_invoice_number=n.clean_text(data.related_invoice_number),
-        invoice_date=invoice_date,
-        due_date=due_date,
+        invoice_date=dates["invoice_date"],
+        due_date=dates["due_date"],
+        service_period_start=dates["service_period_start"],
+        service_period_end=dates["service_period_end"],
         dates=info,
         currency=currency,
         lines=lines,
