@@ -26,7 +26,7 @@ Settings: `MATCH_*` in `.env` (see `.env.example`).
 | Situation | Result | Payment reason |
 |---|---|---|
 | The bill has exactly one candidate, and that transaction fits no other bill | `accepted` → a bill payment is recorded in QuickBooks | `payment_pending`, then paid |
-| Several candidates on either side | nothing is paid; all candidates are stored for the reviewer | `ambiguous_match` |
+| Several candidates on either side | nothing is paid; all candidates are stored, and a review item (stage `matching`) names the candidate transactions | `ambiguous_match` |
 | No candidate | re-checked on the next run | `no_match_yet` |
 | Bill not in the account's currency | not compared | `fx_match_pending` |
 
@@ -36,7 +36,14 @@ When the bank amount differs from the bill within the tolerance:
 
 - the **actual bank amount** is kept on the match (`bank_amount`, `difference`);
 - the payment recorded in QuickBooks never exceeds the bill: an under-payment leaves the difference open on the bill, an over-payment is applied up to the bill amount;
-- the posting gets `payment_status = paid_with_difference` and `payment_reason = payment_difference`, never plain `paid`, and the difference is logged as a warning.
+- the posting gets `payment_status = paid_with_difference` and `payment_reason = payment_difference`, never plain `paid`, and the difference is logged as a warning;
+- the open difference is written off in the Day 3 review (decided 2026-11-23), not automatically.
+
+## Recording the payment in QuickBooks
+
+Each payment carries the number `AP-PAY-<match id>` and a fixed request ID. Before creating it, the workflow searches QuickBooks for that number and the core decides: reuse it (a run that stopped after creating it), create it, or open a review. A failure is reported to the core, which decides whether it is retried on the next run or stopped.
+
+Verified live on 2026-11-23 (test set I, J, K1, K2): exact match paid in full; $1,212.00 paid for $1,212.50 with $0.50 left open; two $86.80 bills and one $86.80 payment left unpaid with a review item each; a second run created nothing; after a simulated crash the existing payment was found again, not duplicated.
 
 ## Guarantees enforced by the database
 

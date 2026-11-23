@@ -30,12 +30,12 @@ Defined in [`db/migrations/`](../db/migrations). Migrations run as the `ap_app` 
 
 ## Original file retention
 
-Original files are needed until they're attached to the QuickBooks bill (Day 2), then deleted.
+Original files are needed until they're attached to the QuickBooks bill, then deleted.
 
 - **Storage:** Docker volume `ap_files`, mounted **only in the core service** at `/data/files`. `invoices.file_path` is relative to that root.
   n8n gets a file through the core API (`GET /invoices/{id}/file`), so there is no shared volume.
 - **Deletion triggers:**
-  1. **After posting** (Day 2): when n8n reports the attachment ID to the core service (`POST /postings/{id}/result`), the core deletes the file (`reason = posted`), after the database commit.
+  1. **After posting**: when n8n reports the attachment ID to the core service (`POST /postings/{id}/result`), the core deletes the file (`reason = posted`), after the database commit.
   2. **Retention limit** (Day 3): a daily n8n schedule calls a purge endpoint that deletes files whose `file_delete_after` has passed (`reason = retention`). `file_delete_after = received_at + FILE_RETENTION_DAYS` (default 30; shorter for the public demo).
   3. Rejected documents follow the same retention limit (`reason = rejected`).
 - **After deletion:** `file_path` is cleared, `file_deleted_at` and `file_deletion_reason` are set, and the deletion is logged. `file_sha256` stays, so a re-sent file is still detected as a duplicate.

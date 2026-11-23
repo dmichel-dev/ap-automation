@@ -8,7 +8,7 @@ All checks are deterministic Python ([`validation.py`](../services/core/app/vali
 |---|---|---|
 | `rejected` | **Only when a human could do nothing with it:** not an invoice, unreadable (no text), exact duplicate file (same SHA-256) | Logged with the reason; the file isn't kept |
 | `needs_review` | Anything a human can check or fix | Review item opened (Day 3: approve / correct / reject) |
-| `ready` | Every check passed | Auto-posted to QuickBooks (Day 2) |
+| `ready` | Every check passed | Posted to QuickBooks automatically (bill + original file) |
 
 ## Checks
 
@@ -34,7 +34,7 @@ All checks are deterministic Python ([`validation.py`](../services/core/app/vali
 
 Discounts, shipping, fees and rounding count wherever they're printed:
 - **In the line-item table**, as rows with `kind = discount | shipping | fee`.
-- **In the totals section**, as *adjustments* with their position (`before_tax` / `after_tax`). These are stored as lines too, so on Day 2 they become separate QuickBooks bill lines.
+- **In the totals section**, as *adjustments* with their position (`before_tax` / `after_tax`). These are stored as lines too, so they become separate QuickBooks bill lines.
 
 Sign rules:
 - Discounts are always negative, whether or not a minus sign is printed.
