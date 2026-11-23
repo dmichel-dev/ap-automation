@@ -6,7 +6,9 @@ they mean. QuickBooks tokens stay in n8n: the core and the review page only read
 
 from __future__ import annotations
 
+import json
 import re
+from pathlib import Path
 from typing import Any, Literal
 
 from . import db
@@ -15,11 +17,12 @@ from .normalize import normalize_supplier_name
 Entity = Literal["Account", "Vendor"]
 PAGE_SIZE = 1000  # the workflow asks for this many; a full page means there may be more
 
-# Accounts an invoice line can be coded to: costs, fixed assets (capitalised purchases)
-# and other current assets (e.g. prepaid expenses).
-CODING_ACCOUNT_TYPES = ("Expense", "Other Expense", "Cost of Goods Sold", "Fixed Asset", "Other Current Asset")
-# QuickBooks system accounts of those types that a bill must never be coded to
-SYSTEM_SUB_TYPES = ("UnappliedCashBillPaymentExpense",)
+# Accounts an invoice can be coded to, by account type and detail type (app/account_coding.json):
+# costs, fixed assets (capitalised purchases), other current assets (e.g. prepaid), minus the
+# detail types a bill must never be coded to (system, contra and clearing accounts).
+_POLICY = json.loads(Path(__file__).with_name("account_coding.json").read_text())
+CODING_ACCOUNT_TYPES: tuple[str, ...] = tuple(_POLICY["coding_account_types"])
+SYSTEM_SUB_TYPES: tuple[str, ...] = tuple(_POLICY["hidden_detail_types"])
 _CODING = "active AND account_type = ANY(%(types)s) AND NOT (coalesce(account_sub_type, '') = ANY(%(system)s))"
 _CODING_PARAMS = {"types": list(CODING_ACCOUNT_TYPES), "system": list(SYSTEM_SUB_TYPES)}
 

@@ -450,6 +450,21 @@ def test_the_picker_shows_the_supplier_default_first_then_accounts_by_type(items
     assert 'value=""' not in select  # nothing to choose when the default is there
 
 
+@pytest.mark.parametrize(
+    "sub_type", ["AccumulatedDepreciation", "Inventory", "UndepositedFunds", "UnappliedCashBillPaymentExpense"]
+)
+def test_accounts_a_bill_must_never_use_are_hidden_by_detail_type(items, sub_type):
+    c, url, live, _demo = items
+    kind = "Fixed Asset" if sub_type == "AccumulatedDepreciation" else "Other Current Asset"
+    sql = """INSERT INTO ap.qbo_accounts
+             (external_id, name, fully_qualified_name, account_type, account_sub_type, active)
+             VALUES ('900', 'Any Name', 'Any Name', %s, %s, true)"""
+    q(url, sql, kind, sub_type)
+    assert 'value="900"' not in c.get(f"/items/{live}").text
+    r = c.post(f"/items/{live}/approve", data={"csrf": csrf(c), "account_id": "900"})
+    assert r.status_code == 409 and review_row(url, live)["status"] == "open"  # refused by the core too
+
+
 def test_without_a_default_the_reviewer_must_choose(items):
     c, _url, live, _demo = items
     html = c.get(f"/items/{live}").text
