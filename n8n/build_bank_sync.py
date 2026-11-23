@@ -13,6 +13,11 @@ What the workflow does (every hour, or by hand):
   3. Payments: for each accepted match, a QuickBooks bill payment, searched by its number first
      (the core decides: reuse / create / review), then created with a fixed request ID, and
      reported to the core. Failures go to the core, which decides: retry next run, or stop.
+  4. Write-offs: for each payment difference a reviewer chose to write off, a vendor credit on the
+     payment-differences account, then a bill payment of 0 that applies it to the bill (no money
+     moves). Both are searched by their number first, so a rerun never records one twice.
+
+Started every hour, by hand, or by a "Run now" request (the 'AP – Run now' workflow).
 
 The core decides everything; this workflow makes the calls and passes the answers through.
 The Plaid access token is in the n8n credential "Plaid – Sandbox" (merged into the request body).
@@ -47,6 +52,9 @@ PLAID_API = "https://sandbox.plaid.com"
 MATCHING = "$('Run matching (core)').first().json.body"
 LOOP = "$('One payment at a time').first().json"  # the payment being worked on (batch size 1)
 MATCH_URL = "=" + CORE + "/matches/{{ " + LOOP + ".match_id }}"
+WO = "$('One write-off at a time').first().json"  # the write-off being worked on (batch size 1)
+WO_URL = "=" + CORE + "/write-offs/{{ " + WO + ".write_off_id }}"
+APPLY = "$('Record credit (core)').first().json.body.apply"  # the bill payment of 0, from the core
 PASS_THROUGH = "status_code: $json.statusCode ?? 0, body: $json.body ?? null"
 
 
@@ -69,6 +77,13 @@ def _trigger_nodes() -> list[Node]:
             "typeVersion": 1,
             "position": AUTO,
             "parameters": {},
+        },
+        {
+            "name": "Called by Run now",
+            "type": "n8n-nodes-base.executeWorkflowTrigger",
+            "typeVersion": 1.1,
+            "position": AUTO,
+            "parameters": {"inputSource": "passthrough"},
         },
     ]
 
@@ -209,13 +224,93 @@ def _payment_nodes() -> list[Node]:
     ]
 
 
+def _find(name: str, entity: str) -> Node:
+    """Searches QuickBooks for this write-off's document by its number (AP-WO-<id>)."""
+    q = '={{ "select Id, VendorRef from ' + entity + " where DocNumber = '\" + " + WO + '.doc_number_q + "\'" }}'
+    return qbo(name, AUTO, "GET", "/query", query={"query": q})
+
+
+def _write_off_nodes() -> list[Node]:
+    lookup = f"JSON.stringify({{ {PASS_THROUGH} }})"
+    routes = ["create", "exists", "review", "error"]
+    return [
+        {
+            "name": "Split write-offs",
+            "type": "n8n-nodes-base.splitOut",
+            "typeVersion": 1,
+            "position": AUTO,
+            "parameters": {"fieldToSplitOut": "body.write_offs_due", "options": {}},
+        },
+        {
+            "name": "One write-off at a time",
+            "type": "n8n-nodes-base.splitInBatches",
+            "typeVersion": 3,
+            "position": AUTO,
+            "parameters": {"batchSize": 1, "options": {}},
+        },
+        _find("Find existing credit (QBO)", "VendorCredit"),
+        core_call("Credit decision (core)", AUTO, "POST", WO_URL + "/lookup/credit", body=lookup),
+        switch_node("Route credit", AUTO, "$json.body?.decision", routes, "core error"),
+        qbo_send(
+            qbo(
+                "Create credit (QBO)",
+                AUTO,
+                "POST",
+                "/vendorcredit",
+                {"requestid": "={{ " + WO + ".credit_request_id }}"},
+            ),
+            f"JSON.stringify({WO}.credit)",
+        ),
+        if_node("Credit created?", AUTO, "$json.statusCode === 200 && !!$json.body?.VendorCredit?.Id"),
+        set_node("Credit ready", AUTO, {"external_id": "String($json.body.external_id ?? $json.body.VendorCredit.Id)"}),
+        core_call(
+            "Record credit (core)",
+            AUTO,
+            "POST",
+            WO_URL + "/credit",
+            body="JSON.stringify({ external_payment_id: $json.external_id, execution_id: $execution.id })",
+        ),
+        if_node("Credit recorded?", AUTO, "$json.statusCode === 200 && !!$json.body?.apply"),
+        _find("Find existing apply (QBO)", "BillPayment"),
+        core_call("Apply decision (core)", AUTO, "POST", WO_URL + "/lookup/apply", body=lookup),
+        switch_node("Route apply", AUTO, "$json.body?.decision", routes, "core error"),
+        qbo_send(
+            qbo(
+                "Apply credit (QBO)", AUTO, "POST", "/billpayment", {"requestid": "={{ " + WO + ".apply_request_id }}"}
+            ),
+            f"JSON.stringify({APPLY})",
+        ),
+        if_node("Applied?", AUTO, "$json.statusCode === 200 && !!$json.body?.BillPayment?.Id"),
+        set_node("Apply ready", AUTO, {"external_id": "String($json.body.external_id ?? $json.body.BillPayment.Id)"}),
+        core_call(
+            "Record write-off (core)",
+            AUTO,
+            "POST",
+            WO_URL + "/applied",
+            body="JSON.stringify({ external_payment_id: $json.external_id, execution_id: $execution.id })",
+        ),
+        if_node("Write-off recorded?", AUTO, "$json.statusCode === 200"),
+        code_node("Write-off failure facts", AUTO, describe_failure_js("write_off_id", WO + ".write_off_id")),
+        core_call(
+            "Report write-off failure (core)",
+            AUTO,
+            "POST",
+            "=" + CORE + "/write-offs/{{ $json.write_off_id }}/failed",
+            body="JSON.stringify($json.body)",
+        ),
+    ]
+
+
 FAIL = [("Collect failure facts", 0)]
+WO_FAIL = [("Write-off failure facts", 0)]
+WO_NEXT = [("One write-off at a time", 0)]
 SYNC_FAILED = [("Bank sync failed", 0)]
 NEXT = [("One payment at a time", 0)]
 
 CONNECTIONS: Connections = {
     "Every hour": [[("Sync state (core)", 0)]],
     "Manual run": [[("Sync state (core)", 0)]],
+    "Called by Run now": [[("Sync state (core)", 0)]],
     "Sync state (core)": [[("State OK?", 0)]],
     "State OK?": [[("Start cursor", 0)], SYNC_FAILED],
     "Start cursor": [[("Sync page (Plaid)", 0)]],
@@ -226,7 +321,7 @@ CONNECTIONS: Connections = {
     "More pages?": [[("Next cursor", 0)], [("Run matching (core)", 0)]],
     "Next cursor": [[("Sync page (Plaid)", 0)]],
     "Run matching (core)": [[("Matching OK?", 0)]],
-    "Matching OK?": [[("Matching summary", 0), ("Split payments", 0)], SYNC_FAILED],
+    "Matching OK?": [[("Matching summary", 0), ("Split payments", 0), ("Split write-offs", 0)], SYNC_FAILED],
     "Split payments": [[("One payment at a time", 0)]],
     "One payment at a time": [[], [("Find existing payment (QBO)", 0)]],
     "Find existing payment (QBO)": [[("Payment decision (core)", 0)]],
@@ -239,6 +334,27 @@ CONNECTIONS: Connections = {
     "Recorded?": [NEXT, FAIL],
     "Collect failure facts": [[("Report failure (core)", 0)]],
     "Report failure (core)": [NEXT],
+    # Write-offs: a vendor credit, then a bill payment of 0 applying it to the bill
+    "Split write-offs": [WO_NEXT],
+    "One write-off at a time": [[], [("Find existing credit (QBO)", 0)]],
+    "Find existing credit (QBO)": [[("Credit decision (core)", 0)]],
+    "Credit decision (core)": [[("Route credit", 0)]],
+    "Route credit": [[("Create credit (QBO)", 0)], [("Credit ready", 0)], WO_FAIL, WO_FAIL, WO_FAIL],
+    "Create credit (QBO)": [[("Credit created?", 0)]],
+    "Credit created?": [[("Credit ready", 0)], WO_FAIL],
+    "Credit ready": [[("Record credit (core)", 0)]],
+    "Record credit (core)": [[("Credit recorded?", 0)]],
+    "Credit recorded?": [[("Find existing apply (QBO)", 0)], WO_FAIL],
+    "Find existing apply (QBO)": [[("Apply decision (core)", 0)]],
+    "Apply decision (core)": [[("Route apply", 0)]],
+    "Route apply": [[("Apply credit (QBO)", 0)], [("Apply ready", 0)], WO_FAIL, WO_FAIL, WO_FAIL],
+    "Apply credit (QBO)": [[("Applied?", 0)]],
+    "Applied?": [[("Apply ready", 0)], WO_FAIL],
+    "Apply ready": [[("Record write-off (core)", 0)]],
+    "Record write-off (core)": [[("Write-off recorded?", 0)]],
+    "Write-off recorded?": [WO_NEXT, WO_FAIL],
+    "Write-off failure facts": [[("Report write-off failure (core)", 0)]],
+    "Report write-off failure (core)": [WO_NEXT],
 }
 
 
@@ -258,10 +374,14 @@ SECTIONS = [
     ),
     Section(
         "Start",
-        "Every hour, or by hand. The core returns the saved sync cursor.",
+        "Every hour, by hand, or by a Run now request. The core returns the saved sync cursor.",
         col=0,
         row=2,
-        grid=(("Every hour", "Sync state (core)", "State OK?", "Start cursor"), ("Manual run", None, None, None)),
+        grid=(
+            ("Every hour", "Sync state (core)", "State OK?", "Start cursor"),
+            ("Manual run", None, None, None),
+            ("Called by Run now", None, None, None),
+        ),
     ),
     Section(
         "Bank transactions, page by page",
@@ -317,11 +437,56 @@ SECTIONS = [
         grid=(("Collect failure facts", "Report failure (core)"),),
         kind="failure",
     ),
+    Section(
+        "Write-offs of payment differences",
+        'Decided by a reviewer on an under-paid bill. A **vendor credit** for the open part ("Payment differences" '
+        "account), then a **bill payment of 0** that applies it to the bill: the bill is closed, no money moves. "
+        "Each is searched by its number (AP-WO-…) first, so a rerun never records it twice.",
+        col=12,
+        row=7,
+        grid=(
+            (
+                "Split write-offs",
+                "One write-off at a time",
+                "Find existing credit (QBO)",
+                "Credit decision (core)",
+                "Route credit",
+                "Create credit (QBO)",
+                "Credit created?",
+                "Credit ready",
+                "Record credit (core)",
+                "Credit recorded?",
+            ),
+            (
+                None,
+                None,
+                "Find existing apply (QBO)",
+                "Apply decision (core)",
+                "Route apply",
+                "Apply credit (QBO)",
+                "Applied?",
+                "Apply ready",
+                "Record write-off (core)",
+                "Write-off recorded?",
+            ),
+        ),
+    ),
+    Section(
+        "Write-off failures",
+        "The core decides: retry on a later run, or stop and show the error on the review item (which then "
+        "offers a retry).",
+        col=17,
+        row=10,
+        grid=(("Write-off failure facts", "Report write-off failure (core)"),),
+        kind="failure",
+    ),
 ]
 
 
 def build(cred_ids: dict[str, str] | None) -> dict[str, Any]:
-    nodes = lay_out(_trigger_nodes() + _sync_nodes() + _matching_nodes() + _payment_nodes(), SECTIONS)
+    nodes = lay_out(
+        _trigger_nodes() + _sync_nodes() + _matching_nodes() + _payment_nodes() + _write_off_nodes(), SECTIONS
+    )
     return workflow("AP – Bank sync & match", nodes, CONNECTIONS, cred_ids)
 
 

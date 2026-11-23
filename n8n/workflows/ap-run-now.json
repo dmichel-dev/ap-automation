@@ -1,0 +1,392 @@
+{
+  "active": false,
+  "connections": {
+    "Allowed?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Which workflow?",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Refused",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Authorize (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Allowed?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Run now request": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Authorize (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Start bank sync": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Started (202)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Start posting": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Started (202)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Which workflow?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Start posting",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Start bank sync",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "AP – Run now",
+  "nodes": [
+    {
+      "id": "note-run-now",
+      "name": "Note: Run now",
+      "parameters": {
+        "color": 5,
+        "content": "## Run now\nStarts the posting or the bank workflow at once, on request (a demo, or after a fix in QuickBooks).\n\nRequests are **signed** (scripts/run_now.py): the secret token never travels, and a signature is accepted for a few minutes and only once. The **core service decides** whether the request may run: the signature (compared in constant time), its age, the target and the rate limits; it records every request.",
+        "height": 350,
+        "width": 1140
+      },
+      "position": [
+        -40,
+        -150
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-request-and-decision",
+      "name": "Note: Request and decision",
+      "parameters": {
+        "color": 7,
+        "content": "## Request and decision\nPOST {\"target\": \"posting\" | \"bank\"} with the headers X-Run-Timestamp and X-Run-Signature. The core answers run or refuse.",
+        "height": 350,
+        "width": 660
+      },
+      "position": [
+        -40,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-start-the-workflow",
+      "name": "Note: Start the workflow",
+      "parameters": {
+        "color": 7,
+        "content": "## Start the workflow\nStarted without waiting; the request gets 202 at once.",
+        "height": 550,
+        "width": 660
+      },
+      "position": [
+        680,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-refused",
+      "name": "Note: Refused",
+      "parameters": {
+        "color": 3,
+        "content": "## Refused\n401 for a wrong, expired or reused signature, 400 for an unknown target, 429 when rate-limited, 503 when not enabled.",
+        "height": 350,
+        "width": 420
+      },
+      "position": [
+        -40,
+        850
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "run-now-request",
+      "name": "Run now request",
+      "parameters": {
+        "httpMethod": "POST",
+        "options": {},
+        "path": "ap-run-now",
+        "responseMode": "responseNode"
+      },
+      "position": [
+        0,
+        400
+      ],
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "5f0c2b7e-9a41-4d6b-8e3a-2c71d0a9b6f4"
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "authorize-core",
+      "maxTries": 3,
+      "name": "Authorize (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ timestamp: String($json.headers['x-run-timestamp'] ?? '').slice(0, 20), signature: String($json.headers['x-run-signature'] ?? '').slice(0, 128), target: String($json.body?.target ?? '').slice(0, 40) }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "http://core:8000/run-now/authorize"
+      },
+      "position": [
+        240,
+        400
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "allowed",
+      "name": "Allowed?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 && $json.body?.decision === 'run' }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        480,
+        400
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "which-workflow",
+      "name": "Which workflow?",
+      "parameters": {
+        "options": {},
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.body.target === 'posting' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "posting",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.body.target === 'bank' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "bank",
+              "renameOutput": true
+            }
+          ]
+        }
+      },
+      "position": [
+        720,
+        400
+      ],
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2
+    },
+    {
+      "executeOnce": true,
+      "id": "start-posting",
+      "name": "Start posting",
+      "parameters": {
+        "options": {
+          "waitForSubWorkflow": false
+        },
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apPostQbo0000001"
+        }
+      },
+      "position": [
+        960,
+        400
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2
+    },
+    {
+      "executeOnce": true,
+      "id": "start-bank-sync",
+      "name": "Start bank sync",
+      "parameters": {
+        "options": {
+          "waitForSubWorkflow": false
+        },
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apBankSync000001"
+        }
+      },
+      "position": [
+        960,
+        600
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2
+    },
+    {
+      "id": "started-202",
+      "name": "Started (202)",
+      "parameters": {
+        "options": {
+          "responseCode": "={{ 202 }}"
+        },
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ started: $('Authorize (core)').first().json.body.target }) }}"
+      },
+      "position": [
+        1200,
+        400
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1
+    },
+    {
+      "id": "refused",
+      "name": "Refused",
+      "parameters": {
+        "options": {
+          "responseCode": "={{ $('Authorize (core)').first().json.body?.status ?? 503 }}"
+        },
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ error: $('Authorize (core)').first().json.body?.message ?? 'not available', retry_after: $('Authorize (core)').first().json.body?.retry_after ?? null }) }}"
+      },
+      "position": [
+        0,
+        1000
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1
+    }
+  ],
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "timezone": "Europe/Paris"
+  }
+}

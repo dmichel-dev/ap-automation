@@ -107,7 +107,7 @@ main { max-width: 1440px; margin: 0 auto; padding: 28px 32px 64px; }
 /* ---- Item page: the two panels -------------------------------------------------------------- */
 .split { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 32px; align-items: start; margin-top: 24px; }
 .original { position: sticky; top: 16px; }
-.original h2, .extracted-head h2, .decision h2 { margin-bottom: 12px; }
+.original h2, .extracted-head h2, .decision h2, .bank h2 { margin-bottom: 12px; }
 .desk { max-height: calc(100vh - 120px); overflow: auto; padding: 20px; background: var(--desk); border-radius: var(--radius-m); }
 .desk img { display: block; width: 100%; height: auto; background: #fff; box-shadow: 0 1px 2px rgba(30, 36, 34, 0.18), 0 6px 18px rgba(30, 36, 34, 0.1); }
 .desk img + img { margin-top: 20px; }
@@ -164,6 +164,7 @@ th.num, td.num { text-align: right; padding-right: 0; padding-left: 10px; }
 .when { color: var(--ink-2); font-variant-numeric: tabular-nums; margin-right: 6px; }
 
 /* ---- Decision panel ------------------------------------------------------------------------- */
+.bank { padding: 18px 22px; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius-m); }
 .decision { padding: 20px 22px 22px; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius-m); }
 .decide { margin: 0; }
 .decide > fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
@@ -199,20 +200,40 @@ textarea { resize: vertical; }
 #act-approve:checked ~ .choices [for=act-approve],
 #act-verify:checked ~ .choices [for=act-verify],
 #act-correct:checked ~ .choices [for=act-correct],
-#act-reject:checked ~ .choices [for=act-reject] { border: 2px solid var(--accent); padding: 9px 11px; background: var(--accent-soft); }
+#act-reject:checked ~ .choices [for=act-reject],
+#act-confirm_match:checked ~ .choices [for=act-confirm_match],
+#act-reject_match:checked ~ .choices [for=act-reject_match],
+#act-write_off:checked ~ .choices [for=act-write_off],
+#act-keep_open:checked ~ .choices [for=act-keep_open],
+#act-retry:checked ~ .choices [for=act-retry] { border: 2px solid var(--accent); padding: 9px 11px; background: var(--accent-soft); }
 #act-reject:checked ~ .choices [for=act-reject] { border-color: var(--red-rule); background: var(--red-bg); color: var(--red); }
 #act-approve:focus-visible ~ .choices [for=act-approve],
 #act-verify:focus-visible ~ .choices [for=act-verify],
 #act-correct:focus-visible ~ .choices [for=act-correct],
-#act-reject:focus-visible ~ .choices [for=act-reject] { outline: 3px solid var(--accent); outline-offset: 2px; }
+#act-reject:focus-visible ~ .choices [for=act-reject],
+#act-confirm_match:focus-visible ~ .choices [for=act-confirm_match],
+#act-reject_match:focus-visible ~ .choices [for=act-reject_match],
+#act-write_off:focus-visible ~ .choices [for=act-write_off],
+#act-keep_open:focus-visible ~ .choices [for=act-keep_open],
+#act-retry:focus-visible ~ .choices [for=act-retry] { outline: 3px solid var(--accent); outline-offset: 2px; }
 #act-approve:checked ~ .fields-approve,
 #act-verify:checked ~ .fields-verify,
 #act-correct:checked ~ .fields-correct,
-#act-reject:checked ~ .fields-reject { display: block; }
+#act-reject:checked ~ .fields-reject,
+#act-confirm_match:checked ~ .fields-confirm_match,
+#act-reject_match:checked ~ .fields-reject_match,
+#act-write_off:checked ~ .fields-write_off,
+#act-keep_open:checked ~ .fields-keep_open,
+#act-retry:checked ~ .fields-retry { display: block; }
 #act-approve:checked ~ .confirm .go-approve,
 #act-verify:checked ~ .confirm .go-verify,
 #act-correct:checked ~ .confirm .go-correct,
-#act-reject:checked ~ .confirm .go-reject { display: inline; }
+#act-reject:checked ~ .confirm .go-reject,
+#act-confirm_match:checked ~ .confirm .go-confirm_match,
+#act-reject_match:checked ~ .confirm .go-reject_match,
+#act-write_off:checked ~ .confirm .go-write_off,
+#act-keep_open:checked ~ .confirm .go-keep_open,
+#act-retry:checked ~ .confirm .go-retry { display: inline; }
 #act-reject:checked ~ .confirm .go { background: var(--red); }
 
 /* ---- Account search (the select becomes a combobox when scripts run) ------------------------- */

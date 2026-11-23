@@ -10,7 +10,8 @@ from psycopg.rows import dict_row
 
 MIGRATIONS = Path("/migrations")
 TABLES = (
-    "matches, bank_transactions, bank_sync_state, accounting_postings, vendor_links, supplier_defaults, "
+    "write_offs, run_requests, matches, bank_transactions, bank_sync_state, accounting_postings, "
+    "vendor_links, supplier_defaults, "
     "qbo_accounts, qbo_vendors, login_attempts, review_sessions, review_users, "
     "invoice_lines, invoice_tax_lines, review_queue, processing_log, invoices"
 )

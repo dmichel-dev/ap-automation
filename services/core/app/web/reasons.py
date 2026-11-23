@@ -104,9 +104,18 @@ REASONS: dict[str, Reason] = {
     "duplicate_in_accounting": Reason(
         "Already in QuickBooks", "QuickBooks already has several documents with this number for this supplier."
     ),
+    "quickbooks_refused": Reason(
+        "QuickBooks refused",
+        "QuickBooks refused this and no automatic retry is left. Check the error, fix the cause in QuickBooks "
+        "if needed, then retry.",
+    ),
     # Bank matching
     "ambiguous_match": Reason(
         "Several bank matches", "Several bank transactions could be this payment. Choose the right one."
+    ),
+    "payment_difference": Reason(
+        "Paid less than billed",
+        "The bank paid less than the bill. Write the difference off, or leave it open on the bill.",
     ),
 }
 FALLBACK = Reason("Needs a check", "Something on this invoice needs a person's check.")

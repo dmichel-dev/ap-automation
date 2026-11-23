@@ -59,7 +59,13 @@ def core_reason_codes() -> set[str]:
     for path in APP.rglob("*.py"):
         if "web" not in path.relative_to(APP).parts:
             codes |= _codes_in(ast.parse(path.read_text()))
-    return codes | set(accounting.REVIEW_ERRORS) | set(accounting.MATCHING_REVIEWS) | set(review.FRAUD_CODES)
+    return (
+        codes
+        | set(accounting.REVIEW_ERRORS)
+        | set(accounting.QUICKBOOKS_REFUSED)
+        | set(accounting.MATCHING_REVIEWS)
+        | set(review.FRAUD_CODES)
+    )
 
 
 def escape(text):
@@ -330,7 +336,7 @@ def test_correcting_in_the_panel_changes_only_what_changed(items):
     assert row["status"] == "open" and [list(x["after"]) for x in row["corrections"]] == [["invoice_number"]]
 
 
-@pytest.mark.parametrize("action", [None, "", "approve_all", "write_off"])
+@pytest.mark.parametrize("action", [None, "", "approve_all", "pay_now"])
 def test_the_panel_needs_a_known_action(items, action):
     c, url, live, _demo = items
     data = {"csrf": csrf(c), "approve.account_id": "20"} | ({"action": action} if action is not None else {})

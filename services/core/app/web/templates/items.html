@@ -21,7 +21,7 @@
       <span class="row-why">
         {% if first %}<span class="badge tone-{{ i | tone }}">{{ first.label }}</span>{% endif %}
         {% if i.reasons | length > 1 %}<span class="more">and {{ i.reasons | length - 1 }} more</span>{% endif %}
-        {% if i.status != "open" %}<span class="row-state">{{ i | status_label }}</span>{% endif %}
+        {% if i.status != "open" or i.waiting_for or i.effect_error %}<span class="row-state">{{ i | status_label }}</span>{% endif %}
       </span>
       <span class="row-amount num">{{ i.total | money(i.currency) }}</span>
       <span class="row-age num"><span class="sr">Opened </span>{{ i.created_at | age }}{% if i.created_at | age != "today" %}<span class="sr"> ago</span>{% endif %}</span>

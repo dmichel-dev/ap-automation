@@ -145,6 +145,27 @@
   </div>
 </section>
 
+{% set pay = item.payment %}
+{% if pay and item.stage != "validation" %}
+<section class="bank" aria-labelledby="bank-title">
+  <h2 id="bank-title">Bill and bank payment</h2>
+  <dl class="facts compact">
+    <div><dt>Bill in QuickBooks</dt><dd>{{ pay.posting.external_id or "not posted yet" }} <span class="muted">({{ pay.posting.status }})</span></dd></div>
+    <div><dt>Bill amount</dt><dd class="num">{{ pay.posting.amount | money(pay.posting.currency) }}</dd></div>
+    <div><dt>Paid</dt><dd class="num">{{ pay.posting.amount_paid | money(pay.posting.currency) }}</dd></div>
+    {% if pay.open_amount %}<div><dt>Open difference</dt><dd class="num">{{ pay.open_amount | money(pay.posting.currency) }}</dd></div>{% endif %}
+    {% if pay.posting.amount_written_off %}<div><dt>Written off</dt><dd class="num">{{ pay.posting.amount_written_off | money(pay.posting.currency) }}</dd></div>{% endif %}
+  </dl>
+  {% set accepted = pay.matches | selectattr("status", "equalto", "accepted") | list %}
+  {% for m in accepted %}<p class="hint">Paid by bank transaction of {{ m.date }} “{{ m.bank_text }}”, {{ m.bank_amount | money(m.currency) }}{% if m.external_payment_id %}, bill payment {{ m.external_payment_id }} in QuickBooks{% endif %}.</p>{% endfor %}
+</section>
+{% endif %}
+{% if is_open and item.waiting_for %}
+<p class="note" role="status">{{ item | status_label }}. Decided by {{ item.reviewer }}; it closes on its own once QuickBooks confirms (next run).{% if item.effect_error %} Last attempt: <span class="muted">{{ item.effect_error }}</span>{% endif %}</p>
+{% elif is_open and item.effect_error %}
+<p class="note error" role="alert">QuickBooks: {{ item.effect_error }}</p>
+{% endif %}
+
 {% if item.actions %}
 {% set decide = "verify" if "verify" in item.actions else "approve" %}
 {# A possible fraud is never pre-decided: the reviewer picks "verified" or "reject" themselves #}
@@ -164,6 +185,7 @@
         {% endif %}
         {% if "correct" in item.actions %}<label for="act-correct" class="choice">Correct the data<span>Fix what was read wrongly; the item stays open</span></label>{% endif %}
         {% if "reject" in item.actions %}<label for="act-reject" class="choice">Reject<span>Don't post it; the stored file is deleted</span></label>{% endif %}
+        {% for a, title, hint in settle_choices if a in item.actions %}<label for="act-{{ a }}" class="choice{{ ' main' if loop.first }}">{{ title }}<span>{{ hint }}</span></label>{% endfor %}
       </div>
 
       {% if decide in item.actions %}
@@ -239,16 +261,56 @@
       </div>
       {% endif %}
 
+      {% if "confirm_match" in item.actions %}
+      <div class="fields fields-confirm_match">
+        <fieldset class="sub">
+          <legend>Which bank transaction pays this bill?</legend>
+          {% for m in pay.matches if m.status == "candidate" %}
+          <label class="opt"><input type="radio" name="confirm_match.bank_transaction_id" value="{{ m.bank_transaction_id }}" data-required-for="confirm_match"> {{ m.date }} · “{{ m.bank_text }}” · <span class="num">{{ m.bank_amount | money(m.currency) }}</span>{% if m.difference | float %} <span class="muted">(difference {{ m.difference | money }})</span>{% endif %}</label>
+          {% endfor %}
+        </fieldset>
+        <label for="confirm_match-note">Note, optional</label>
+        <textarea name="confirm_match.note" id="confirm_match-note" maxlength="1000" rows="2"></textarea>
+        <p class="hint">The bill payment is recorded in QuickBooks for the bank amount, never more than the bill. No money is sent.</p>
+      </div>
+      {% endif %}
+      {% if "reject_match" in item.actions %}
+      <div class="fields fields-reject_match">
+        <label for="reject_match-note">Why none of these pays the bill, required</label>
+        <textarea name="reject_match.note" id="reject_match-note" maxlength="1000" rows="2"></textarea>
+        <p class="hint">These transactions won't be proposed again for this bill. It stays unpaid and is matched again on later runs.</p>
+      </div>
+      {% endif %}
+      {% if "write_off" in item.actions %}
+      <div class="fields fields-write_off">
+        <p>Writes off <strong class="num">{{ pay.open_amount | money(pay.posting.currency) }}</strong> to the “Payment differences” account: a vendor credit, applied to the bill. No money moves.</p>
+        <label for="write_off-note">Note, optional</label>
+        <textarea name="write_off.note" id="write_off-note" maxlength="1000" rows="2"></textarea>
+      </div>
+      {% endif %}
+      {% if "keep_open" in item.actions %}
+      <div class="fields fields-keep_open">
+        <label for="keep_open-note">Note, optional</label>
+        <textarea name="keep_open.note" id="keep_open-note" maxlength="1000" rows="2"></textarea>
+        <p class="hint">The difference stays open on the bill in QuickBooks.</p>
+      </div>
+      {% endif %}
+      {% if "retry" in item.actions %}
+      <div class="fields fields-retry">
+        <label for="retry-note">What was fixed, optional</label>
+        <textarea name="retry.note" id="retry-note" maxlength="1000" rows="2"></textarea>
+        <p class="hint">Fix the cause in QuickBooks first if the error asks for it. Each document is searched by its number before it is created, so nothing is recorded twice.</p>
+      </div>
+      {% endif %}
+
       <div class="confirm">
         <button class="go" data-needs-action>
-          <span class="go-none">Choose an action first</span><span class="go-approve">Approve and post</span><span class="go-verify">Post as verified</span><span class="go-correct">Save corrections</span><span class="go-reject">Reject the invoice</span>
+          <span class="go-none">Choose an action first</span><span class="go-approve">Approve and post</span><span class="go-verify">Post as verified</span><span class="go-correct">Save corrections</span><span class="go-reject">Reject the invoice</span><span class="go-confirm_match">Confirm the payment</span><span class="go-reject_match">None of these</span><span class="go-write_off">Write off the difference</span><span class="go-keep_open">Leave it open</span><span class="go-retry">Try again in QuickBooks</span>
         </button>
       </div>
     </fieldset>
   </form>
 </section>
-{% elif is_open %}
-<p class="note">This {{ item.stage }} review is settled with QuickBooks actions, which aren't on this page yet.</p>
 {% endif %}
 </div>
 </div>

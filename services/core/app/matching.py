@@ -147,11 +147,16 @@ def evaluate(bill: OpenBill, tx: BankTx, rules: Rules) -> Evaluation:
     )
 
 
-def decide(bills: list[OpenBill], txs: list[BankTx], rules: Rules) -> Decision:
+def decide(
+    bills: list[OpenBill], txs: list[BankTx], rules: Rules, excluded: frozenset[tuple[str, str]] = frozenset()
+) -> Decision:
+    """excluded: (invoice ID, transaction ID) pairs a person dismissed: never proposed again."""
     candidates: dict[str, list[tuple[BankTx, Evaluation]]] = {b.invoice_id: [] for b in bills}
     per_tx: dict[str, set[str]] = {}
     for bill in bills:
         for tx in txs:
+            if (bill.invoice_id, tx.transaction_id) in excluded:
+                continue
             ev = evaluate(bill, tx, rules)
             if ev.candidate:
                 candidates[bill.invoice_id].append((tx, ev))

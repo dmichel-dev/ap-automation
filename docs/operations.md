@@ -96,6 +96,8 @@ python3 scripts/create_chart_of_accounts.py --apply   # create the missing ones
 
 Then run **AP – Sync QuickBooks reference data** by hand, so the review page's picker shows the new accounts at once.
 
+The chart includes **Payment differences** (*Other Expense*, detail *Other Miscellaneous Expense*; it takes both debits and credits). Reviewers write the open part of under-paid bills off to it. Put its QuickBooks ID in `QBO_WRITE_OFF_ACCOUNT_ID`; until then, a write-off fails and shows on its review item. It is hidden from the review page's account picker: it is never an invoice's expense account.
+
 ## Review page accounts
 
 The review page (`http://localhost:8081`, internal listener) has no self-registration. Accounts are managed with a CLI in its container; passwords are typed at a prompt (twice), never passed as arguments:
@@ -118,4 +120,32 @@ Used once on 2026-11-22 for invoice `f6a94cb0-…` (BW-1042, Step 5 test of Day 
 
 ## Retrying a failed posting
 
-A posting that failed permanently (validation error in QuickBooks, attempts used up) is retried after the cause is fixed with `POST /postings/{invoice_id}/retry` (`{"note": "…"}`): attempts go back to 0 and the request is logged. It is refused while an open `posting` review item exists for the invoice: the reviewer decides those (Day 3).
+A posting that failed permanently (validation error in QuickBooks, attempts used up) opens a review item, `quickbooks_refused`, that shows QuickBooks' error. After fixing the cause, the reviewer chooses **Try again in QuickBooks** on the review page. Operators can do the same with `POST /postings/{invoice_id}/retry` (`{"note": "…"}`): attempts go back to 0, the item waits for the posting, and the request is logged. The operator retry is refused while a review item for another reason (e.g. `vendor_currency_conflict`) is open: a reviewer decides those.
+
+## Run now
+
+The workflow **AP – Run now** starts the posting or the bank workflow at once, instead of waiting for the schedule (for a demo, or after fixing something in QuickBooks):
+
+```bash
+set -a; . ./.env; set +a
+python3 scripts/run_now.py posting   # or: bank
+```
+
+- **The token never travels.** n8n stores every webhook request, headers included, even for a workflow set to save nothing: the execution is soft-deleted, then pruned about an hour later. So a request carries a timestamp and `HMAC-SHA256(RUN_NOW_TOKEN, "<timestamp>.<target>")`, not the token. The core checks the signature in constant time. It accepts it within 5 minutes of its timestamp, and only once: what n8n keeps can't be reused.
+- **Refused:** no or wrong signature (401), expired or reused (401), unknown target (400), not configured (`RUN_NOW_TOKEN` empty: 503).
+- **Rate limits:** 2 runs per target per minute. After 10 refused requests in 10 minutes, every request is refused for 10 minutes (429 with `retry_after`).
+- Every request is recorded in `run_requests` and `processing_log` (step `run_now`), without the token.
+- **Rotating the token:** change `RUN_NOW_TOKEN` in `.env`, then `docker compose up -d core`.
+
+## Updating the workflows in n8n
+
+The builders in `n8n/build_*.py` are the source of truth. To load a changed workflow into the running n8n (credential IDs from a local file, never committed):
+
+```bash
+python3 n8n/build_bank_sync.py --credentials cred_ids.json \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); d['id']='apBankSync000001'; print(json.dumps(d))" \
+  | docker compose exec -T n8n sh -c "cat > /tmp/w.json && n8n import:workflow --input=/tmp/w.json; n8n publish:workflow --id=apBankSync000001; rm -f /tmp/w.json"
+docker compose restart n8n
+```
+
+Workflow IDs: `apEmailIntake001`, `apPostQbo0000001`, `apBankSync000001`, `apSyncQboRef0001`, `apRunNow00000001`. An import leaves the workflow unpublished, so publish it again. Wait until the log says "Finished building workflow dependency index" before calling a webhook (until then it answers 404). `scripts/export_workflow.sh` brings editor changes back for comparison.

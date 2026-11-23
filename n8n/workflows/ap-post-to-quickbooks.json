@@ -552,7 +552,7 @@
       "name": "Note: Start and claim",
       "parameters": {
         "color": 7,
-        "content": "## Start and claim\nEvery 15 minutes, after each email intake, or by hand. QuickBooks' closing date is read first: the core posts nothing into a closed period. The core then hands out up to 10 invoices.",
+        "content": "## Start and claim\nEvery 15 minutes, after each email intake (or a Run now request), or by hand. QuickBooks' closing date is read first: the core posts nothing into a closed period. The core then hands out up to 10 invoices.",
         "height": 750,
         "width": 1140
       },

@@ -27,6 +27,8 @@
     {"name": "Prepaid Expenses", "type": "Other Current Asset", "sub_type": "PrepaidExpenses"},
 
     {"name": "Materials", "type": "Cost of Goods Sold", "sub_type": "SuppliesMaterialsCogs", "parent": "Cost of Goods Sold"},
-    {"name": "Freight In", "type": "Cost of Goods Sold", "sub_type": "ShippingFreightDeliveryCos", "parent": "Cost of Goods Sold"}
+    {"name": "Freight In", "type": "Cost of Goods Sold", "sub_type": "ShippingFreightDeliveryCos", "parent": "Cost of Goods Sold"},
+
+    {"name": "Payment differences", "type": "Other Expense", "sub_type": "OtherMiscellaneousExpense"}
   ]
 }

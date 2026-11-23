@@ -406,7 +406,8 @@ SECTIONS = [
     ),
     Section(
         "Start and claim",
-        "Every 15 minutes, after each email intake, or by hand. QuickBooks' closing date is read first: "
+        "Every 15 minutes, after each email intake (or a Run now request), or by hand. "
+        "QuickBooks' closing date is read first: "
         "the core posts nothing into a closed period. The core then hands out up to 10 invoices.",
         col=0,
         row=2,

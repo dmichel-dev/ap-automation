@@ -1,12 +1,85 @@
 {
   "active": false,
   "connections": {
+    "Applied?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Apply ready",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Write-off failure facts",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Apply credit (QBO)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Applied?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Apply decision (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Route apply",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Apply ready": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Record write-off (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Called by Run now": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Sync state (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
     "Collect failure facts": {
       "main": [
         [
           {
             "index": 0,
             "node": "Report failure (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Create credit (QBO)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Credit created?",
             "type": "main"
           }
         ]
@@ -23,12 +96,92 @@
         ]
       ]
     },
+    "Credit created?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Credit ready",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Write-off failure facts",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Credit decision (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Route credit",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Credit ready": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Record credit (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Credit recorded?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Find existing apply (QBO)",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Write-off failure facts",
+            "type": "main"
+          }
+        ]
+      ]
+    },
     "Every hour": {
       "main": [
         [
           {
             "index": 0,
             "node": "Sync state (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Find existing apply (QBO)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Apply decision (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Find existing credit (QBO)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Credit decision (core)",
             "type": "main"
           }
         ]
@@ -67,6 +220,11 @@
           {
             "index": 0,
             "node": "Split payments",
+            "type": "main"
+          },
+          {
+            "index": 0,
+            "node": "Split write-offs",
             "type": "main"
           }
         ],
@@ -115,6 +273,18 @@
           {
             "index": 0,
             "node": "Find existing payment (QBO)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "One write-off at a time": {
+      "main": [
+        [],
+        [
+          {
+            "index": 0,
+            "node": "Find existing credit (QBO)",
             "type": "main"
           }
         ]
@@ -178,12 +348,34 @@
         ]
       ]
     },
+    "Record credit (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Credit recorded?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
     "Record payment (core)": {
       "main": [
         [
           {
             "index": 0,
             "node": "Recorded?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Record write-off (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Write-off recorded?",
             "type": "main"
           }
         ]
@@ -213,6 +405,95 @@
           {
             "index": 0,
             "node": "One payment at a time",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Report write-off failure (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "One write-off at a time",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Route apply": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Apply credit (QBO)",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Apply ready",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Write-off failure facts",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Write-off failure facts",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Write-off failure facts",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Route credit": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Create credit (QBO)",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Credit ready",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Write-off failure facts",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Write-off failure facts",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Write-off failure facts",
             "type": "main"
           }
         ]
@@ -274,6 +555,17 @@
           {
             "index": 0,
             "node": "One payment at a time",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Split write-offs": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "One write-off at a time",
             "type": "main"
           }
         ]
@@ -358,6 +650,35 @@
           }
         ]
       ]
+    },
+    "Write-off failure facts": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Report write-off failure (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Write-off recorded?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "One write-off at a time",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Write-off failure facts",
+            "type": "main"
+          }
+        ]
+      ]
     }
   },
   "name": "AP – Bank sync & match",
@@ -383,8 +704,8 @@
       "name": "Note: Start",
       "parameters": {
         "color": 7,
-        "content": "## Start\nEvery hour, or by hand. The core returns the saved sync cursor.",
-        "height": 550,
+        "content": "## Start\nEvery hour, by hand, or by a Run now request. The core returns the saved sync cursor.",
+        "height": 750,
         "width": 900
       },
       "position": [
@@ -475,6 +796,38 @@
       "typeVersion": 1
     },
     {
+      "id": "note-write-offs-of-payment-differences",
+      "name": "Note: Write-offs of payment differences",
+      "parameters": {
+        "color": 7,
+        "content": "## Write-offs of payment differences\nDecided by a reviewer on an under-paid bill. A **vendor credit** for the open part (\"Payment differences\" account), then a **bill payment of 0** that applies it to the bill: the bill is closed, no money moves. Each is searched by its number (AP-WO-…) first, so a rerun never records it twice.",
+        "height": 550,
+        "width": 2340
+      },
+      "position": [
+        2840,
+        1250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-write-off-failures",
+      "name": "Note: Write-off failures",
+      "parameters": {
+        "color": 3,
+        "content": "## Write-off failures\nThe core decides: retry on a later run, or stop and show the error on the review item (which then offers a retry).",
+        "height": 350,
+        "width": 420
+      },
+      "position": [
+        4040,
+        1850
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
       "id": "every-hour",
       "name": "Every hour",
       "parameters": {
@@ -504,6 +857,19 @@
       ],
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1
+    },
+    {
+      "id": "called-by-run-now",
+      "name": "Called by Run now",
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "position": [
+        0,
+        800
+      ],
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1
     },
     {
       "credentials": {
@@ -1414,6 +1780,905 @@
       "position": [
         4320,
         800
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "split-write-offs",
+      "name": "Split write-offs",
+      "parameters": {
+        "fieldToSplitOut": "body.write_offs_due",
+        "options": {}
+      },
+      "position": [
+        2880,
+        1400
+      ],
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1
+    },
+    {
+      "id": "one-write-off-at-a-time",
+      "name": "One write-off at a time",
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "position": [
+        3120,
+        1400
+      ],
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3
+    },
+    {
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "name": "QuickBooks – Sandbox US"
+        }
+      },
+      "id": "find-existing-credit-qbo",
+      "maxTries": 3,
+      "name": "Find existing credit (QBO)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "method": "GET",
+        "nodeCredentialType": "quickBooksOAuth2Api",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchInterval": 300,
+              "batchSize": 1
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "minorversion",
+              "value": "={{ $('Run matching (core)').first().json.body.minorversion }}"
+            },
+            {
+              "name": "query",
+              "value": "={{ \"select Id, VendorRef from VendorCredit where DocNumber = '\" + $('One write-off at a time').first().json.doc_number_q + \"'\" }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "sendQuery": true,
+        "url": "={{ $('Run matching (core)').first().json.body.qbo_base }}/query"
+      },
+      "position": [
+        3360,
+        1400
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "credit-decision-core",
+      "maxTries": 3,
+      "name": "Credit decision (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ status_code: $json.statusCode ?? 0, body: $json.body ?? null }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "=http://core:8000/write-offs/{{ $('One write-off at a time').first().json.write_off_id }}/lookup/credit"
+      },
+      "position": [
+        3600,
+        1400
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "route-credit",
+      "name": "Route credit",
+      "parameters": {
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "core error"
+        },
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.body?.decision === 'create' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "create",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.body?.decision === 'exists' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "exists",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.body?.decision === 'review' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "review",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.body?.decision === 'error' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "error",
+              "renameOutput": true
+            }
+          ]
+        }
+      },
+      "position": [
+        3840,
+        1400
+      ],
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2
+    },
+    {
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "name": "QuickBooks – Sandbox US"
+        }
+      },
+      "id": "create-credit-qbo",
+      "maxTries": 3,
+      "name": "Create credit (QBO)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "jsonBody": "={{ JSON.stringify($('One write-off at a time').first().json.credit) }}",
+        "method": "POST",
+        "nodeCredentialType": "quickBooksOAuth2Api",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchInterval": 300,
+              "batchSize": 1
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "minorversion",
+              "value": "={{ $('Run matching (core)').first().json.body.minorversion }}"
+            },
+            {
+              "name": "requestid",
+              "value": "={{ $('One write-off at a time').first().json.credit_request_id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "sendHeaders": true,
+        "sendQuery": true,
+        "specifyBody": "json",
+        "url": "={{ $('Run matching (core)').first().json.body.qbo_base }}/vendorcredit"
+      },
+      "position": [
+        4080,
+        1400
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "credit-created",
+      "name": "Credit created?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 && !!$json.body?.VendorCredit?.Id }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        4320,
+        1400
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "credit-ready",
+      "name": "Credit ready",
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "external_id",
+              "name": "external_id",
+              "type": "string",
+              "value": "={{ String($json.body.external_id ?? $json.body.VendorCredit.Id) }}"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "mode": "manual",
+        "options": {}
+      },
+      "position": [
+        4560,
+        1400
+      ],
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "record-credit-core",
+      "maxTries": 3,
+      "name": "Record credit (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ external_payment_id: $json.external_id, execution_id: $execution.id }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "=http://core:8000/write-offs/{{ $('One write-off at a time').first().json.write_off_id }}/credit"
+      },
+      "position": [
+        4800,
+        1400
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "credit-recorded",
+      "name": "Credit recorded?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 && !!$json.body?.apply }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        5040,
+        1400
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "name": "QuickBooks – Sandbox US"
+        }
+      },
+      "id": "find-existing-apply-qbo",
+      "maxTries": 3,
+      "name": "Find existing apply (QBO)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "method": "GET",
+        "nodeCredentialType": "quickBooksOAuth2Api",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchInterval": 300,
+              "batchSize": 1
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "minorversion",
+              "value": "={{ $('Run matching (core)').first().json.body.minorversion }}"
+            },
+            {
+              "name": "query",
+              "value": "={{ \"select Id, VendorRef from BillPayment where DocNumber = '\" + $('One write-off at a time').first().json.doc_number_q + \"'\" }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "sendQuery": true,
+        "url": "={{ $('Run matching (core)').first().json.body.qbo_base }}/query"
+      },
+      "position": [
+        3360,
+        1600
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "apply-decision-core",
+      "maxTries": 3,
+      "name": "Apply decision (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ status_code: $json.statusCode ?? 0, body: $json.body ?? null }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "=http://core:8000/write-offs/{{ $('One write-off at a time').first().json.write_off_id }}/lookup/apply"
+      },
+      "position": [
+        3600,
+        1600
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "route-apply",
+      "name": "Route apply",
+      "parameters": {
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "core error"
+        },
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.body?.decision === 'create' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "create",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.body?.decision === 'exists' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "exists",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.body?.decision === 'review' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "review",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.body?.decision === 'error' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "error",
+              "renameOutput": true
+            }
+          ]
+        }
+      },
+      "position": [
+        3840,
+        1600
+      ],
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2
+    },
+    {
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "name": "QuickBooks – Sandbox US"
+        }
+      },
+      "id": "apply-credit-qbo",
+      "maxTries": 3,
+      "name": "Apply credit (QBO)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "jsonBody": "={{ JSON.stringify($('Record credit (core)').first().json.body.apply) }}",
+        "method": "POST",
+        "nodeCredentialType": "quickBooksOAuth2Api",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchInterval": 300,
+              "batchSize": 1
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "minorversion",
+              "value": "={{ $('Run matching (core)').first().json.body.minorversion }}"
+            },
+            {
+              "name": "requestid",
+              "value": "={{ $('One write-off at a time').first().json.apply_request_id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "sendHeaders": true,
+        "sendQuery": true,
+        "specifyBody": "json",
+        "url": "={{ $('Run matching (core)').first().json.body.qbo_base }}/billpayment"
+      },
+      "position": [
+        4080,
+        1600
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "applied",
+      "name": "Applied?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 && !!$json.body?.BillPayment?.Id }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        4320,
+        1600
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "apply-ready",
+      "name": "Apply ready",
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "external_id",
+              "name": "external_id",
+              "type": "string",
+              "value": "={{ String($json.body.external_id ?? $json.body.BillPayment.Id) }}"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "mode": "manual",
+        "options": {}
+      },
+      "position": [
+        4560,
+        1600
+      ],
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "record-write-off-core",
+      "maxTries": 3,
+      "name": "Record write-off (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ external_payment_id: $json.external_id, execution_id: $execution.id }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "=http://core:8000/write-offs/{{ $('One write-off at a time').first().json.write_off_id }}/applied"
+      },
+      "position": [
+        4800,
+        1600
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "write-off-recorded",
+      "name": "Write-off recorded?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        5040,
+        1600
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "write-off-failure-facts",
+      "name": "Write-off failure facts",
+      "parameters": {
+        "jsCode": "// Facts about the step that failed. The core decides what they mean (retry later, stop, review).\nconst NAMED = {};   // steps that answered 200 without the expected data\nconst step = $prevNode.name;\nconst r = $json;\nconst b = r.body ?? {};\nlet facts;\nif (b.decision) {          // the core's answer to a lookup: review, or QuickBooks query error\n  facts = { error_code: b.error_code, error_message: b.error_message, http_status: b.http_status,\n            fault_code: b.fault_code };\n} else {                   // a QuickBooks or core call that failed\n  const fault = b.Fault?.Error?.[0];\n  facts = { http_status: r.statusCode ?? 0, fault_code: fault?.code ?? null,\n            error_message: fault ? `${fault.Message ?? ''} ${fault.Detail ?? ''}`.trim()\n                                 : String(b.message ?? b.detail ?? r.error?.message ?? '') };\n  if (NAMED[step] && r.statusCode === 200) facts.error_code = NAMED[step];\n}\nreturn [{ json: { write_off_id: $('One write-off at a time').first().json.write_off_id, body: {\n  ...{}, ...facts, error_message: `${step}: ${facts.error_message ?? ''}`.slice(0, 1000),\n  execution_id: $execution.id } } }];",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        4080,
+        2000
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "report-write-off-failure-core",
+      "maxTries": 3,
+      "name": "Report write-off failure (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "=http://core:8000/write-offs/{{ $json.write_off_id }}/failed"
+      },
+      "position": [
+        4320,
+        2000
       ],
       "retryOnFail": true,
       "type": "n8n-nodes-base.httpRequest",

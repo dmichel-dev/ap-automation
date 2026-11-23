@@ -7,7 +7,7 @@ from typing import Any, get_args
 from pydantic import BaseModel, ValidationError
 from starlette.datastructures import FormData
 
-from .. import review
+from .. import review, settlement
 from .accounts import Viewer
 
 CORRECTABLE = tuple(review.Corrections.model_fields)
@@ -68,6 +68,19 @@ def decision(form: FormData, viewer: Viewer) -> review.Decision:
         accept_suggested_dates=text(form, "accept_suggested_dates") == "1",
         note=text(form, "note") or None,
     )
+
+
+def settled(form: FormData, viewer: Viewer, action: str) -> settlement.Settlement:
+    """A decision on a posting or matching item: the chosen bank transaction (confirm) and a note."""
+    note = text(form, "note") or None
+    if action == "confirm_match":
+        return _build(
+            settlement.MatchChoice,
+            reviewer=viewer.reviewer,
+            bank_transaction_id=text(form, "bank_transaction_id"),
+            note=note,
+        )
+    return _build(settlement.Settlement, reviewer=viewer.reviewer, note=note)
 
 
 def rejection(form: FormData, viewer: Viewer) -> review.Rejection:

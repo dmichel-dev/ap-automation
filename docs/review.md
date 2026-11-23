@@ -10,9 +10,23 @@ Invoices that validation can't pass alone go to a person. The core decides which
 | **Verified with supplier** | fraud items only (`possible_bank_detail_change`) | Same as approve. A note saying how it was verified is required (e.g. "called the number on file, not the one in the letter"). Fraud items have **no plain Approve**. |
 | **Correct** | validation review, no fraud flag | Fix a header field that was printed or read wrongly (supplier, number, dates, currency, subtotal, tax total, total, document type). The item stays open; the reviewer then approves or rejects. Line items can't be edited yet (roadmap): an invoice with wrong lines is rejected. |
 | **Reject** | any validation review | A reason is required. The invoice is not posted and its stored file is deleted. |
-| Write off, choose the bank match, retry/exclude a posting | posting and matching reviews | Planned: they need QuickBooks actions. The page shows these items without actions for now. |
+| **Confirm the payment** | `ambiguous_match` (matching) | The reviewer picks the candidate bank transaction that pays the bill. The match is accepted, the other candidates are dismissed, and the bill payment is recorded by the next bank run. Another bill's item that waited on the same transaction closes on its own (`closed_by_other_decision`); that bill stays unpaid and is matched again later. |
+| **None of these** | `ambiguous_match` (matching) | A reason is required. The candidates are dismissed and never proposed again for this bill; it stays unpaid. |
+| **Write off the difference** | `payment_difference` (matching: the bank paid less than the bill) | The open part is written off to the **Payment differences** account: a vendor credit, applied to the bill by a bill payment of 0. No money moves. |
+| **Leave it open** | `payment_difference` | The difference stays open on the bill in QuickBooks. |
+| **Try again in QuickBooks** | a QuickBooks call failed with no automatic retry left (`quickbooks_refused`, or a write-off or payment that stopped) | After fixing the cause in QuickBooks: the failed step (posting, bill payment or write-off) is tried again on the next run. |
 
-A decided item can't be decided again (409).
+A decided item can't be decided again (409). Only under-payments open a `payment_difference` item. An over-payment is recorded up to the bill amount and logged as its own warning (`over-payment not recorded in QuickBooks`, with the amount and the match), so it can be found and settled by hand.
+
+## Decisions that take effect in QuickBooks
+
+Confirm, write off and retry need QuickBooks. The decision (reviewer, action, note) is recorded at once, in the audit trail and the log. The item then **stays open, waiting** (`waiting_for` = `posting`, `payment` or `write_off`; the page says "Waiting for QuickBooks") until the workflow reports the effect recorded. Then it closes as `approved` or `written_off`.
+
+- **A failure that will be retried** (network, QuickBooks unavailable) shows on the waiting item as the last error.
+- **A failure with no retry left** (QuickBooks refused the request, attempts used up) stops the wait. The item shows QuickBooks' error (e.g. `qbo_6000: …`) and offers only **Try again**.
+- **Nothing is recorded twice.** Every QuickBooks document carries a fixed number (`AP-PAY-<match>` for a payment, `AP-WO-<write-off>` for the vendor credit and the bill payment applying it), searched before it is created and sent with a fixed request ID. A retry after a run that stopped half-way finds what was already created.
+
+Machine API (same rules as the page): `POST /review/items/{id}/confirm-match` (`{"reviewer", "bank_transaction_id", "note"?}`), `/reject-match` (note required), `/write-off`, `/keep-open`, `/retry` (`{"reviewer", "note"?}`).
 
 ## What approving still checks
 
@@ -42,7 +56,8 @@ Each review item keeps:
 
 - the reasons it was opened for, plus any possible duplicate found after a correction;
 - each correction, with the reviewer, the time, and the values before and after;
-- the decision: action, account and its source, whether the supplier default was created or updated, whether the suggested dates were accepted, the reviewer, the note, and the time.
+- the decision: action, account and its source, whether the supplier default was created or updated, whether the suggested dates were accepted, the reviewer, the note, and the time;
+- for a QuickBooks decision: the chosen transaction, or the amount written off and its write-off ID, the number of retries, and the time QuickBooks confirmed it (`resolved_at`).
 
 The reviewer is whoever acted: on the review page, the signed-in account ("Name (review user N)", from the session, never from the form); through the machine API, the name the automated run gives itself.
 

@@ -351,11 +351,14 @@ def test_a_decided_item_cannot_be_decided_again(new):
     assert r.status_code == 409 and "approved" in r.json()["message"]
 
 
-def test_posting_reviews_have_no_actions_yet(new):
+def test_posting_reviews_offer_only_a_retry(new):
     _state, cfg = new
     review_id = post().json()["review_id"]
     q(cfg, "UPDATE ap.review_queue SET stage = 'posting'")
-    assert item(review_id)["actions"] == []
+    assert item(review_id)["actions"] == ["retry"]
+    r = act(review_id, "retry", reviewer="david")  # nothing failed in QuickBooks for this invoice
+    assert r.status_code == 409 and "nothing to retry" in r.json()["message"]
+    assert item(review_id)["status"] == "open"
 
 
 def test_review_list_filters_by_scope(new):

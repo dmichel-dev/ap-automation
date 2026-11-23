@@ -1,4 +1,4 @@
-"""Review decisions on invoices that validation sent to a person.
+"""Review decisions on invoices that validation sent to a person, and which actions each item allows.
 
 The core decides which actions an item allows; the review page only offers those.
   approve  the reviewer accepts the invoice (after corrections, if any) and chooses its account
@@ -8,7 +8,7 @@ The core decides which actions an item allows; the review page only offers those
 
 Approving re-runs the deterministic checks a bill needs (posting_blockers). The judgement reasons
 (possible duplicate, new supplier, capex, cut-off, low confidence) are settled by the decision.
-Posting and matching reviews are decided separately (they need QuickBooks actions).
+Posting and matching items take effect in QuickBooks; their decisions are in settlement.py.
 
 Every read and decision takes an optional scope: the review page passes the signed-in user's scope,
 so an item of another scope is "unknown" (404) to it; the machine API (bearer token) passes None.
@@ -29,7 +29,10 @@ from .models import CommonInvoice, DateInfo, ExtractionMeta, InvoiceLine, Issue,
 from .normalize import normalize_invoice_number, normalize_supplier_name, normalize_tax_id
 from .validation import DUPLICATE_DATE_WINDOW_DAYS, DUPLICATE_RULES, posting_blockers
 
-Action = Literal["approve", "verify", "correct", "reject"]
+Action = Literal[
+    "approve", "verify", "correct", "reject", "confirm_match", "reject_match", "write_off", "keep_open", "retry"
+]
+SETTLEMENT_ACTIONS = frozenset({"confirm_match", "reject_match", "write_off", "keep_open", "retry"})
 Scope = Literal["live", "e2e", "demo"]
 FRAUD_CODES = frozenset({"possible_bank_detail_change"})
 # Reasons whose approval must name the account (never the supplier's default by fallback): an item
@@ -112,11 +115,22 @@ DERIVED = {
 # Reading
 # =====================================================================================
 def actions(item: db.Row) -> list[Action]:
-    if item["status"] != "open" or item["stage"] != "validation":
-        return []  # posting and matching reviews: Step 4
-    if {r["code"] for r in item["reasons"]} & FRAUD_CODES:
-        return ["verify", "reject"]  # never a plain approve
-    return ["approve", "correct", "reject"]
+    """What a person may do now. An item waiting for QuickBooks allows nothing; after a failed
+    QuickBooks call (effect_error, not waiting), only a retry."""
+    if item["status"] != "open" or item.get("waiting_for"):
+        return []
+    codes = {r["code"] for r in item["reasons"]}
+    if item["stage"] == "validation":
+        if codes & FRAUD_CODES:
+            return ["verify", "reject"]  # never a plain approve
+        return ["approve", "correct", "reject"]
+    if item.get("effect_error") or item["stage"] == "posting":
+        return ["retry"]
+    if "ambiguous_match" in codes:
+        return ["confirm_match", "reject_match"]
+    if "payment_difference" in codes:
+        return ["write_off", "keep_open"]
+    return []
 
 
 def _item(conn: db.Conn, review_id: int, lock: bool = False, scope: Scope | None = None) -> db.Row:
@@ -213,6 +227,7 @@ def detail(conn: db.Conn, review_id: int, scope: Scope | None = None) -> dict[st
     blockers, _ = posting_blockers(stored_invoice(conn, inv))
     result = {
         **{k: item[k] for k in ("id", "stage", "status", "scope", "reasons", "corrections", "decision", "reviewer")},
+        **{k: item[k] for k in ("waiting_for", "effect_error")},
         "created_at": item["created_at"],
         "resolved_at": item["resolved_at"],
         "actions": actions(item),
@@ -221,15 +236,44 @@ def detail(conn: db.Conn, review_id: int, scope: Scope | None = None) -> dict[st
         "taxes": taxes,
         "supplier_default_account": _supplier_default(conn, inv["supplier_key"]),
         "blockers": [b.model_dump() for b in blockers],  # what approving would refuse now
+        "payment": _payment(conn, inv["id"]),
     }
     result["invoice"].pop("file_path")
     out: dict[str, Any] = db.jsonable(result)
     return out
 
 
+def _payment(conn: db.Conn, invoice_id: Any) -> dict[str, Any] | None:
+    """The bill in QuickBooks and its bank side: candidate and accepted matches, any write-off."""
+    posting = conn.execute(
+        """SELECT status, external_id, amount, currency, payment_status, payment_reason, amount_paid,
+                  amount_written_off, last_error
+             FROM accounting_postings WHERE invoice_id = %s""",
+        (invoice_id,),
+    ).fetchone()
+    if posting is None:
+        return None
+    matches = conn.execute(
+        """SELECT m.id, m.status, m.bank_transaction_id, m.invoice_amount, m.bank_amount, m.difference,
+                  m.currency, m.days_from_invoice, m.name_similarity, m.invoice_number_found,
+                  m.external_payment_id, m.payment_last_error, t.date, t.name AS bank_text, t.merchant_name
+             FROM matches m JOIN bank_transactions t ON t.transaction_id = m.bank_transaction_id
+            WHERE m.invoice_id = %s AND m.status IN ('candidate', 'accepted')
+            ORDER BY m.status, t.date, m.id""",
+        (invoice_id,),
+    ).fetchall()
+    write_off = conn.execute(
+        "SELECT id, amount, currency, status, last_error FROM write_offs WHERE invoice_id = %s", (invoice_id,)
+    ).fetchone()
+    under_paid = posting["payment_status"] == "paid_with_difference" and posting["amount_paid"] < posting["amount"]
+    open_amount = posting["amount"] - posting["amount_paid"] if under_paid else None
+    return {"posting": posting, "matches": matches, "write_off": write_off, "open_amount": open_amount}
+
+
 def list_items(conn: db.Conn, scope: Scope, status: str = "open", limit: int = 100) -> list[dict[str, Any]]:
     rows = conn.execute(
-        """SELECT r.id, r.stage, r.status, r.reasons, r.created_at, r.resolved_at, r.reviewer,
+        """SELECT r.id, r.stage, r.status, r.reasons, r.created_at, r.resolved_at, r.reviewer, r.waiting_for,
+                  r.effect_error,
                   i.id AS invoice_id, i.supplier_name, i.invoice_number, i.invoice_date, i.currency, i.total,
                   i.document_type
              FROM review_queue r JOIN invoices i ON i.id = r.invoice_id

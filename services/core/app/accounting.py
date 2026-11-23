@@ -52,6 +52,7 @@ class AccountingConfig:
     qbo_base: str = ""  # https://…/v3/company/<realm>
     max_attempts: int = 5
     lease_minutes: int = 10
+    write_off_account_id: str = ""  # payment differences written off by a reviewer (config/chart_of_accounts_us.json)
 
 
 # =====================================================================================
@@ -335,6 +336,7 @@ def _record_posted(conn: Conn, cfg: AccountingConfig, p: Row, inv: Row, r: Row, 
             "attachment": bool(r.get("attachment_external_id")),
         },
     )
+    effect_recorded(conn, str(p["invoice_id"]), "posting")
     return _mark_file_deleted(conn, inv) if r.get("attachment_external_id") else None
 
 
@@ -355,8 +357,8 @@ def _record_failed(conn: Conn, cfg: AccountingConfig, p: Row, r: Row, ctx: LogCo
     code, retryable = postings.classify_failure(
         r.get("error_code"), r.get("http_status"), r.get("fault_code"), REVIEW_ERRORS
     )
-    if code in REVIEW_ERRORS:  # a person must decide; no blind retries
-        _open_review(conn, str(p["invoice_id"]), "posting", code, r.get("error_message"))
+    final = not retryable or p["attempts"] >= cfg.max_attempts
+    quickbooks_failed(conn, str(p["invoice_id"]), code, r.get("error_message"), final)
     conn.execute(
         """UPDATE accounting_postings
               SET status = CASE WHEN status = 'posted' THEN 'posted' ELSE 'failed' END,
@@ -408,26 +410,43 @@ def lookup_decision(
     return postings.existing_document_decision(status, body, entity, vendor_id or "")
 
 
+# A QuickBooks call that failed for good (no retry left) and needs no specific decision: a person
+# looks at the error, fixes the cause in QuickBooks if needed, and retries
+QUICKBOOKS_REFUSED = {
+    "quickbooks_refused": (
+        None,
+        "QuickBooks refused the last attempt and no automatic retry is left: check the error, then retry.",
+    ),
+}
+
 # Matching outcomes a person must settle (review)
 MATCHING_REVIEWS = {
     "ambiguous_match": (
         "payment",
         "Several bank transactions or bills fit this payment; choose the right pair.",
     ),
+    "payment_difference": (
+        "payment",
+        "The bank paid less than the bill: write the open difference off, or leave it open.",
+    ),
 }
 _STAGE_STEP = {"posting": "post", "matching": "match"}
+Waiting = Literal["posting", "payment", "write_off"]
 
 
 def _open_review(
     conn: Conn, invoice_id: str, stage: Literal["posting", "matching"], code: str, detail: str | None
 ) -> None:
-    """One open review item per invoice: if one is already open, it stays the only one."""
-    field, message = {**REVIEW_ERRORS, **MATCHING_REVIEWS}[code]
+    """One open review item per invoice: if one is already open, it stays the only one, and a failure
+    is shown on it (it stops waiting: a person decides what's next)."""
+    field, message = {**REVIEW_ERRORS, **QUICKBOOKS_REFUSED, **MATCHING_REVIEWS}[code]
     reason = {"code": code, "field": field, "message": message, "detail": (detail or "")[:300]}
+    shown = (detail or "")[:500] if code in QUICKBOOKS_REFUSED else _effect_error(code, detail)
+    error = shown if code in QUICKBOOKS_REFUSED else None  # QuickBooks' own words, shown on the item
     row = conn.execute(
-        """INSERT INTO review_queue (invoice_id, reasons, stage) VALUES (%s, %s, %s)
+        """INSERT INTO review_queue (invoice_id, reasons, stage, effect_error) VALUES (%s, %s, %s, %s)
            ON CONFLICT (invoice_id) WHERE status = 'open' DO NOTHING RETURNING id""",
-        (invoice_id, Jsonb([reason]), stage),
+        (invoice_id, Jsonb([reason]), stage, error),
     ).fetchone()
     if row:  # logged once, when opened (matching runs every hour)
         db.log(
@@ -438,6 +457,56 @@ def _open_review(
             invoice_id=invoice_id,
             details={"code": code, "review_id": row["id"]},
         )
+    elif stage == "posting":  # a QuickBooks failure on an item that is already open
+        conn.execute(
+            """UPDATE review_queue SET waiting_for = NULL, effect_error = %s, updated_at = now()
+                WHERE invoice_id = %s AND status = 'open'""",
+            (shown, invoice_id),
+        )
+
+
+def _effect_error(code: str, detail: str | None) -> str:
+    return f"{code}: {(detail or '').strip()}"[:500]
+
+
+def quickbooks_failed(conn: Conn, invoice_id: str, code: str, detail: str | None, final: bool) -> None:
+    """A failed QuickBooks call for this invoice. Final (no retry left, or a person must decide): the
+    open item shows it and stops waiting, or a posting review opens. Otherwise the waiting item shows
+    the last error while the next run retries."""
+    if code in REVIEW_ERRORS:
+        _open_review(conn, invoice_id, "posting", code, detail)
+    elif final:  # the item says which call failed and how (QuickBooks' own code)
+        _open_review(conn, invoice_id, "posting", "quickbooks_refused", _effect_error(code, detail))
+    else:
+        conn.execute(
+            """UPDATE review_queue SET effect_error = %s, updated_at = now()
+                WHERE invoice_id = %s AND status = 'open' AND waiting_for IS NOT NULL""",
+            (_effect_error(code, (detail or "") + " (retried automatically)"), invoice_id),
+        )
+
+
+def effect_recorded(conn: Conn, invoice_id: str, waiting_for: Waiting) -> int | None:
+    """QuickBooks confirmed what a decided item waited for: it closes with the status its decision
+    gives. Returns the item's ID (None if no item waited for this)."""
+    row = conn.execute(
+        """UPDATE review_queue
+              SET status = decision->>'closes_as', waiting_for = NULL, effect_error = NULL,
+                  resolved_at = now(), updated_at = now()
+            WHERE invoice_id = %s AND status = 'open' AND waiting_for = %s
+        RETURNING id, decision->>'closes_as' AS status""",
+        (invoice_id, waiting_for),
+    ).fetchone()
+    if row is None:
+        return None
+    db.log(
+        conn,
+        step="review",
+        level="info",
+        message=f"review {row['status']}: recorded in QuickBooks",
+        invoice_id=invoice_id,
+        details={"review_id": row["id"], "effect": waiting_for},
+    )
+    return int(row["id"])
 
 
 def retry_posting(conn: Conn, invoice_id: str, note: str | None = None) -> Row:
@@ -446,14 +515,22 @@ def retry_posting(conn: Conn, invoice_id: str, note: str | None = None) -> Row:
     if p["status"] != "failed":
         raise Conflict(f"only a failed posting can be retried (status is {p['status']})")
     review = conn.execute(
-        "SELECT 1 FROM review_queue WHERE invoice_id = %s AND status = 'open' AND stage = 'posting'", (invoice_id,)
+        "SELECT id, reasons FROM review_queue WHERE invoice_id = %s AND status = 'open' AND stage = 'posting'",
+        (invoice_id,),
     ).fetchone()
-    if review:
+    if review and {r["code"] for r in review["reasons"]} - set(QUICKBOOKS_REFUSED):
         raise Conflict("an open posting review decides this invoice")
     conn.execute(
         "UPDATE accounting_postings SET attempts = 0, next_attempt_at = now(), claimed_until = NULL WHERE id = %s",
         (p["id"],),
     )
+    if review:  # only "QuickBooks refused": the item now waits for this retry, as after a reviewer's retry
+        decision = {"action": "retry", "retried": "posting", "closes_as": "approved", "by": "operator (API)"}
+        conn.execute(
+            """UPDATE review_queue SET reviewer = 'operator (API)', decision = %s, decision_note = %s,
+                      waiting_for = 'posting', effect_error = NULL, updated_at = now() WHERE id = %s""",
+            (Jsonb(decision), note, review["id"]),
+        )
     db.log(
         conn,
         step="post",
@@ -720,7 +797,9 @@ def run_matching(conn: Conn, cfg: AccountingConfig, item_key: str, rules: matchi
         )
         for t in txs
     ]
-    decision = matching.decide(bills, bank, rules)
+    dismissed = conn.execute("SELECT invoice_id, bank_transaction_id FROM matches WHERE status = 'dismissed'")
+    excluded = frozenset((str(r["invoice_id"]), r["bank_transaction_id"]) for r in dismissed.fetchall())
+    decision = matching.decide(bills, bank, rules, excluded)
     by_invoice = {str(r["invoice_id"]): r for r in same}
 
     for bill, tx, ev in decision.accepted:
@@ -871,8 +950,8 @@ def record_payment_failure(conn: Conn, cfg: AccountingConfig, match_id: int, r: 
     code, retryable = postings.classify_failure(
         r.get("error_code"), r.get("http_status"), r.get("fault_code"), REVIEW_ERRORS
     )
-    if code in REVIEW_ERRORS:
-        _open_review(conn, str(m["invoice_id"]), "posting", code, r.get("error_message"))
+    final = not retryable or m["payment_attempts"] >= cfg.max_attempts
+    quickbooks_failed(conn, str(m["invoice_id"]), code, r.get("error_message"), final)
     conn.execute(
         """UPDATE matches SET payment_claimed_until = NULL, payment_last_error = %s,
                   payment_attempts = CASE WHEN %s THEN payment_attempts ELSE %s END
@@ -925,4 +1004,32 @@ def record_payment(conn: Conn, match_id: int, external_payment_id: str, executio
         execution_id=execution_id,
         details={"external_payment_id": external_payment_id, "difference": str(m["difference"])},
     )
+    invoice_id = str(m["invoice_id"])
+    effect_recorded(conn, invoice_id, "payment")  # a confirmed match waited for this payment
+    _settle_difference(conn, m, invoice_id, execution_id)
     return _posting_of(conn, m["invoice_id"])
+
+
+def _settle_difference(conn: Conn, m: Row, invoice_id: str, execution_id: str | None) -> None:
+    """Under-payment: a person writes the open part off or leaves it open (review). Over-payment: not
+    written off yet; logged as its own warning so it can be found and settled by hand."""
+    open_part = m["invoice_amount"] - min(m["bank_amount"], m["invoice_amount"])
+    if open_part > 0:
+        detail = f"bill {m['invoice_amount']:.2f}, bank {m['bank_amount']:.2f}, open {open_part:.2f} {m['currency']}"
+        _open_review(conn, invoice_id, "matching", "payment_difference", detail)
+    elif m["bank_amount"] > m["invoice_amount"]:
+        db.log(
+            conn,
+            step="match",
+            level="warning",
+            message="over-payment not recorded in QuickBooks",
+            invoice_id=invoice_id,
+            channel="system",
+            execution_id=execution_id,
+            details={
+                "over_payment": str(m["bank_amount"] - m["invoice_amount"]),
+                "currency": m["currency"],
+                "match_id": m["id"],
+                "note": "the bill payment stops at the bill amount; the extra is not written off automatically",
+            },
+        )

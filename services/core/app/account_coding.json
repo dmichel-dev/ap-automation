@@ -14,10 +14,11 @@
     "UndepositedFunds": "money received but not yet deposited: never a cost"
   },
   "hidden_default_names": {
-    "note": "QuickBooks' default US names for its catch-all accounts, which share generic detail types with real accounts, so they can only be recognised by name. For a company set up in another language, add the localized names here.",
+    "note": "QuickBooks' default US names for its catch-all accounts, which share generic detail types with real accounts, so they can only be recognised by name. For a company set up in another language, add the localized names here. Also the account the review writes payment differences off to (config/chart_of_accounts_us.json creates it with this name): never an invoice's account.",
     "names": [
       "Uncategorized Expense",
-      "Uncategorized Asset"
+      "Uncategorized Asset",
+      "Payment differences"
     ]
   }
 }

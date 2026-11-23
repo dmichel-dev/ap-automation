@@ -71,14 +71,27 @@ def age(created_at: str, now: datetime | None = None) -> str:
 
 
 def tone(item: dict[str, Any]) -> Tone:
-    """The status colour: amber needs review, red possible fraud (only a fraud item can be verified),
-    green approved or verified, grey otherwise."""
+    """The status colour: amber needs review, red possible fraud (only a fraud item can be verified) or a
+    QuickBooks call that failed, grey while waiting for QuickBooks, green approved or verified."""
     if item["status"] == "open":
-        return "fraud" if "verify" in item["actions"] else "review"
+        if item.get("waiting_for"):
+            return "closed"
+        return "fraud" if "verify" in item["actions"] or item.get("effect_error") else "review"
     return "ready" if item["status"] in ("approved", "verified") else "closed"
 
 
+WAITING_LABELS = {
+    "posting": "Waiting for QuickBooks: bill posting",
+    "payment": "Waiting for QuickBooks: bill payment",
+    "write_off": "Waiting for QuickBooks: write-off",
+}
+
+
 def status_label(item: dict[str, Any]) -> str:
+    if item["status"] == "open" and item.get("waiting_for"):
+        return WAITING_LABELS.get(str(item["waiting_for"]), "Waiting for QuickBooks")
+    if item["status"] == "open" and item.get("effect_error"):
+        return "QuickBooks refused"
     if item["status"] == "open" and "verify" in item["actions"]:
         return "Possible fraud"
     status = str(item["status"])

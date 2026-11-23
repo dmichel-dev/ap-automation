@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     qbo_tax_recoverable_account_id: str = ""  # only if a tax rule is "recoverable"
     tax_treatment_file: str = ""  # default: app/tax_treatment.json
     qbo_bank_account_id: str = "35"  # Checking (mapped to the Plaid account)
+    qbo_write_off_account_id: str = ""  # "Payment differences": open parts of under-paid bills written off
+    # "Run now" webhooks: the shared secret requests are signed with (empty: every request is refused)
+    run_now_token: SecretStr = SecretStr("")
     posting_max_attempts: int = 5
     posting_lease_minutes: int = 10
 

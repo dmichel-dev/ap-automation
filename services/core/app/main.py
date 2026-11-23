@@ -38,7 +38,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
-from . import accounting, db, files, intake, matching, postings, processing, qbo_reference, review
+from . import accounting, db, files, intake, matching, postings, processing, qbo_reference, review, run_now, settlement
 from .config import get_settings
 from .extraction import build_common_invoice
 from .models import CommonInvoice
@@ -155,6 +155,7 @@ def get_accounting_config() -> accounting.AccountingConfig:
         tax_recoverable_account_id=s.qbo_tax_recoverable_account_id,
         tax_treatment=TaxTreatment.load(Path(s.tax_treatment_file) if s.tax_treatment_file else None),
         bank_account_id=s.qbo_bank_account_id,
+        write_off_account_id=s.qbo_write_off_account_id,
         max_attempts=s.posting_max_attempts,
         lease_minutes=s.posting_lease_minutes,
         qbo_base=f"{s.qbo_api_host.rstrip('/')}/v3/company/{s.qbo_realm_id}" if s.qbo_realm_id else "",
@@ -378,7 +379,8 @@ def bank_sync_page(item_key: str, body: SyncPage, cfg: AcctCfg) -> JsonDict:
 @app.post("/matching/run/{item_key}", dependencies=Auth)
 def matching_run(item_key: str, cfg: AcctCfg, rules: Annotated[matching.Rules, Depends(get_rules)]) -> JsonDict:
     with db.connect(cfg.database_url) as conn:
-        return {**accounting.run_matching(conn, cfg, item_key, rules), **_qbo_target(cfg)}
+        result = accounting.run_matching(conn, cfg, item_key, rules)
+        return {**result, "write_offs_due": settlement.write_offs_due(conn, cfg), **_qbo_target(cfg)}
 
 
 class PaymentRecorded(BaseModel):
@@ -402,6 +404,51 @@ def match_payment_failed(match_id: int, body: FailureFacts, cfg: AcctCfg) -> Jso
 def match_payment(match_id: int, body: PaymentRecorded, cfg: AcctCfg) -> JsonDict:
     with db.connect(cfg.database_url) as conn:
         return _json(accounting.record_payment(conn, match_id, body.external_payment_id, body.execution_id))
+
+
+# Write-offs of payment differences (decided in review, recorded by the bank workflow)
+@app.post("/write-offs/{write_off_id}/lookup/{kind}", dependencies=Auth)
+def write_off_lookup(write_off_id: int, kind: Literal["credit", "apply"], body: Lookup, cfg: AcctCfg) -> JsonDict:
+    with db.connect(cfg.database_url) as conn:
+        return asdict(settlement.write_off_lookup(conn, write_off_id, kind, body.status_code, body.body))
+
+
+@app.post("/write-offs/{write_off_id}/credit", dependencies=Auth)
+def write_off_credit(write_off_id: int, body: PaymentRecorded, cfg: AcctCfg) -> JsonDict:
+    """The vendor credit exists; the answer is the bill payment of 0 that applies it to the bill."""
+    with db.connect(cfg.database_url) as conn:
+        return settlement.record_write_off_credit(conn, cfg, write_off_id, body.external_payment_id)
+
+
+@app.post("/write-offs/{write_off_id}/applied", dependencies=Auth)
+def write_off_applied(write_off_id: int, body: PaymentRecorded, cfg: AcctCfg) -> JsonDict:
+    with db.connect(cfg.database_url) as conn:
+        return _json(
+            settlement.record_write_off_applied(conn, write_off_id, body.external_payment_id, body.execution_id)
+        )
+
+
+@app.post("/write-offs/{write_off_id}/failed", dependencies=Auth)
+def write_off_failed(write_off_id: int, body: FailureFacts, cfg: AcctCfg) -> JsonDict:
+    with db.connect(cfg.database_url) as conn:
+        return _json(settlement.record_write_off_failure(conn, cfg, write_off_id, body.model_dump()))
+
+
+# "Run now": a workflow's webhook asks before it starts (signature, rate limits)
+class RunRequest(BaseModel):
+    """A signed request (run_now.py): the token itself never travels."""
+
+    timestamp: str = Field(default="", max_length=20)
+    signature: str = Field(default="", max_length=128)
+    target: str = Field(default="", max_length=40)
+
+
+@app.post("/run-now/authorize", dependencies=Auth)
+def run_now_authorize(body: RunRequest, cfg: AcctCfg) -> JsonDict:
+    token = get_settings().run_now_token.get_secret_value()
+    with db.connect(cfg.database_url) as conn:
+        answer = run_now.authorize(conn, token, run_now.Signed(body.timestamp, body.signature, body.target))
+    return {"decision": "run" if answer.outcome == "run" else "refuse", **asdict(answer)}
 
 
 # =====================================================================================
@@ -482,3 +529,36 @@ def review_reject(review_id: int, body: review.Rejection, cfg: AcctCfg) -> JsonD
     accounting.delete_stored_file(cfg.storage_dir, file_path)
     with db.connect(cfg.database_url) as conn:
         return review.detail(conn, review_id)
+
+
+# Posting and matching items: decisions that take effect in QuickBooks (settlement.py)
+def _settle(review_id: int, action: str, body: settlement.Settlement, cfg: accounting.AccountingConfig) -> JsonDict:
+    with db.connect(cfg.database_url) as conn:
+        settlement.decide(conn, review_id, action, body)
+        conn.commit()
+        return review.detail(conn, review_id)
+
+
+@app.post("/review/items/{review_id}/confirm-match", dependencies=Auth)
+def review_confirm_match(review_id: int, body: settlement.MatchChoice, cfg: AcctCfg) -> JsonDict:
+    return _settle(review_id, "confirm_match", body, cfg)
+
+
+@app.post("/review/items/{review_id}/reject-match", dependencies=Auth)
+def review_reject_match(review_id: int, body: settlement.Settlement, cfg: AcctCfg) -> JsonDict:
+    return _settle(review_id, "reject_match", body, cfg)
+
+
+@app.post("/review/items/{review_id}/write-off", dependencies=Auth)
+def review_write_off(review_id: int, body: settlement.Settlement, cfg: AcctCfg) -> JsonDict:
+    return _settle(review_id, "write_off", body, cfg)
+
+
+@app.post("/review/items/{review_id}/keep-open", dependencies=Auth)
+def review_keep_open(review_id: int, body: settlement.Settlement, cfg: AcctCfg) -> JsonDict:
+    return _settle(review_id, "keep_open", body, cfg)
+
+
+@app.post("/review/items/{review_id}/retry", dependencies=Auth)
+def review_retry(review_id: int, body: settlement.Settlement, cfg: AcctCfg) -> JsonDict:
+    return _settle(review_id, "retry", body, cfg)

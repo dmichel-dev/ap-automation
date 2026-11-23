@@ -26,7 +26,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import FormData
 
-from .. import accounting, db, qbo_reference, review
+from .. import accounting, db, qbo_reference, review, settlement
 from ..accounting import Conflict, NotFound
 from . import accounts, display, forms, reasons, render
 from .accounts import Viewer
@@ -60,6 +60,12 @@ DONE = {
     "verify": "Verified with the supplier. The invoice is ready and will be posted on the next posting run.",
     "correct": "Correction saved. Check the item again, then approve or reject it.",
     "reject": "Rejected. The invoice won't be posted and its stored file was deleted.",
+    "confirm_match": "Match confirmed. The bill payment is recorded in QuickBooks on the next bank run; "
+    "this item closes once it is.",
+    "reject_match": "Done. None of these transactions will be proposed again for this bill; it stays unpaid.",
+    "write_off": "Write-off decided. It is recorded in QuickBooks on the next bank run; this item closes once it is.",
+    "keep_open": "Done. The difference stays open on the bill.",
+    "retry": "Retry requested. QuickBooks is tried again on the next run; this item closes once it works.",
 }
 # Account picker groups, in this order (labels for a reviewer); a type not listed here comes last
 ACCOUNT_GROUPS = {
@@ -70,6 +76,14 @@ ACCOUNT_GROUPS = {
     "Other Current Asset": "Other current assets (e.g. prepaid)",
 }
 NO_ACTION_ON_FRAUD = "Possible fraud: choose “Verified with the supplier” or “Reject”, then confirm. Nothing was saved."
+# Decision panel choices on posting and matching items: (action, title, what it does)
+SETTLE_CHOICES = (
+    ("confirm_match", "Confirm the payment", "The chosen bank transaction pays this bill"),
+    ("reject_match", "None of these", "No candidate pays it; they won't be proposed again"),
+    ("write_off", "Write off the difference", "A vendor credit closes the bill; no money moves"),
+    ("keep_open", "Leave it open", "The difference stays open on the bill"),
+    ("retry", "Try again in QuickBooks", "After fixing the cause; nothing is created twice"),
+)
 ListStatus = Literal["open", "approved", "corrected", "verified", "rejected", "written_off", "all"]
 
 router = APIRouter()
@@ -388,6 +402,7 @@ def _item_page(
         chosen=chosen,
         correctable=forms.CORRECTABLE,
         choose_account=review.account_choice_required(data),
+        settle_choices=SETTLE_CHOICES,
         error=message.get("error"),
         done=message.get("done"),
     )
@@ -440,6 +455,9 @@ def original(request: Request, review_id: int, viewer: CurrentViewer) -> Respons
 
 def _apply(conn: db.Conn, viewer: Viewer, review_id: int, action: review.Action, form: FormData) -> str | None:
     """Runs the decision in the core; returns a stored file to delete after COMMIT (reject)."""
+    if action in review.SETTLEMENT_ACTIONS:
+        settlement.decide(conn, review_id, action, forms.settled(form, viewer, action), viewer.scope)
+        return None
     if action == "correct":
         invoice = review.detail(conn, review_id, viewer.scope)["invoice"]
         review.correct(conn, review_id, forms.correction(form, viewer, invoice), viewer.scope)

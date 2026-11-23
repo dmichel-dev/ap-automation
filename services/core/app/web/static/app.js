@@ -152,7 +152,10 @@ document.addEventListener("DOMContentLoaded", () => {
   // fraud: nothing is pre-selected), and every field marked data-required-for="<action>" (an account
   // to choose, the suggested dates to accept). Without scripts the button stays enabled and the
   // server refuses what is missing.
-  const filled = (el) => (el.type === "checkbox" ? el.checked : el.value !== "");
+  const filled = (el) => {
+    if (el.type === "radio") return !!el.form.querySelector(`input[name="${el.name}"]:checked`); // a group: one picked
+    return el.type === "checkbox" ? el.checked : el.value !== "";
+  };
   for (const button of document.querySelectorAll("button[data-needs-action]")) {
     const form = button.form;
     const update = () => {

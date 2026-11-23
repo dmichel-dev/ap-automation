@@ -18,9 +18,9 @@ Intake channels ──► common invoice format ──► core checks ──► 
 - **The LLM only extracts data.** Every approval decision is deterministic, unit-tested code, which protects against prompt injection hidden in uploaded documents.
 - **n8n orchestrates, the Python core decides.** n8n runs the triggers and the calls (Gmail, QuickBooks, Plaid) and routes on the core's answers. Every rule lives in the core, typed and tested: which email attachments to process, validation and routing, the content of each bill, what QuickBooks' answers mean (reuse a vendor or create it, a duplicate bill), and whether a failure is retried or sent to review.
 - Anything uncertain (failed check, ambiguous date, low confidence, possible duplicate, a supplier's first invoice, a bank payment that fits several bills) goes to **human review**. Nothing is guessed, including the expense account: each supplier's account is chosen once by a person, then reused.
-- **A review page for people** shows each document (rendered on the server as images) next to what was read, and records who approved, corrected or rejected it. It is built with security defaults: Argon2id passwords, lockout and rate limits, server-side sessions, CSRF protection, a strict CSP, access scoped per user. Reviewer accounts can't sign in from the internet at all.
+- **A review page for people** shows each document (rendered on the server as images) next to what was read, and records who approved, corrected or rejected it. Its decisions take effect in QuickBooks: confirm which bank payment pays a bill, write off a small under-payment (a vendor credit, no money moves), or retry after QuickBooks refused something. The item stays open until QuickBooks confirms. It is built with security defaults: Argon2id passwords, lockout and rate limits, server-side sessions, CSRF protection, a strict CSP, access scoped per user. Reviewer accounts can't sign in from the internet at all.
 - Details: [invoice format](docs/common-invoice-format.md), [checks and routing](docs/validation.md), [human review](docs/review.md), [review page security](docs/security.md), [data model](docs/data-model.md), [bank matching](docs/matching.md), [Plaid and QuickBooks facts verified live](docs/integrations.md), [operations](docs/operations.md).
-- **Safe to re-run.** Every write to QuickBooks is reserved in the database first, searched before it is created and sent with a fixed request ID, so a crash or a retry never creates a second bill or payment.
+- **Safe to re-run.** Every write to QuickBooks is reserved in the database first, searched before it is created and sent with a fixed request ID, so a crash or a retry never creates a second bill, payment or write-off. A workflow can be started at once with a signed **Run now** request (HMAC with a timestamp, single use, rate-limited); the secret never reaches n8n.
 
 ## Stack
 
@@ -28,10 +28,10 @@ Intake channels ──► common invoice format ──► core checks ──► 
 |---|---|
 | n8n Community Edition | Orchestration: intake triggers, routing, integrations |
 | Python core (FastAPI) | Extraction, normalization, validation, persistence, posting content, bank matching, every decision |
-| Review page (FastAPI + Jinja2, own container) | Sign-in, review list, document pages, approve / correct / reject; loopback only for reviewer accounts |
+| Review page (FastAPI + Jinja2, own container) | Sign-in, review list, document pages, approve / correct / reject, bank-match and payment-difference decisions, retries; loopback only for reviewer accounts |
 | Mistral OCR (`mistral-ocr-latest`) | PDF/scan text and structured-data extraction |
 | PostgreSQL 17 | n8n database + `ap` schema (invoices, lines, taxes, review queue, log, postings, bank transactions, matches) |
-| QuickBooks Online (sandbox, US, multi-currency) | Vendors, bills and vendor credits with the original file, bill payments |
+| QuickBooks Online (sandbox, US, multi-currency) | Vendors, bills and vendor credits with the original file, bill payments, write-offs of payment differences |
 | Plaid (sandbox) | Bank transactions (`/transactions/sync`) for payment matching |
 | Docker Compose | Runs everything locally and on the VPS |
 
@@ -52,7 +52,7 @@ Three levels, from fastest to most realistic:
 
 | Level | What it covers | Command |
 |---|---|---|
-| Unit + integration (550) | Normalization, validation, totals, dates, duplicates, email screening, posting content and decisions, matching, review decisions, the review page's security (sign-in, lockout, sessions, CSRF, listeners, scope, document rendering, headers) and presentation (plain-language reasons for every code, confidence bands, decision panel, fraud items with no action pre-selected, the data label in the header, five sample suppliers with their own invoices), the full pipeline on a test database | `docker compose run --rm core-test` |
+| Unit + integration (580) | Normalization, validation, totals, dates, duplicates, email screening, posting content and decisions, matching, review decisions and their effect in QuickBooks (confirmed matches, write-offs, retries without duplicates), signed "Run now" requests (refused without a valid signature, expired or replayed, rate limits), the review page's security (sign-in, lockout, sessions, CSRF, listeners, scope, document rendering, headers) and presentation (plain-language reasons for every code, confidence bands, decision panel, fraud items with no action pre-selected, the data label in the header, five sample suppliers with their own invoices), the full pipeline on a test database | `docker compose run --rm core-test` |
 | Live provider (3) | Real Mistral OCR calls on a fictional invoice | `docker compose run --rm core-test pytest -m live` |
 | End to end (12 emails) | Gmail → n8n → core → database → Gmail labels → QuickBooks → bank matching | send the test set, then `scripts/run_e2e.sh --since <start time>` |
 
@@ -84,7 +84,7 @@ Every commit runs [pre-commit](https://pre-commit.com) (`.pre-commit-config.yaml
 
 ## Updating the n8n workflow
 
-The workflows are generated from code (`n8n/build_email_intake.py`, `n8n/build_post_qbo.py`, `n8n/build_bank_sync.py`, `n8n/build_sync_reference.py`) and committed without credentials. Each canvas is laid out by the builders too: nodes on a grid, grouped in sections with a note explaining each one (`Section` and `lay_out` in `n8n/nodes.py`), and `n8n/check_layout.py` fails the commit and CI if a node sits outside a section or anything overlaps. After a change made in the n8n editor, `scripts/export_workflow.sh` exports the live workflows, strips credential IDs and instance data, refuses to write a file if a secret scan matches, and shows the diff.
+The workflows are generated from code (`n8n/build_email_intake.py`, `n8n/build_post_qbo.py`, `n8n/build_bank_sync.py`, `n8n/build_sync_reference.py`, `n8n/build_run_now.py`) and committed without credentials. Each canvas is laid out by the builders too: nodes on a grid, grouped in sections with a note explaining each one (`Section` and `lay_out` in `n8n/nodes.py`), and `n8n/check_layout.py` fails the commit and CI if a node sits outside a section or anything overlaps. After a change made in the n8n editor, `scripts/export_workflow.sh` exports the live workflows, strips credential IDs and instance data, refuses to write a file if a secret scan matches, and shows the diff.
 
 ## Repository layout
 

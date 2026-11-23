@@ -7,13 +7,15 @@ Defined in [`db/migrations/`](../db/migrations). Migrations run as the `ap_app` 
 | `invoices` | One row per received document (invoice or credit note): source, file, parties, amounts, extraction, status |
 | `invoice_lines` | Line items |
 | `invoice_tax_lines` | Generic tax breakdown: `vat`, `gst`, `sales_tax`, `withholding`, `other`, `none` |
-| `review_queue` | Human review items (at most one open item per invoice), with the decision, the reviewer and every correction (before/after; see [review](review.md)); `stage` = `validation` (extraction/checks) `posting` (e.g. `vendor_currency_conflict`, `vendor_inactive`, `duplicate_in_accounting`) or `matching` (`ambiguous_match`: one bank transaction fits several bills, or one bill several transactions; the candidate transactions are named) |
+| `review_queue` | Human review items (at most one open item per invoice), with the decision, the reviewer and every correction (before/after; see [review](review.md)); `stage` = `validation` (extraction/checks) `posting` (e.g. `vendor_currency_conflict`, `vendor_inactive`, `duplicate_in_accounting`) or `matching` (`ambiguous_match`: one bank transaction fits several bills, or one bill several transactions; the candidate transactions are named. `payment_difference`: the bank paid less than the bill). A decision that needs QuickBooks keeps the item open with `waiting_for` (`posting`, `payment`, `write_off`) until QuickBooks confirms it; `effect_error` holds the last QuickBooks failure |
 | `processing_log` | Append-only audit trail; `invoice_id` is optional so events without an invoice are logged too |
 | `vendor_links` | Supplier + currency → accounting vendor (QuickBooks fixes a vendor's currency, so one supplier can have one vendor per currency) |
 | `accounting_postings` | One per invoice sent to QuickBooks: bill or vendor credit, rate used, attachment, payment status and reason; created **before** any API call |
 | `bank_sync_state` | The bank account used for matching, its currency and the Plaid sync cursor (no access token) |
 | `bank_transactions` | Plaid transactions as received; **positive amount = money out** |
-| `matches` | Invoice ↔ bank transaction: `accepted` (used for a payment), `candidate` (ambiguous, for review), `dismissed` |
+| `matches` | Invoice ↔ bank transaction: `accepted` (used for a payment), `candidate` (ambiguous, for review), `dismissed` (never proposed again for that bill) |
+| `write_offs` | The open part of an under-paid bill, written off by a reviewer: amount, who decided, the vendor credit and the bill payment applying it in QuickBooks (`AP-WO-<id>`), attempts and the last error. `recorded` only with both QuickBooks IDs |
+| `run_requests` | Every "Run now" request, allowed or refused: target, outcome, time and, for a request that ran, the SHA-256 of its signature (a signature is accepted once). Never the token |
 | `qbo_accounts`, `qbo_vendors` | Copy of the QuickBooks chart of accounts and vendor list, refreshed hourly by the sync workflow; a row missing from the latest sync is kept as inactive |
 | `supplier_defaults` | Supplier → default account, set by a reviewer on the supplier's first confirmed invoice (`source` = `reviewer`, or `test_setup` for the e2e test suppliers) |
 | `review_users` | Review-page accounts: email, display name, Argon2id password hash, `role` (`reviewer`, `admin`, `demo`), `scope` (a `demo` account always has the `demo` scope), lockout state. Created with the CLI only (see [security](security.md)) |
@@ -33,7 +35,7 @@ Defined in [`db/migrations/`](../db/migrations). Migrations run as the `ap_app` 
 - **Scope:** `invoices`, `review_queue` and `processing_log` have `scope` = `live`, `e2e` or `demo`, so test and demo data stay out of live summaries, alerts and the review list.
 - **Database safeguards:** a `ready` invoice must have every required field, including a resolved invoice date. `dates_ambiguous` records what was printed (a reviewer may settle it). `processing_log` rejects UPDATE, DELETE and TRUNCATE.
 - `processing_log` never stores document content (privacy): only IDs, steps, check names and short messages.
-- **Posting safeguards:** one posting per invoice; a `posted` row always has the external ID, vendor and exchange rate used; payment status and reason must agree (e.g. `paid_with_difference` ⇔ `payment_difference`).
+- **Posting safeguards:** one posting per invoice; a `posted` row always has the external ID, vendor and exchange rate used; payment status and reason must agree (e.g. `paid_with_difference` ⇔ `payment_difference`; `paid_with_write_off` only when the amount paid plus the amount written off equals the bill).
 - **Matching safeguards:** a bank transaction pays at most one invoice and an invoice is paid by at most one transaction (partial unique indexes on accepted matches), so even a buggy or concurrent run can't pay twice.
 - `invoices.posting_excluded_reason` keeps an invoice out of posting (e.g. superseded test data); it can't be set once the invoice is posted.
 
