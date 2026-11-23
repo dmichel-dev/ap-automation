@@ -12,8 +12,13 @@ OCR_TEXT = "Quillmoor Paper Supply LLC ... Total due: USD 641.24 (all amounts in
 
 
 def check(ocr_avg=0.98, ocr_text=OCR_TEXT, duplicates=None, threshold=0.85, **overrides):
-    result = ProviderResult(annotation=base_annotation(**overrides), ocr_text=ocr_text, pages=1,
-                            ocr_confidence_avg=ocr_avg, ocr_confidence_min=0.4)
+    result = ProviderResult(
+        annotation=base_annotation(**overrides),
+        ocr_text=ocr_text,
+        pages=1,
+        ocr_confidence_avg=ocr_avg,
+        ocr_confidence_min=0.4,
+    )
     inv = build_common_invoice(result, "test")
     return validate(inv, confidence_threshold=threshold, duplicates=duplicates)
 
@@ -54,11 +59,22 @@ def test_invalid_extraction_with_readable_text_goes_to_review():
 
 # --- review: a human can check or fix ---------------------------------------------
 def test_wrong_sign_goes_to_review():
-    v = check(total="-641.24", subtotal="-591.00", tax_total="-50.24",
-              line_items=[{"kind": "item", "description": "Paper", "quantity": "1", "unit_price": "-591.00",
-                           "amount": "-591.00", "tax_rate": None}],
-              tax_lines=[{"tax_type": "sales_tax", "label": None, "rate": None, "taxable_base": None,
-                          "amount": "-50.24"}])
+    v = check(
+        total="-641.24",
+        subtotal="-591.00",
+        tax_total="-50.24",
+        line_items=[
+            {
+                "kind": "item",
+                "description": "Paper",
+                "quantity": "1",
+                "unit_price": "-591.00",
+                "amount": "-591.00",
+                "tax_rate": None,
+            }
+        ],
+        tax_lines=[{"tax_type": "sales_tax", "label": None, "rate": None, "taxable_base": None, "amount": "-50.24"}],
+    )
     assert v.status == "needs_review" and codes(v) == ["wrong_sign"]
 
 
@@ -128,77 +144,154 @@ def test_tax_mismatch():
 
 def test_discount_before_tax_subtotal_after_discount():
     # 591.00 - 29.55 = 561.45 ; tax 8.5% = 47.72 ; total 609.17
-    v = check(adjustments=[{"kind": "discount", "label": "Discount 5%", "amount": "29.55", "position": "before_tax"}],
-              subtotal="$561.45", tax_total="$47.72", total="USD 609.17",
-              tax_lines=[{"tax_type": "sales_tax", "label": None, "rate": "8.5%", "taxable_base": "561.45",
-                          "amount": "47.72"}])
+    v = check(
+        adjustments=[{"kind": "discount", "label": "Discount 5%", "amount": "29.55", "position": "before_tax"}],
+        subtotal="$561.45",
+        tax_total="$47.72",
+        total="USD 609.17",
+        tax_lines=[
+            {"tax_type": "sales_tax", "label": None, "rate": "8.5%", "taxable_base": "561.45", "amount": "47.72"}
+        ],
+    )
     assert v.status == "ready", v.reasons
 
 
 def test_discount_before_tax_subtotal_before_discount():
     # Subtotal printed as the sum of items (591.00), discount printed below it
-    v = check(adjustments=[{"kind": "discount", "label": "Discount", "amount": "-29.55", "position": "before_tax"}],
-              subtotal="$591.00", tax_total="$47.72", total="USD 609.17",
-              tax_lines=[{"tax_type": "sales_tax", "label": None, "rate": "8.5%", "taxable_base": "561.45",
-                          "amount": "47.72"}])
+    v = check(
+        adjustments=[{"kind": "discount", "label": "Discount", "amount": "-29.55", "position": "before_tax"}],
+        subtotal="$591.00",
+        tax_total="$47.72",
+        total="USD 609.17",
+        tax_lines=[
+            {"tax_type": "sales_tax", "label": None, "rate": "8.5%", "taxable_base": "561.45", "amount": "47.72"}
+        ],
+    )
     assert v.status == "ready", v.reasons
 
 
 def test_shipping_after_tax_and_rounding():
     # 591.00 + 50.24 + 15.00 shipping - 0.24 rounding = 656.00
-    v = check(adjustments=[{"kind": "shipping", "label": "Shipping", "amount": "15.00", "position": "after_tax"},
-                           {"kind": "rounding", "label": "Rounding", "amount": "-0.24", "position": "after_tax"}],
-              total="USD 656.00")
+    v = check(
+        adjustments=[
+            {"kind": "shipping", "label": "Shipping", "amount": "15.00", "position": "after_tax"},
+            {"kind": "rounding", "label": "Rounding", "amount": "-0.24", "position": "after_tax"},
+        ],
+        total="USD 656.00",
+    )
     assert v.status == "ready", v.reasons
 
 
 def test_shipping_line_in_table():
-    lines = base_annotation()["line_items"] + [{"kind": "shipping", "description": "Freight", "quantity": "1",
-                                                 "unit_price": "9.00", "amount": "9.00", "tax_rate": None}]
-    v = check(line_items=lines, subtotal="$600.00", tax_total="$51.00", total="USD 651.00",
-              tax_lines=[{"tax_type": "sales_tax", "label": None, "rate": "8.5%", "taxable_base": "600.00",
-                          "amount": "51.00"}])
+    lines = base_annotation()["line_items"] + [
+        {
+            "kind": "shipping",
+            "description": "Freight",
+            "quantity": "1",
+            "unit_price": "9.00",
+            "amount": "9.00",
+            "tax_rate": None,
+        }
+    ]
+    v = check(
+        line_items=lines,
+        subtotal="$600.00",
+        tax_total="$51.00",
+        total="USD 651.00",
+        tax_lines=[
+            {"tax_type": "sales_tax", "label": None, "rate": "8.5%", "taxable_base": "600.00", "amount": "51.00"}
+        ],
+    )
     assert v.status == "ready", v.reasons
 
 
 def test_rounding_tolerance_one_cent_per_line():
-    v = check(total="USD 641.25")           # off by 0.01 with 3 summed lines → accepted
+    v = check(total="USD 641.25")  # off by 0.01 with 3 summed lines → accepted
     assert v.status == "ready"
     v = check(total="USD 641.30")
     assert codes(v) == ["total_mismatch"]
 
 
 def test_zero_decimal_currency_tolerance():
-    v = check(currency="JPY", supplier_country_code="JP", ocr_text=OCR_TEXT + " JPY",
-              line_items=[{"kind": "item", "description": "文具", "quantity": "1", "unit_price": "10,000",
-                           "amount": "10,000", "tax_rate": "10%"}],
-              tax_lines=[{"tax_type": "vat", "label": "消費税 10%", "rate": "10%", "taxable_base": "10,000",
-                          "amount": "1,000"}],
-              subtotal="10,000", tax_total="1,000", total="11,000")
+    v = check(
+        currency="JPY",
+        supplier_country_code="JP",
+        ocr_text=OCR_TEXT + " JPY",
+        line_items=[
+            {
+                "kind": "item",
+                "description": "文具",
+                "quantity": "1",
+                "unit_price": "10,000",
+                "amount": "10,000",
+                "tax_rate": "10%",
+            }
+        ],
+        tax_lines=[
+            {"tax_type": "vat", "label": "消費税 10%", "rate": "10%", "taxable_base": "10,000", "amount": "1,000"}
+        ],
+        subtotal="10,000",
+        tax_total="1,000",
+        total="11,000",
+    )
     assert v.status == "ready", v.reasons
 
 
 def test_tax_inclusive_prices():
     # Japanese style: line amounts include tax, total = lines, tax shown "of which"
-    v = check(currency="JPY", supplier_country_code="JP", ocr_text=OCR_TEXT + " 円",
-              line_items=[{"kind": "item", "description": "文具", "quantity": "1", "unit_price": "11,000",
-                           "amount": "11,000", "tax_rate": "10%"}],
-              tax_lines=[{"tax_type": "vat", "label": "内消費税", "rate": "10%", "taxable_base": None,
-                          "amount": "1,000"}],
-              subtotal=None, tax_total="1,000", total="11,000円")
+    v = check(
+        currency="JPY",
+        supplier_country_code="JP",
+        ocr_text=OCR_TEXT + " 円",
+        line_items=[
+            {
+                "kind": "item",
+                "description": "文具",
+                "quantity": "1",
+                "unit_price": "11,000",
+                "amount": "11,000",
+                "tax_rate": "10%",
+            }
+        ],
+        tax_lines=[{"tax_type": "vat", "label": "内消費税", "rate": "10%", "taxable_base": None, "amount": "1,000"}],
+        subtotal=None,
+        tax_total="1,000",
+        total="11,000円",
+    )
     assert v.status == "ready", v.reasons
     assert v.tax_mode == "inclusive"
 
 
 def test_withholding_tax_reduces_total():
     # 1000 + VAT 21% 210 - withholding 15% 150 = 1060
-    v = check(currency="EUR", supplier_country_code="ES", ocr_text=OCR_TEXT + " EUR",
-              line_items=[{"kind": "item", "description": "Consultoría", "quantity": "1", "unit_price": "1.000,00",
-                           "amount": "1.000,00", "tax_rate": None}],
-              tax_lines=[{"tax_type": "vat", "label": "IVA 21%", "rate": "21%", "taxable_base": "1.000,00", "amount": "210,00"},
-                         {"tax_type": "withholding", "label": "IRPF -15%", "rate": "15%", "taxable_base": "1.000,00",
-                          "amount": "-150,00"}],
-              subtotal="1.000,00", tax_total="210,00", total="1.060,00")
+    v = check(
+        currency="EUR",
+        supplier_country_code="ES",
+        ocr_text=OCR_TEXT + " EUR",
+        line_items=[
+            {
+                "kind": "item",
+                "description": "Consultoría",
+                "quantity": "1",
+                "unit_price": "1.000,00",
+                "amount": "1.000,00",
+                "tax_rate": None,
+            }
+        ],
+        tax_lines=[
+            {"tax_type": "vat", "label": "IVA 21%", "rate": "21%", "taxable_base": "1.000,00", "amount": "210,00"},
+            {
+                "tax_type": "withholding",
+                "label": "IRPF -15%",
+                "rate": "15%",
+                "taxable_base": "1.000,00",
+                "amount": "-150,00",
+            },
+        ],
+        subtotal="1.000,00",
+        tax_total="210,00",
+        total="1.060,00",
+    )
     assert v.status == "ready", v.reasons
 
 
@@ -209,35 +302,74 @@ def test_no_line_items():
 
 def test_credit_note_with_discount_balances():
     # Printed positive: lines 100 + shipping refund 10, discount 5 → 105 + VAT 21 = 126 → stored negative
-    v = check(document_kind="credit_note", currency="EUR", supplier_country_code="FR", ocr_text=OCR_TEXT + " EUR",
-              line_items=[{"kind": "item", "description": "Retour", "quantity": "1", "unit_price": "100,00",
-                           "amount": "100,00", "tax_rate": None}],
-              adjustments=[{"kind": "shipping", "label": "Port", "amount": "10,00", "position": "before_tax"},
-                           {"kind": "discount", "label": "Remise", "amount": "5,00", "position": "before_tax"}],
-              tax_lines=[{"tax_type": "vat", "label": "TVA 20 %", "rate": "20 %", "taxable_base": "105,00",
-                          "amount": "21,00"}],
-              subtotal="105,00", tax_total="21,00", total="126,00")
+    v = check(
+        document_kind="credit_note",
+        currency="EUR",
+        supplier_country_code="FR",
+        ocr_text=OCR_TEXT + " EUR",
+        line_items=[
+            {
+                "kind": "item",
+                "description": "Retour",
+                "quantity": "1",
+                "unit_price": "100,00",
+                "amount": "100,00",
+                "tax_rate": None,
+            }
+        ],
+        adjustments=[
+            {"kind": "shipping", "label": "Port", "amount": "10,00", "position": "before_tax"},
+            {"kind": "discount", "label": "Remise", "amount": "5,00", "position": "before_tax"},
+        ],
+        tax_lines=[
+            {"tax_type": "vat", "label": "TVA 20 %", "rate": "20 %", "taxable_base": "105,00", "amount": "21,00"}
+        ],
+        subtotal="105,00",
+        tax_total="21,00",
+        total="126,00",
+    )
     assert v.status == "ready", v.reasons
 
 
 def test_withholding_repeated_as_adjustment_is_counted_once():
     # Seen live (Spanish invoice D): IRPF returned as a tax line AND as an 'other' adjustment
-    v = check(currency="EUR", supplier_country_code="ES", ocr_text=OCR_TEXT + " EUR",
-              line_items=[{"kind": "item", "description": "Diseño", "quantity": "1", "unit_price": "1.560,00",
-                           "amount": "1.560,00", "tax_rate": None}],
-              adjustments=[{"kind": "other", "label": "Retención IRPF 15 %", "amount": "-234,00",
-                            "position": "after_tax"}],
-              tax_lines=[{"tax_type": "vat", "label": "IVA 21 %", "rate": "21 %", "taxable_base": "1.560,00",
-                          "amount": "327,60"},
-                         {"tax_type": "withholding", "label": "Retención IRPF 15 %", "rate": "15 %",
-                          "taxable_base": None, "amount": "-234,00"}],
-              subtotal="1.560,00", tax_total=None, total="1.653,60")
+    v = check(
+        currency="EUR",
+        supplier_country_code="ES",
+        ocr_text=OCR_TEXT + " EUR",
+        line_items=[
+            {
+                "kind": "item",
+                "description": "Diseño",
+                "quantity": "1",
+                "unit_price": "1.560,00",
+                "amount": "1.560,00",
+                "tax_rate": None,
+            }
+        ],
+        adjustments=[{"kind": "other", "label": "Retención IRPF 15 %", "amount": "-234,00", "position": "after_tax"}],
+        tax_lines=[
+            {"tax_type": "vat", "label": "IVA 21 %", "rate": "21 %", "taxable_base": "1.560,00", "amount": "327,60"},
+            {
+                "tax_type": "withholding",
+                "label": "Retención IRPF 15 %",
+                "rate": "15 %",
+                "taxable_base": None,
+                "amount": "-234,00",
+            },
+        ],
+        subtotal="1.560,00",
+        tax_total=None,
+        total="1.653,60",
+    )
     assert v.status == "ready", v.reasons
     assert [i.code for i in v.info] == ["adjustment_repeats_tax"]
 
 
 def test_shipping_equal_to_a_tax_amount_is_kept():
     # Only 'other' adjustments are deduplicated: real shipping that happens to equal the tax stays
-    v = check(adjustments=[{"kind": "shipping", "label": "Shipping", "amount": "50.24", "position": "after_tax"}],
-              total="USD 691.48")
+    v = check(
+        adjustments=[{"kind": "shipping", "label": "Shipping", "amount": "50.24", "position": "after_tax"}],
+        total="USD 691.48",
+    )
     assert v.status == "ready" and v.info == [], (v.reasons, v.info)

@@ -49,53 +49,94 @@ def total_of(lines):
 
 
 def test_tax_exclusive_invoice_lines_sum_to_total():
-    out = document_lines(lines=[line(1, "420.00"), line(2, "171.00")], taxes=[tax("50.24", "sales_tax", "Sales tax")],
-                         tax_mode="exclusive", total=D("641.24"), currency="USD", is_credit_note=False)
+    out = document_lines(
+        lines=[line(1, "420.00"), line(2, "171.00")],
+        taxes=[tax("50.24", "sales_tax", "Sales tax")],
+        tax_mode="exclusive",
+        total=D("641.24"),
+        currency="USD",
+        is_credit_note=False,
+    )
     assert total_of(out) == D("641.24") and [l.account for l in out] == ["expense", "expense", "tax"]
 
 
 def test_discount_and_withholding_are_negative_lines():
-    out = document_lines(lines=[line(1, "1560.00"), line(2, "-78.00", "discount")],
-                         taxes=[tax("311.22", label="IVA 21 %"), tax("-222.30", "withholding", "IRPF 15 %")],
-                         tax_mode="exclusive", total=D("1570.92"), currency="EUR", is_credit_note=False)
+    out = document_lines(
+        lines=[line(1, "1560.00"), line(2, "-78.00", "discount")],
+        taxes=[tax("311.22", label="IVA 21 %"), tax("-222.30", "withholding", "IRPF 15 %")],
+        tax_mode="exclusive",
+        total=D("1570.92"),
+        currency="EUR",
+        is_credit_note=False,
+    )
     assert [l.amount for l in out] == [D("1560.00"), D("-78.00"), D("311.22"), D("-222.30")]
     assert total_of(out) == D("1570.92")
 
 
 def test_tax_inclusive_invoice_does_not_add_tax_again():
-    out = document_lines(lines=[line(1, "11000")], taxes=[tax("1000", label="内消費税")], tax_mode="inclusive",
-                         total=D("11000"), currency="JPY", is_credit_note=False)
+    out = document_lines(
+        lines=[line(1, "11000")],
+        taxes=[tax("1000", label="内消費税")],
+        tax_mode="inclusive",
+        total=D("11000"),
+        currency="JPY",
+        is_credit_note=False,
+    )
     assert [(l.amount, l.account) for l in out] == [(D("11000"), "expense")]
 
 
 def test_credit_note_lines_are_positive():
-    out = document_lines(lines=[line(1, "-69.00"), line(2, "-58.00")], taxes=[tax("-25.40")], tax_mode="exclusive",
-                         total=D("-152.40"), currency="GBP", is_credit_note=True)
+    out = document_lines(
+        lines=[line(1, "-69.00"), line(2, "-58.00")],
+        taxes=[tax("-25.40")],
+        tax_mode="exclusive",
+        total=D("-152.40"),
+        currency="GBP",
+        is_credit_note=True,
+    )
     assert total_of(out) == D("152.40") and all(l.amount > 0 for l in out)
 
 
 def test_rounding_residual_within_tolerance_becomes_a_line():
-    out = document_lines(lines=[line(1, "10.00"), line(2, "10.00")], taxes=[tax("4.00")], tax_mode="exclusive",
-                         total=D("24.01"), currency="EUR", is_credit_note=False)
+    out = document_lines(
+        lines=[line(1, "10.00"), line(2, "10.00")],
+        taxes=[tax("4.00")],
+        tax_mode="exclusive",
+        total=D("24.01"),
+        currency="EUR",
+        is_credit_note=False,
+    )
     assert out[-1].description == "Rounding difference" and out[-1].amount == D("0.01")
     assert total_of(out) == D("24.01")
 
 
 def test_large_residual_is_refused():
     with pytest.raises(PostingError) as e:
-        document_lines(lines=[line(1, "10.00")], taxes=[], tax_mode="exclusive", total=D("12.00"), currency="EUR",
-                       is_credit_note=False)
+        document_lines(
+            lines=[line(1, "10.00")],
+            taxes=[],
+            tax_mode="exclusive",
+            total=D("12.00"),
+            currency="EUR",
+            is_credit_note=False,
+        )
     assert e.value.code == "lines_do_not_sum_to_total"
 
 
 def test_missing_amount_is_refused():
     with pytest.raises(PostingError):
-        document_lines(lines=[line(1, None)], taxes=[], tax_mode="exclusive", total=D("10"), currency="EUR",
-                       is_credit_note=False)
+        document_lines(
+            lines=[line(1, None)], taxes=[], tax_mode="exclusive", total=D("10"), currency="EUR", is_credit_note=False
+        )
 
 
 def test_zero_decimal_currency_amounts_are_integers():
-    out = document_lines(lines=[line(1, "6000"), line(2, "7600"), line(3, "2940")],
-                         taxes=[tax("1360"), tax("235")], tax_mode="exclusive", total=D("18135"), currency="JPY",
-                         is_credit_note=False)
+    out = document_lines(
+        lines=[line(1, "6000"), line(2, "7600"), line(3, "2940")],
+        taxes=[tax("1360"), tax("235")],
+        tax_mode="exclusive",
+        total=D("18135"),
+        currency="JPY",
+        is_credit_note=False,
+    )
     assert all(l.amount == l.amount.to_integral_value() for l in out) and total_of(out) == D("18135")

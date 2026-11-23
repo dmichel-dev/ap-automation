@@ -69,8 +69,9 @@ def _unsupported_file(_: Request, exc: files.UnsupportedFile) -> JSONResponse:
 def _provider_error(_: Request, exc: ProviderError) -> JSONResponse:
     # 503 = temporary, n8n may retry later; 502 = permanent provider problem
     status = 503 if exc.retryable else 502
-    return JSONResponse({"error": f"provider_{exc.kind}", "message": str(exc), "retryable": exc.retryable},
-                        status_code=status)
+    return JSONResponse(
+        {"error": f"provider_{exc.kind}", "message": str(exc), "retryable": exc.retryable}, status_code=status
+    )
 
 
 @app.get("/health")
@@ -90,8 +91,10 @@ def health() -> JSONResponse:
 def get_processing_config() -> processing.Config:
     s = get_settings()
     return processing.Config(
-        database_url=s.ap_database_url.get_secret_value(), storage_dir=Path(s.file_storage_dir),
-        retention_days=s.file_retention_days, confidence_threshold=s.confidence_threshold,
+        database_url=s.ap_database_url.get_secret_value(),
+        storage_dir=Path(s.file_storage_dir),
+        retention_days=s.file_retention_days,
+        confidence_threshold=s.confidence_threshold,
     )
 
 
@@ -108,8 +111,12 @@ def process_invoice(
     """The shared core for every channel: extract → normalize → check → store. Idempotent per source_ref."""
     content = file.file.read(files.MAX_FILE_BYTES + 1)
     req = processing.ProcessRequest(
-        content=content, file_name=(file.filename or "unnamed")[:255], channel=channel, source_ref=source_ref,
-        received_at=received_at, execution_id=n8n_execution_id,
+        content=content,
+        file_name=(file.filename or "unnamed")[:255],
+        channel=channel,
+        source_ref=source_ref,
+        received_at=received_at,
+        execution_id=n8n_execution_id,
     )
     return processing.process(req, provider, cfg)
 
@@ -131,10 +138,14 @@ def extract(
 def get_accounting_config() -> accounting.AccountingConfig:
     s = get_settings()
     return accounting.AccountingConfig(
-        database_url=s.ap_database_url.get_secret_value(), storage_dir=Path(s.file_storage_dir),
-        home_currency=s.home_currency, expense_account_id=s.qbo_expense_account_id,
-        tax_account_id=s.qbo_tax_account_id, bank_account_id=s.qbo_bank_account_id,
-        max_attempts=s.posting_max_attempts, lease_minutes=s.posting_lease_minutes,
+        database_url=s.ap_database_url.get_secret_value(),
+        storage_dir=Path(s.file_storage_dir),
+        home_currency=s.home_currency,
+        expense_account_id=s.qbo_expense_account_id,
+        tax_account_id=s.qbo_tax_account_id,
+        bank_account_id=s.qbo_bank_account_id,
+        max_attempts=s.posting_max_attempts,
+        lease_minutes=s.posting_lease_minutes,
         qbo_base=f"{s.qbo_api_host.rstrip('/')}/v3/company/{s.qbo_realm_id}" if s.qbo_realm_id else "",
     )
 
@@ -142,9 +153,12 @@ def get_accounting_config() -> accounting.AccountingConfig:
 def get_rules() -> matching.Rules:
     s = get_settings()
     return matching.Rules(
-        abs_tolerance=Decimal(s.match_amount_abs_tolerance), pct_tolerance=Decimal(s.match_amount_pct_tolerance),
-        days_before_invoice=s.match_days_before_invoice, days_after_due=s.match_days_after_due,
-        default_terms_days=s.match_default_terms_days, min_name_similarity=s.match_name_min_similarity,
+        abs_tolerance=Decimal(s.match_amount_abs_tolerance),
+        pct_tolerance=Decimal(s.match_amount_pct_tolerance),
+        days_before_invoice=s.match_days_before_invoice,
+        days_after_due=s.match_days_after_due,
+        default_terms_days=s.match_default_terms_days,
+        min_name_similarity=s.match_name_min_similarity,
     )
 
 
@@ -166,10 +180,12 @@ def _json(row: dict | None) -> dict | None:
     """DB row → JSON-safe dict (Decimal as exact string, dates as ISO)."""
     if row is None:
         return None
+
     def conv(v):
         if isinstance(v, (Decimal, UUID)):
             return str(v)
         return v.isoformat() if isinstance(v, (date, datetime)) else v
+
     return {k: conv(v) for k, v in row.items()}
 
 
@@ -219,7 +235,7 @@ def posting_result(invoice_id: str, body: PostingResult, cfg: AcctCfg) -> dict:
         raise HTTPException(422, "attached requires attachment_external_id")
     with db.connect(cfg.database_url) as conn:
         posting, to_delete = accounting.record_result(conn, cfg, invoice_id, body.model_dump())
-    accounting.delete_stored_file(cfg.storage_dir, to_delete)      # after COMMIT
+    accounting.delete_stored_file(cfg.storage_dir, to_delete)  # after COMMIT
     return _json(posting)
 
 
@@ -243,8 +259,9 @@ class VendorLink(BaseModel):
 @app.put("/vendor-links", dependencies=Auth)
 def vendor_link(body: VendorLink, cfg: AcctCfg) -> dict:
     with db.connect(cfg.database_url) as conn:
-        return _json(accounting.link_vendor(conn, body.supplier_key, body.currency, body.external_id,
-                                            body.display_name))
+        return _json(
+            accounting.link_vendor(conn, body.supplier_key, body.currency, body.external_id, body.display_name)
+        )
 
 
 class BankAccount(BaseModel):
@@ -275,8 +292,9 @@ class SyncPage(BaseModel):
 @app.post("/bank/sync-page/{item_key}", dependencies=Auth)
 def bank_sync_page(item_key: str, body: SyncPage, cfg: AcctCfg) -> dict:
     with db.connect(cfg.database_url) as conn:
-        return accounting.store_sync_page(conn, item_key, body.added, body.modified, body.removed,
-                                          body.next_cursor, body.has_more)
+        return accounting.store_sync_page(
+            conn, item_key, body.added, body.modified, body.removed, body.next_cursor, body.has_more
+        )
 
 
 @app.post("/matching/run/{item_key}", dependencies=Auth)

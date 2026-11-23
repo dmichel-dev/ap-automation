@@ -9,8 +9,13 @@ from app.providers.base import ProviderError
 from app.providers.mistral import API_URL, MistralOcrProvider
 
 OK_BODY = {
-    "pages": [{"index": 0, "markdown": "Invoice", "confidence_scores": {
-        "average_page_confidence_score": 0.9, "minimum_page_confidence_score": 0.5}}],
+    "pages": [
+        {
+            "index": 0,
+            "markdown": "Invoice",
+            "confidence_scores": {"average_page_confidence_score": 0.9, "minimum_page_confidence_score": 0.5},
+        }
+    ],
     "model": "mistral-ocr-latest",
     "document_annotation": json.dumps({"document_kind": "invoice"}),
     "usage_info": {"pages_processed": 1},
@@ -59,7 +64,9 @@ def test_image_request_omits_pages():
 
 @respx.mock
 def test_retries_on_429_then_succeeds():
-    route = respx.post(API_URL).mock(side_effect=[httpx.Response(429), httpx.Response(503), httpx.Response(200, json=OK_BODY)])
+    route = respx.post(API_URL).mock(
+        side_effect=[httpx.Response(429), httpx.Response(503), httpx.Response(200, json=OK_BODY)]
+    )
     provider().extract(b"%PDF", "application/pdf")
     assert route.call_count == 3
 

@@ -21,7 +21,7 @@ import sys
 
 WORKFLOW_ID = "apPostQbo0000001"
 CORE = "http://core:8000"
-LOOP = "$('One at a time').first().json"            # the posting being worked on (batch size 1)
+LOOP = "$('One at a time').first().json"  # the posting being worked on (batch size 1)
 BASE = "$('Claim postings (core)').first().json.qbo_base"
 MINOR = "$('Claim postings (core)').first().json.minorversion"
 
@@ -30,36 +30,68 @@ MINOR = "$('Claim postings (core)').first().json.minorversion"
 def condition(expression: str) -> dict:
     return {
         "options": {"caseSensitive": True, "leftValue": "", "typeValidation": "loose", "version": 2},
-        "conditions": [{"id": "c1", "leftValue": "={{ " + expression + " }}", "rightValue": "",
-                        "operator": {"type": "boolean", "operation": "true", "singleValue": True}}],
+        "conditions": [
+            {
+                "id": "c1",
+                "leftValue": "={{ " + expression + " }}",
+                "rightValue": "",
+                "operator": {"type": "boolean", "operation": "true", "singleValue": True},
+            }
+        ],
         "combinator": "and",
     }
 
 
 def if_node(name: str, pos: list[int], expression: str) -> dict:
-    return {"name": name, "type": "n8n-nodes-base.if", "typeVersion": 2.2, "position": pos,
-            "parameters": {"conditions": condition(expression), "options": {}}}
+    return {
+        "name": name,
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": pos,
+        "parameters": {"conditions": condition(expression), "options": {}},
+    }
 
 
 def switch_node(name: str, pos: list[int], field: str, outputs: list[str]) -> dict:
     rules = []
     for key in outputs:
         rules.append({"conditions": condition(f"{field} === '{key}'"), "renameOutput": True, "outputKey": key})
-    return {"name": name, "type": "n8n-nodes-base.switch", "typeVersion": 3.2, "position": pos,
-            "parameters": {"rules": {"values": rules}, "options": {}}}
+    return {
+        "name": name,
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.2,
+        "position": pos,
+        "parameters": {"rules": {"values": rules}, "options": {}},
+    }
 
 
 def code_node(name: str, pos: list[int], js: str) -> dict:
-    return {"name": name, "type": "n8n-nodes-base.code", "typeVersion": 2, "position": pos,
-            "parameters": {"mode": "runOnceForAllItems", "language": "javaScript", "jsCode": js.strip()}}
+    return {
+        "name": name,
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": pos,
+        "parameters": {"mode": "runOnceForAllItems", "language": "javaScript", "jsCode": js.strip()},
+    }
 
 
 def set_node(name: str, pos: list[int], fields: dict[str, str]) -> dict:
-    return {"name": name, "type": "n8n-nodes-base.set", "typeVersion": 3.4, "position": pos,
-            "parameters": {"mode": "manual", "includeOtherFields": False, "options": {},
-                           "assignments": {"assignments": [
-                               {"id": k, "name": k, "value": "={{ " + v + " }}", "type": "string"}
-                               for k, v in fields.items()]}}}
+    return {
+        "name": name,
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": pos,
+        "parameters": {
+            "mode": "manual",
+            "includeOtherFields": False,
+            "options": {},
+            "assignments": {
+                "assignments": [
+                    {"id": k, "name": k, "value": "={{ " + v + " }}", "type": "string"} for k, v in fields.items()
+                ]
+            },
+        },
+    }
 
 
 RESPONSE = {"response": {"response": {"fullResponse": True, "neverError": True}}}
@@ -68,35 +100,56 @@ RESPONSE = {"response": {"response": {"fullResponse": True, "neverError": True}}
 RETRY = {"retryOnFail": True, "maxTries": 3, "waitBetweenTries": 2000}
 
 
-def qbo(name: str, pos: list[int], method: str, path: str, query: dict | None = None,
-        body: str | None = None) -> dict:
+def qbo(name: str, pos: list[int], method: str, path: str, query: dict | None = None, body: str | None = None) -> dict:
     """QuickBooks call: one item at a time, full response, never throws (the next node checks it)."""
     q = {"minorversion": "={{ " + MINOR + " }}", **(query or {})}
     params = {
-        "method": method, "url": "={{ " + BASE + " }}" + path,
-        "authentication": "predefinedCredentialType", "nodeCredentialType": "quickBooksOAuth2Api",
-        "sendQuery": True, "queryParameters": {"parameters": [{"name": k, "value": v} for k, v in q.items()]},
-        "sendHeaders": True, "headerParameters": {"parameters": [{"name": "Accept", "value": "application/json"}]},
+        "method": method,
+        "url": "={{ " + BASE + " }}" + path,
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "quickBooksOAuth2Api",
+        "sendQuery": True,
+        "queryParameters": {"parameters": [{"name": k, "value": v} for k, v in q.items()]},
+        "sendHeaders": True,
+        "headerParameters": {"parameters": [{"name": "Accept", "value": "application/json"}]},
         "options": {"batching": {"batch": {"batchSize": 1, "batchInterval": 300}}, **RESPONSE},
     }
     if body is not None:
         params.update({"sendBody": True, "specifyBody": "json", "jsonBody": "={{ " + body + " }}"})
     # continueRegularOutput: a network error (DNS, timeout) becomes an item without statusCode,
     # which the next check treats as a failure (status 0 → retryable) instead of stopping the run
-    return {"name": name, "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": pos,
-            "onError": "continueRegularOutput", **RETRY, "parameters": params, "credentials": {"quickBooksOAuth2Api": "QBO"}}
+    return {
+        "name": name,
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": pos,
+        "onError": "continueRegularOutput",
+        **RETRY,
+        "parameters": params,
+        "credentials": {"quickBooksOAuth2Api": "QBO"},
+    }
 
 
 def core(name: str, pos: list[int], method: str, path: str, body: str | None = None, **extra) -> dict:
     params = {
-        "method": method, "url": "=" + CORE + path,
-        "authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth",
+        "method": method,
+        "url": "=" + CORE + path,
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "options": {**RESPONSE, **extra.pop("options", {})},
     }
     if body is not None:
         params.update({"sendBody": True, "specifyBody": "json", "jsonBody": "={{ " + body + " }}"})
-    node = {"name": name, "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": pos,
-            "onError": "continueRegularOutput", **RETRY, "parameters": params, "credentials": {"httpHeaderAuth": "CORE"}}
+    node = {
+        "name": name,
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": pos,
+        "onError": "continueRegularOutput",
+        **RETRY,
+        "parameters": params,
+        "credentials": {"httpHeaderAuth": "CORE"},
+    }
     node.update(extra)
     return node
 
@@ -205,94 +258,222 @@ return [{ json: { invoice_id: item.invoice_id, body: {
 def build(cred_ids: dict | None) -> dict:
     nodes = [
         # --- triggers + claim -----------------------------------------------------------
-        {"name": "Every 15 minutes", "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.2, "position": [0, 200],
-         "parameters": {"rule": {"interval": [{"field": "minutes", "minutesInterval": 15}]}}},
-        {"name": "Called by intake", "type": "n8n-nodes-base.executeWorkflowTrigger", "typeVersion": 1.1,
-         "position": [0, 400], "parameters": {"inputSource": "passthrough"}},
-        {"name": "Manual run", "type": "n8n-nodes-base.manualTrigger", "typeVersion": 1, "position": [0, 600],
-         "parameters": {}},
-        {"name": "Claim postings (core)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
-         "position": [240, 400], "executeOnce": True,
-         "parameters": {"method": "POST", "url": f"{CORE}/postings/claim",
-                        "authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth",
-                        "sendQuery": True, "queryParameters": {"parameters": [{"name": "limit", "value": "10"}]},
-                        "options": {}},
-         "credentials": {"httpHeaderAuth": "CORE"}},
-        {"name": "Split postings", "type": "n8n-nodes-base.splitOut", "typeVersion": 1, "position": [460, 400],
-         "parameters": {"fieldToSplitOut": "items", "options": {}}},
-        {"name": "One at a time", "type": "n8n-nodes-base.splitInBatches", "typeVersion": 3, "position": [680, 400],
-         "parameters": {"batchSize": 1, "options": {}}},
+        {
+            "name": "Every 15 minutes",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1.2,
+            "position": [0, 200],
+            "parameters": {"rule": {"interval": [{"field": "minutes", "minutesInterval": 15}]}},
+        },
+        {
+            "name": "Called by intake",
+            "type": "n8n-nodes-base.executeWorkflowTrigger",
+            "typeVersion": 1.1,
+            "position": [0, 400],
+            "parameters": {"inputSource": "passthrough"},
+        },
+        {
+            "name": "Manual run",
+            "type": "n8n-nodes-base.manualTrigger",
+            "typeVersion": 1,
+            "position": [0, 600],
+            "parameters": {},
+        },
+        {
+            "name": "Claim postings (core)",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [240, 400],
+            "executeOnce": True,
+            "parameters": {
+                "method": "POST",
+                "url": f"{CORE}/postings/claim",
+                "authentication": "genericCredentialType",
+                "genericAuthType": "httpHeaderAuth",
+                "sendQuery": True,
+                "queryParameters": {"parameters": [{"name": "limit", "value": "10"}]},
+                "options": {},
+            },
+            "credentials": {"httpHeaderAuth": "CORE"},
+        },
+        {
+            "name": "Split postings",
+            "type": "n8n-nodes-base.splitOut",
+            "typeVersion": 1,
+            "position": [460, 400],
+            "parameters": {"fieldToSplitOut": "items", "options": {}},
+        },
+        {
+            "name": "One at a time",
+            "type": "n8n-nodes-base.splitInBatches",
+            "typeVersion": 3,
+            "position": [680, 400],
+            "parameters": {"batchSize": 1, "options": {}},
+        },
         switch_node("Route action", [900, 420], "$json.action", ["create", "attach"]),
-
         # --- vendor ----------------------------------------------------------------------
         if_node("Vendor linked?", [1120, 200], "!!$json.vendor.external_id"),
-        qbo("Find vendor (QBO)", [1340, 300], "GET", "/query", query={
-            "query": "={{ \"select Id, DisplayName, CurrencyRef, Active from Vendor where DisplayName = '\" + "
-                     + LOOP + ".vendor.display_name_q + \"' and Active in (true, false)\" }}"}),
+        qbo(
+            "Find vendor (QBO)",
+            [1340, 300],
+            "GET",
+            "/query",
+            query={
+                "query": '={{ "select Id, DisplayName, CurrencyRef, Active from Vendor where DisplayName = \'" + '
+                + LOOP
+                + '.vendor.display_name_q + "\' and Active in (true, false)" }}'
+            },
+        ),
         code_node("Vendor lookup", [1560, 300], VENDOR_LOOKUP_JS),
         switch_node("Route vendor", [1780, 300], "$json.decision", ["use", "create", "review", "error"]),
-        qbo("Create vendor (QBO)", [2000, 320], "POST", "/vendor",
+        qbo(
+            "Create vendor (QBO)",
+            [2000, 320],
+            "POST",
+            "/vendor",
             query={"requestid": "={{ 'ap-vendor-' + " + LOOP + ".posting_id }}"},
-            body="JSON.stringify({ DisplayName: " + LOOP + ".vendor.display_name, CompanyName: " + LOOP
-                 + ".vendor.company_name, CurrencyRef: { value: " + LOOP + ".currency } })"),
+            body="JSON.stringify({ DisplayName: "
+            + LOOP
+            + ".vendor.display_name, CompanyName: "
+            + LOOP
+            + ".vendor.company_name, CurrencyRef: { value: "
+            + LOOP
+            + ".currency } })",
+        ),
         if_node("Vendor created?", [2220, 320], "$json.statusCode === 200 && !!$json.body?.Vendor?.Id"),
-        core("Link vendor (core)", [2440, 220], "PUT", "/vendor-links",
-             body="JSON.stringify({ supplier_key: " + LOOP + ".vendor.supplier_key, currency: " + LOOP
-                  + ".currency, external_id: String($json.vendor_id ?? $json.body.Vendor.Id), display_name: "
-                  + LOOP + ".vendor.display_name })"),
+        core(
+            "Link vendor (core)",
+            [2440, 220],
+            "PUT",
+            "/vendor-links",
+            body="JSON.stringify({ supplier_key: "
+            + LOOP
+            + ".vendor.supplier_key, currency: "
+            + LOOP
+            + ".currency, external_id: String($json.vendor_id ?? $json.body.Vendor.Id), display_name: "
+            + LOOP
+            + ".vendor.display_name })",
+        ),
         if_node("Linked?", [2660, 220], "$json.statusCode === 200"),
-        set_node("Vendor ready", [2880, 120], {"vendor_id": "String($json.body?.external_id ?? " + LOOP
-                                                         + ".vendor.external_id)"}),
-
+        set_node(
+            "Vendor ready",
+            [2880, 120],
+            {"vendor_id": "String($json.body?.external_id ?? " + LOOP + ".vendor.external_id)"},
+        ),
         # --- exchange rate ---------------------------------------------------------------
         if_node("Needs exchange rate?", [3100, 120], LOOP + ".needs_exchange_rate"),
-        qbo("Get exchange rate (QBO)", [3320, 20], "GET", "/exchangerate", query={
-            "sourcecurrencycode": "={{ " + LOOP + ".currency }}", "asofdate": "={{ " + LOOP + ".exchange_rate_date }}"}),
+        qbo(
+            "Get exchange rate (QBO)",
+            [3320, 20],
+            "GET",
+            "/exchangerate",
+            query={
+                "sourcecurrencycode": "={{ " + LOOP + ".currency }}",
+                "asofdate": "={{ " + LOOP + ".exchange_rate_date }}",
+            },
+        ),
         if_node("Rate OK?", [3540, 20], "$json.statusCode === 200 && Number($json.body?.ExchangeRate?.Rate) > 0"),
-        set_node("Rate", [3760, 120], {"vendor_id": "$('Vendor ready').first().json.vendor_id",
-                                       "exchange_rate": "$json.body?.ExchangeRate?.Rate ?? ''"}),
-
+        set_node(
+            "Rate",
+            [3760, 120],
+            {
+                "vendor_id": "$('Vendor ready').first().json.vendor_id",
+                "exchange_rate": "$json.body?.ExchangeRate?.Rate ?? ''",
+            },
+        ),
         # --- bill / vendor credit ------------------------------------------------------
-        qbo("Find existing document (QBO)", [3980, 120], "GET", "/query", query={
-            "query": "={{ 'select Id, VendorRef, TotalAmt from ' + " + LOOP + ".entity + \" where DocNumber = '\" + "
-                     + LOOP + ".doc_number_q + \"'\" }}"}),
+        qbo(
+            "Find existing document (QBO)",
+            [3980, 120],
+            "GET",
+            "/query",
+            query={
+                "query": "={{ 'select Id, VendorRef, TotalAmt from ' + "
+                + LOOP
+                + '.entity + " where DocNumber = \'" + '
+                + LOOP
+                + '.doc_number_q + "\'" }}'
+            },
+        ),
         code_node("Existing?", [4200, 120], EXISTING_JS),
         switch_node("Route document", [4420, 120], "$json.decision", ["create", "exists", "review_dup", "error"]),
-        qbo("Create document (QBO)", [4640, 40], "POST", "",            # URL set below (entity endpoint)
+        qbo(
+            "Create document (QBO)",
+            [4640, 40],
+            "POST",
+            "",  # URL set below (entity endpoint)
             query={"requestid": "={{ " + LOOP + ".request_id }}"},
-            body="JSON.stringify(Object.assign({}, " + LOOP + ".document, { VendorRef: { value: $('Rate').first().json.vendor_id } }, "
-                 + LOOP + ".needs_exchange_rate ? { ExchangeRate: Number($('Rate').first().json.exchange_rate) } : {}))"),
+            body="JSON.stringify(Object.assign({}, "
+            + LOOP
+            + ".document, { VendorRef: { value: $('Rate').first().json.vendor_id } }, "
+            + LOOP
+            + ".needs_exchange_rate ? { ExchangeRate: Number($('Rate').first().json.exchange_rate) } : {}))",
+        ),
         if_node("Created?", [4860, 40], "$json.statusCode === 200 && !!$json.body?.[" + LOOP + ".entity]?.Id"),
-        set_node("Document ready", [5080, 120], {
-            "external_id": "String($json.external_id ?? $json.body[" + LOOP + ".entity].Id)"}),
-
+        set_node(
+            "Document ready",
+            [5080, 120],
+            {"external_id": "String($json.external_id ?? $json.body[" + LOOP + ".entity].Id)"},
+        ),
         # --- attachment (create path and attach-only path) ------------------------------
         if_node("File available?", [5300, 120], LOOP + ".file.available"),
-        core("Get file (core)", [5520, 40], "GET", "",                  # URL set below (file path)
-             options={"response": {"response": {"fullResponse": True, "neverError": True,
-                                                 "responseFormat": "file", "outputPropertyName": "data"}}}),
+        core(
+            "Get file (core)",
+            [5520, 40],
+            "GET",
+            "",  # URL set below (file path)
+            options={
+                "response": {
+                    "response": {
+                        "fullResponse": True,
+                        "neverError": True,
+                        "responseFormat": "file",
+                        "outputPropertyName": "data",
+                    }
+                }
+            },
+        ),
         if_node("File OK?", [5740, 40], "$json.statusCode === 200"),
         code_node("Prepare upload", [5960, -40], PREPARE_UPLOAD_JS),
-        {"name": "Upload attachment (QBO)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
-         "position": [6180, -40],
-         "parameters": {"method": "POST", "url": "={{ " + BASE + " }}/upload",
-                        "authentication": "predefinedCredentialType", "nodeCredentialType": "quickBooksOAuth2Api",
-                        "sendQuery": True, "queryParameters": {"parameters": [
-                            {"name": "minorversion", "value": "={{ " + MINOR + " }}"}]},
-                        "sendHeaders": True, "headerParameters": {"parameters": [{"name": "Accept", "value": "application/json"}]},
-                        "sendBody": True, "contentType": "multipart-form-data",
-                        "bodyParameters": {"parameters": [
-                            {"parameterType": "formBinaryData", "name": "file_metadata_0", "inputDataFieldName": "meta"},
-                            {"parameterType": "formBinaryData", "name": "file_content_0", "inputDataFieldName": "data"}]},
-                        "options": RESPONSE},
-         "onError": "continueRegularOutput", **RETRY, "credentials": {"quickBooksOAuth2Api": "QBO"}},
+        {
+            "name": "Upload attachment (QBO)",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [6180, -40],
+            "parameters": {
+                "method": "POST",
+                "url": "={{ " + BASE + " }}/upload",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "quickBooksOAuth2Api",
+                "sendQuery": True,
+                "queryParameters": {"parameters": [{"name": "minorversion", "value": "={{ " + MINOR + " }}"}]},
+                "sendHeaders": True,
+                "headerParameters": {"parameters": [{"name": "Accept", "value": "application/json"}]},
+                "sendBody": True,
+                "contentType": "multipart-form-data",
+                "bodyParameters": {
+                    "parameters": [
+                        {"parameterType": "formBinaryData", "name": "file_metadata_0", "inputDataFieldName": "meta"},
+                        {"parameterType": "formBinaryData", "name": "file_content_0", "inputDataFieldName": "data"},
+                    ]
+                },
+                "options": RESPONSE,
+            },
+            "onError": "continueRegularOutput",
+            **RETRY,
+            "credentials": {"quickBooksOAuth2Api": "QBO"},
+        },
         code_node("Upload result", [6400, -40], UPLOAD_RESULT_JS),
         code_node("Build result", [6620, 120], BUILD_RESULT_JS),
-
         # --- failures + report ---------------------------------------------------------
         code_node("Describe failure", [5960, 560], DESCRIBE_FAILURE_JS),
-        core("Report result (core)", [6840, 400], "POST", "/postings/{{ $json.invoice_id }}/result",
-             body="JSON.stringify($json.body)"),
+        core(
+            "Report result (core)",
+            [6840, 400],
+            "POST",
+            "/postings/{{ $json.invoice_id }}/result",
+            body="JSON.stringify($json.body)",
+        ),
     ]
     # URLs that depend on the work item
     for n in nodes:
@@ -307,13 +488,17 @@ def build(cred_ids: dict | None) -> dict:
         "Manual run": [[("Claim postings (core)", 0)]],
         "Claim postings (core)": [[("Split postings", 0)]],
         "Split postings": [[("One at a time", 0)]],
-        "One at a time": [[], [("Route action", 0)]],                       # 0 = done, 1 = next item
+        "One at a time": [[], [("Route action", 0)]],  # 0 = done, 1 = next item
         "Route action": [[("Vendor linked?", 0)], [("File available?", 0)]],
         "Vendor linked?": [[("Vendor ready", 0)], [("Find vendor (QBO)", 0)]],
         "Find vendor (QBO)": [[("Vendor lookup", 0)]],
         "Vendor lookup": [[("Route vendor", 0)]],
-        "Route vendor": [[("Link vendor (core)", 0)], [("Create vendor (QBO)", 0)],
-                         [("Describe failure", 0)], [("Describe failure", 0)]],
+        "Route vendor": [
+            [("Link vendor (core)", 0)],
+            [("Create vendor (QBO)", 0)],
+            [("Describe failure", 0)],
+            [("Describe failure", 0)],
+        ],
         "Create vendor (QBO)": [[("Vendor created?", 0)]],
         "Vendor created?": [[("Link vendor (core)", 0)], [("Describe failure", 0)]],
         "Link vendor (core)": [[("Linked?", 0)]],
@@ -325,8 +510,12 @@ def build(cred_ids: dict | None) -> dict:
         "Rate": [[("Find existing document (QBO)", 0)]],
         "Find existing document (QBO)": [[("Existing?", 0)]],
         "Existing?": [[("Route document", 0)]],
-        "Route document": [[("Create document (QBO)", 0)], [("Document ready", 0)],
-                           [("Describe failure", 0)], [("Describe failure", 0)]],
+        "Route document": [
+            [("Create document (QBO)", 0)],
+            [("Document ready", 0)],
+            [("Describe failure", 0)],
+            [("Describe failure", 0)],
+        ],
         "Create document (QBO)": [[("Created?", 0)]],
         "Created?": [[("Document ready", 0)], [("Describe failure", 0)]],
         "Document ready": [[("File available?", 0)]],
@@ -356,8 +545,13 @@ def build(cred_ids: dict | None) -> dict:
             src: {"main": [[{"node": n, "type": "main", "index": i} for n, i in out] for out in outs]}
             for src, outs in connections.items()
         },
-        "settings": {"executionOrder": "v1", "saveDataErrorExecution": "all", "saveDataSuccessExecution": "all",
-                     "saveManualExecutions": True, "timezone": "Europe/Paris"},
+        "settings": {
+            "executionOrder": "v1",
+            "saveDataErrorExecution": "all",
+            "saveDataSuccessExecution": "all",
+            "saveManualExecutions": True,
+            "timezone": "Europe/Paris",
+        },
         "pinData": {},
         "active": False,
     }

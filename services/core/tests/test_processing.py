@@ -29,9 +29,15 @@ class FakeProvider:
         self.calls += 1
         if self.error:
             raise self.error
-        return ProviderResult(annotation=base_annotation(**self.overrides), ocr_text=self.ocr_text, pages=1,
-                              model="fake-1", ocr_confidence_avg=0.97, ocr_confidence_min=0.5,
-                              raw={"model": "fake-1"})
+        return ProviderResult(
+            annotation=base_annotation(**self.overrides),
+            ocr_text=self.ocr_text,
+            pages=1,
+            model="fake-1",
+            ocr_confidence_avg=0.97,
+            ocr_confidence_min=0.5,
+            raw={"model": "fake-1"},
+        )
 
 
 @pytest.fixture
@@ -46,10 +52,15 @@ def env(clean_db, tmp_path):
 
 def post(content=b"%PDF-1.4 invoice A", source_ref="gmail:m1:a1", name="invoice.pdf"):
     return TestClient(app).post(
-        "/invoices/process", headers=AUTH,
+        "/invoices/process",
+        headers=AUTH,
         files={"file": (name, content)},
-        data={"channel": "email", "source_ref": source_ref, "n8n_execution_id": "42",
-              "received_at": "2026-11-22T10:00:00Z"},
+        data={
+            "channel": "email",
+            "source_ref": source_ref,
+            "n8n_execution_id": "42",
+            "received_at": "2026-11-22T10:00:00Z",
+        },
     )
 
 
@@ -64,7 +75,7 @@ def test_ready_invoice_is_stored(env):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["status"] == "ready" and body["review_id"] is None and not body["already_processed"]
-    assert body["summary"]["total"] == "641.24"         # decimal as string, exact
+    assert body["summary"]["total"] == "641.24"  # decimal as string, exact
     assert body["confidence"] == {"score": 0.97, "ocr": 0.97, "completeness": 1.0, "tax_mode": "exclusive"}
 
     inv = q(cfg.database_url, "SELECT * FROM ap.invoices")[0]
@@ -122,8 +133,12 @@ def test_ambiguous_date_stores_suggestion(env):
     state["provider"] = FakeProvider(invoice_date="03/04/2026", due_date="05/04/2026")
     body = post().json()
     assert body["status"] == "needs_review"
-    assert body["suggested_dates"] == {"order": "MDY", "invoice_date": "2026-03-04", "due_date": "2026-05-04",
-                                       "basis": "supplier country US writes month first"}
+    assert body["suggested_dates"] == {
+        "order": "MDY",
+        "invoice_date": "2026-03-04",
+        "due_date": "2026-05-04",
+        "basis": "supplier country US writes month first",
+    }
     row = q(cfg.database_url, "SELECT * FROM ap.invoices")[0]
     assert row["invoice_date"] is None and row["dates_ambiguous"]
     assert str(row["invoice_date_suggested"]) == "2026-03-04" and row["date_order_suggested"] == "MDY"
@@ -151,7 +166,7 @@ def test_not_invoice_is_rejected_and_file_not_kept(env):
     body = post().json()
     assert body["status"] == "rejected"
     row = q(cfg.database_url, "SELECT file_path, file_sha256 FROM ap.invoices")[0]
-    assert row["file_path"] is None and row["file_sha256"]      # hash kept for duplicate detection
+    assert row["file_path"] is None and row["file_sha256"]  # hash kept for duplicate detection
     assert list(Path(cfg.storage_dir).rglob("*.pdf")) == []
 
 
@@ -159,7 +174,9 @@ def test_adjustment_lines_are_stored_with_kind(env):
     state, cfg = env
     state["provider"] = FakeProvider(
         adjustments=[{"kind": "shipping", "label": "Shipping", "amount": "15.00", "position": "after_tax"}],
-        total="USD 656.24", ocr_text=OCR_TEXT)
+        total="USD 656.24",
+        ocr_text=OCR_TEXT,
+    )
     assert post().json()["status"] == "ready"
     rows = q(cfg.database_url, "SELECT kind, tax_stage, amount FROM ap.invoice_lines ORDER BY line_no")
     assert rows[-1] == {"kind": "shipping", "tax_stage": "after_tax", "amount": 15}

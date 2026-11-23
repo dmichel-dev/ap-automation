@@ -22,10 +22,23 @@ class FakeProvider:
         self.calls.append(mime_type)
         if self.error:
             raise self.error
-        return ProviderResult(annotation={"document_kind": "not_invoice", **{k: None for k in (
-            "supplier_name supplier_tax_id supplier_address supplier_country_code buyer_name buyer_tax_id "
-            "invoice_number related_invoice_number invoice_date due_date currency subtotal tax_total total language"
-        ).split()}, "line_items": [], "adjustments": [], "tax_lines": []}, ocr_text="Dear customer", pages=1)
+        return ProviderResult(
+            annotation={
+                "document_kind": "not_invoice",
+                **{
+                    k: None
+                    for k in (
+                        "supplier_name supplier_tax_id supplier_address supplier_country_code buyer_name buyer_tax_id "
+                        "invoice_number related_invoice_number invoice_date due_date currency subtotal tax_total total language"
+                    ).split()
+                },
+                "line_items": [],
+                "adjustments": [],
+                "tax_lines": [],
+            },
+            ocr_text="Dear customer",
+            pages=1,
+        )
 
 
 @pytest.fixture
@@ -54,7 +67,9 @@ def test_extract_returns_common_format(fake):
 
 
 def test_file_type_comes_from_content_not_name(fake):
-    r = client.post("/extract", files={"file": ("invoice.pdf", b"MZ\x90\x00 not a pdf", "application/pdf")}, headers=AUTH)
+    r = client.post(
+        "/extract", files={"file": ("invoice.pdf", b"MZ\x90\x00 not a pdf", "application/pdf")}, headers=AUTH
+    )
     assert r.status_code == 415 and r.json()["error"] == "unsupported_type" and fake.calls == []
 
 

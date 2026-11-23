@@ -136,9 +136,12 @@ class MistralOcrProvider:
             "usage_info": data.get("usage_info"),
             "document_annotation": raw_annotation,
             "pages": [
-                {"index": p.get("index"), "confidence_scores": {
-                    k: v for k, v in (p.get("confidence_scores") or {}).items() if k != "word_confidence_scores"
-                }}
+                {
+                    "index": p.get("index"),
+                    "confidence_scores": {
+                        k: v for k, v in (p.get("confidence_scores") or {}).items() if k != "word_confidence_scores"
+                    },
+                }
                 for p in pages
             ],
         }

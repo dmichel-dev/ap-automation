@@ -1,0 +1,60 @@
+# Tooling settings only (the core service is installed from services/core/requirements.txt).
+# Checks run on every commit through pre-commit (.pre-commit-config.yaml).
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+extend-exclude = ["backups", "test-data/output"]
+
+[tool.ruff.lint]
+select = [
+  "E", "W",   # pycodestyle
+  "F",        # pyflakes
+  "I",        # import order
+  "B",        # bugbear (likely bugs)
+  "UP",       # modern syntax for Python 3.13
+  "SIM",      # simplifications
+  "C90",      # complexity
+  "RUF",      # ruff's own checks
+]
+ignore = [
+  # Multilingual invoices are the point of the test set: ×, –, «», CJK, Arabic, Devanagari are intended
+  "RUF001", "RUF002", "RUF003",
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.per-file-ignores]
+# Test-data generator: invoice layouts are long lists of drawing calls, by nature
+"test-data/generate.py" = ["C901"]
+
+[tool.mypy]
+python_version = "3.13"
+cache_dir = "/tmp/mypy-cache"
+files = ["services/core/app", "services/core/tests", "scripts", "n8n", "test-data/generate.py"]
+plugins = ["pydantic.mypy"]
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+check_untyped_defs = true
+explicit_package_bases = true
+mypy_path = "services/core"
+
+# The core service: the flags of --strict (strict itself can't be set per module)
+[[tool.mypy.overrides]]
+module = ["app", "app.*"]
+disallow_any_generics = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_untyped_decorators = true
+warn_return_any = true
+no_implicit_reexport = true
+strict_equality = true
+extra_checks = true
+
+[[tool.mypy.overrides]]
+module = ["respx", "fpdf", "fpdf.*"]
+ignore_missing_imports = true

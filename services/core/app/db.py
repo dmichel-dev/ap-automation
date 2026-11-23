@@ -64,45 +64,85 @@ def _reasons(items: list[Issue]) -> Jsonb:
 
 
 def insert_invoice(
-    conn, *, invoice_id: str, channel: str, source_ref: str, received_at: datetime,
-    file_name: str, mime_type: str, size: int, sha256: str,
-    file_path: str | None, file_delete_after: datetime | None,
-    inv: CommonInvoice | None, validation: Validation, raw_extraction: dict | None,
-    execution_id: str | None, confidence_threshold: float, duplicate_of: str | None = None,
+    conn,
+    *,
+    invoice_id: str,
+    channel: str,
+    source_ref: str,
+    received_at: datetime,
+    file_name: str,
+    mime_type: str,
+    size: int,
+    sha256: str,
+    file_path: str | None,
+    file_delete_after: datetime | None,
+    inv: CommonInvoice | None,
+    validation: Validation,
+    raw_extraction: dict | None,
+    execution_id: str | None,
+    confidence_threshold: float,
+    duplicate_of: str | None = None,
 ) -> None:
     v = validation
     row: dict[str, Any] = {
-        "id": invoice_id, "channel": channel, "source_ref": source_ref, "received_at": received_at,
-        "file_name": file_name, "file_mime_type": mime_type, "file_size_bytes": size, "file_sha256": sha256,
-        "file_path": file_path, "file_delete_after": file_delete_after,
-        "status": v.status, "status_reasons": _reasons(v.reasons), "checks": Jsonb(v.checks),
-        "confidence": v.confidence, "ocr_confidence_avg": v.confidence_ocr,
-        "confidence_completeness": v.confidence_completeness, "confidence_threshold": confidence_threshold,
-        "tax_mode": v.tax_mode, "n8n_execution_id": execution_id, "duplicate_of": duplicate_of,
+        "id": invoice_id,
+        "channel": channel,
+        "source_ref": source_ref,
+        "received_at": received_at,
+        "file_name": file_name,
+        "file_mime_type": mime_type,
+        "file_size_bytes": size,
+        "file_sha256": sha256,
+        "file_path": file_path,
+        "file_delete_after": file_delete_after,
+        "status": v.status,
+        "status_reasons": _reasons(v.reasons),
+        "checks": Jsonb(v.checks),
+        "confidence": v.confidence,
+        "ocr_confidence_avg": v.confidence_ocr,
+        "confidence_completeness": v.confidence_completeness,
+        "confidence_threshold": confidence_threshold,
+        "tax_mode": v.tax_mode,
+        "n8n_execution_id": execution_id,
+        "duplicate_of": duplicate_of,
         "extraction": Jsonb(raw_extraction) if raw_extraction is not None else None,
     }
     if inv is not None:
         d = inv.dates
-        row.update({
-            "document_type": inv.document_type or "invoice",
-            "invoice_number": inv.invoice_number, "invoice_number_norm": inv.normalized.invoice_number,
-            "related_invoice_number": inv.related_invoice_number,
-            "invoice_date": inv.invoice_date, "due_date": inv.due_date, "dates_ambiguous": d.ambiguous,
-            "invoice_date_raw": d.invoice_date_raw, "due_date_raw": d.due_date_raw,
-            "date_order_suggested": d.suggested_order, "invoice_date_suggested": d.suggested_invoice_date,
-            "due_date_suggested": d.suggested_due_date, "date_suggestion_basis": d.suggestion_basis,
-            "supplier_name": inv.supplier.name, "supplier_name_norm": inv.normalized.supplier_name,
-            "supplier_tax_id": inv.supplier.tax_id, "supplier_tax_id_norm": inv.normalized.supplier_tax_id,
-            "supplier_country": inv.supplier.country,
-            "buyer_name": inv.buyer.name, "buyer_tax_id": inv.buyer.tax_id,
-            "currency": inv.currency, "subtotal": inv.subtotal, "tax_total": inv.tax_total, "total": inv.total,
-            "language": inv.language, "ocr_text": inv.ocr_text,
-            "extraction_provider": inv.extraction.provider, "ocr_confidence_min": inv.extraction.ocr_confidence_min,
-        })
+        row.update(
+            {
+                "document_type": inv.document_type or "invoice",
+                "invoice_number": inv.invoice_number,
+                "invoice_number_norm": inv.normalized.invoice_number,
+                "related_invoice_number": inv.related_invoice_number,
+                "invoice_date": inv.invoice_date,
+                "due_date": inv.due_date,
+                "dates_ambiguous": d.ambiguous,
+                "invoice_date_raw": d.invoice_date_raw,
+                "due_date_raw": d.due_date_raw,
+                "date_order_suggested": d.suggested_order,
+                "invoice_date_suggested": d.suggested_invoice_date,
+                "due_date_suggested": d.suggested_due_date,
+                "date_suggestion_basis": d.suggestion_basis,
+                "supplier_name": inv.supplier.name,
+                "supplier_name_norm": inv.normalized.supplier_name,
+                "supplier_tax_id": inv.supplier.tax_id,
+                "supplier_tax_id_norm": inv.normalized.supplier_tax_id,
+                "supplier_country": inv.supplier.country,
+                "buyer_name": inv.buyer.name,
+                "buyer_tax_id": inv.buyer.tax_id,
+                "currency": inv.currency,
+                "subtotal": inv.subtotal,
+                "tax_total": inv.tax_total,
+                "total": inv.total,
+                "language": inv.language,
+                "ocr_text": inv.ocr_text,
+                "extraction_provider": inv.extraction.provider,
+                "ocr_confidence_min": inv.extraction.ocr_confidence_min,
+            }
+        )
     cols = list(row)
-    conn.execute(
-        f"INSERT INTO invoices ({', '.join(cols)}) VALUES ({', '.join('%(' + c + ')s' for c in cols)})", row
-    )
+    conn.execute(f"INSERT INTO invoices ({', '.join(cols)}) VALUES ({', '.join('%(' + c + ')s' for c in cols)})", row)
     if inv is None:
         return
     with conn.cursor() as cur:
@@ -110,8 +150,20 @@ def insert_invoice(
             """INSERT INTO invoice_lines (invoice_id, line_no, kind, tax_stage, description, quantity,
                                           unit_price, amount, tax_rate)
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-            [(invoice_id, li.line_no, li.kind, li.tax_stage, li.description, li.quantity, li.unit_price,
-              li.amount, li.tax_rate) for li in inv.lines],
+            [
+                (
+                    invoice_id,
+                    li.line_no,
+                    li.kind,
+                    li.tax_stage,
+                    li.description,
+                    li.quantity,
+                    li.unit_price,
+                    li.amount,
+                    li.tax_rate,
+                )
+                for li in inv.lines
+            ],
         )
         cur.executemany(
             """INSERT INTO invoice_tax_lines (invoice_id, tax_type, label, rate, taxable_base, amount)
@@ -127,9 +179,18 @@ def open_review(conn, invoice_id: str, reasons: list[Issue]) -> int:
     ).fetchone()["id"]
 
 
-def log(conn, *, step: str, level: str, message: str, invoice_id: str | None = None,
-        channel: str | None = None, source_ref: str | None = None, execution_id: str | None = None,
-        details: dict | None = None) -> None:
+def log(
+    conn,
+    *,
+    step: str,
+    level: str,
+    message: str,
+    invoice_id: str | None = None,
+    channel: str | None = None,
+    source_ref: str | None = None,
+    execution_id: str | None = None,
+    details: dict | None = None,
+) -> None:
     """Append to processing_log. Never pass document content in message/details (privacy)."""
     conn.execute(
         """INSERT INTO processing_log (invoice_id, channel, source_ref, n8n_execution_id, step, level, message, details)

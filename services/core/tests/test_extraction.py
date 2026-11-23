@@ -17,8 +17,14 @@ def annotation(**overrides):
 
 
 def build(ocr_text="Total due: USD 641.24 (all amounts in $)", **overrides):
-    result = ProviderResult(annotation=annotation(**overrides), ocr_text=ocr_text, pages=1,
-                            model="test", ocr_confidence_avg=0.98, ocr_confidence_min=0.6)
+    result = ProviderResult(
+        annotation=annotation(**overrides),
+        ocr_text=ocr_text,
+        pages=1,
+        model="test",
+        ocr_confidence_avg=0.98,
+        ocr_confidence_min=0.6,
+    )
     return build_common_invoice(result, "test")
 
 
@@ -35,7 +41,7 @@ def test_clean_us_invoice():
     assert inv.taxes[0].rate == Decimal("8.5")
     assert inv.normalized.invoice_number == "QM1042"
     assert inv.normalized.supplier_name == "quillmoor paper supply"
-    assert codes(inv) == []          # explicit 'USD' in the total wins over '$'
+    assert codes(inv) == []  # explicit 'USD' in the total wins over '$'
 
 
 def test_ambiguous_date_us_supplier_suggests_month_first():
@@ -139,27 +145,48 @@ def test_recorded_mistral_response_parses():
 
 
 def test_adjustments_become_lines_and_discount_is_negative():
-    inv = build(adjustments=[
-        {"kind": "discount", "label": "Discount 5%", "amount": "29.55", "position": "before_tax"},
-        {"kind": "shipping", "label": "Shipping", "amount": "$15.00", "position": "after_tax"},
-        {"kind": "rounding", "label": "Rounding", "amount": "-0.01", "position": "after_tax"},
-    ])
+    inv = build(
+        adjustments=[
+            {"kind": "discount", "label": "Discount 5%", "amount": "29.55", "position": "before_tax"},
+            {"kind": "shipping", "label": "Shipping", "amount": "$15.00", "position": "after_tax"},
+            {"kind": "rounding", "label": "Rounding", "amount": "-0.01", "position": "after_tax"},
+        ]
+    )
     kinds = [(li.line_no, li.kind, li.tax_stage, li.amount) for li in inv.lines[2:]]
-    assert kinds == [(3, "discount", "before_tax", Decimal("-29.55")),
-                     (4, "shipping", "after_tax", Decimal("15.00")),
-                     (5, "rounding", "after_tax", Decimal("-0.01"))]
+    assert kinds == [
+        (3, "discount", "before_tax", Decimal("-29.55")),
+        (4, "shipping", "after_tax", Decimal("15.00")),
+        (5, "rounding", "after_tax", Decimal("-0.01")),
+    ]
 
 
 def test_discount_row_in_table_is_negative():
-    lines = annotation()["line_items"] + [{"kind": "discount", "description": "Loyalty discount", "quantity": None,
-                                            "unit_price": None, "amount": "$20.00", "tax_rate": None}]
+    lines = annotation()["line_items"] + [
+        {
+            "kind": "discount",
+            "description": "Loyalty discount",
+            "quantity": None,
+            "unit_price": None,
+            "amount": "$20.00",
+            "tax_rate": None,
+        }
+    ]
     inv = build(line_items=lines)
     assert inv.lines[2].kind == "discount" and inv.lines[2].amount == Decimal("-20.00")
 
 
 def test_withholding_tax_is_negative():
-    inv = build(tax_lines=[{"tax_type": "withholding", "label": "Retención 15%", "rate": "15%",
-                            "taxable_base": "591.00", "amount": "88.65"}])
+    inv = build(
+        tax_lines=[
+            {
+                "tax_type": "withholding",
+                "label": "Retención 15%",
+                "rate": "15%",
+                "taxable_base": "591.00",
+                "amount": "88.65",
+            }
+        ]
+    )
     assert inv.taxes[0].amount == Decimal("-88.65")
 
 

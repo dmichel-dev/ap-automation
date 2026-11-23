@@ -27,10 +27,12 @@ from .reference import minor_units
 RULE_VERSION = "m1"
 
 # Words banks add to descriptions; they say nothing about the payee
-BANK_NOISE = frozenset("""
+BANK_NOISE = frozenset(
+    """
 ach ppd ccd ctx web tel pos debit credit payment pmt pymt paymt bill billpay online transfer xfer
 wire check chk cheque purchase card visa mastercard des descr id indn entry co to from the for ref and
-""".split())
+""".split()
+)
 
 
 @dataclass(frozen=True)
@@ -47,7 +49,7 @@ class Rules:
 class OpenBill:
     invoice_id: str
     currency: str
-    amount: Decimal                  # positive, document currency
+    amount: Decimal  # positive, document currency
     invoice_date: date
     due_date: date | None
     supplier_name_norm: str | None
@@ -57,7 +59,7 @@ class OpenBill:
 @dataclass(frozen=True)
 class BankTx:
     transaction_id: str
-    amount: Decimal                  # Plaid sign: positive = money out
+    amount: Decimal  # Plaid sign: positive = money out
     currency: str | None
     date: date
     name: str | None
@@ -84,8 +86,8 @@ class Evaluation:
 @dataclass
 class Decision:
     accepted: list[tuple[OpenBill, BankTx, Evaluation]] = field(default_factory=list)
-    ambiguous: dict[str, list[tuple[BankTx, Evaluation]]] = field(default_factory=dict)   # invoice_id → candidates
-    unmatched: list[str] = field(default_factory=list)                                     # invoice_ids
+    ambiguous: dict[str, list[tuple[BankTx, Evaluation]]] = field(default_factory=dict)  # invoice_id → candidates
+    unmatched: list[str] = field(default_factory=list)  # invoice_ids
 
 
 def round_to_currency(amount: Decimal, currency: str) -> Decimal:
@@ -100,7 +102,7 @@ def _tokens(text: str | None) -> list[str]:
 def _token_match(a: str, b: str) -> bool:
     if a == b:
         return True
-    if min(len(a), len(b)) >= 3 and (a.startswith(b) or b.startswith(a)):   # bank truncation: SUP → supply
+    if min(len(a), len(b)) >= 3 and (a.startswith(b) or b.startswith(a)):  # bank truncation: SUP → supply
         return True
     return SequenceMatcher(None, a, b).ratio() >= 0.85
 
@@ -116,7 +118,7 @@ def name_similarity(supplier_name_norm: str | None, *bank_texts: str | None) -> 
 
 
 def invoice_number_in(number_norm: str | None, *bank_texts: str | None) -> bool:
-    if not number_norm or len(number_norm) < 4:          # too short to be evidence
+    if not number_norm or len(number_norm) < 4:  # too short to be evidence
         return False
     haystack = "".join(re.sub(r"[^0-9A-Z]", "", (t or "").upper()) for t in bank_texts)
     return number_norm in haystack
@@ -127,14 +129,18 @@ def evaluate(bill: OpenBill, tx: BankTx, rules: Rules) -> Evaluation:
     difference = bank_amount - bill.amount
     tolerance = min(rules.abs_tolerance, round_to_currency(bill.amount * rules.pct_tolerance, bill.currency))
     days = (tx.date - bill.invoice_date).days
-    latest = (bill.due_date or bill.invoice_date + timedelta(days=rules.default_terms_days)) \
-        + timedelta(days=rules.days_after_due)
+    latest = (bill.due_date or bill.invoice_date + timedelta(days=rules.default_terms_days)) + timedelta(
+        days=rules.days_after_due
+    )
     similarity = name_similarity(bill.supplier_name_norm, tx.name, tx.merchant_name)
     number_found = invoice_number_in(bill.invoice_number_norm, tx.name, tx.merchant_name)
     same_currency_outflow = tx.currency == bill.currency and tx.amount > 0 and not tx.pending
     return Evaluation(
-        bank_amount=bank_amount, difference=difference, days_from_invoice=days,
-        name_similarity=similarity, invoice_number_found=number_found,
+        bank_amount=bank_amount,
+        difference=difference,
+        days_from_invoice=days,
+        name_similarity=similarity,
+        invoice_number_found=number_found,
         amount_ok=same_currency_outflow and abs(difference) <= tolerance,
         date_ok=-rules.days_before_invoice <= days and tx.date <= latest,
         name_ok=similarity >= rules.min_name_similarity or number_found,

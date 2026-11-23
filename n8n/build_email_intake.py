@@ -93,12 +93,14 @@ def switch_rule(output_key: str, expression: str) -> dict:
     return {
         "conditions": {
             "options": {"caseSensitive": True, "leftValue": "", "typeValidation": "strict", "version": 2},
-            "conditions": [{
-                "id": output_key.replace(" ", "-"),
-                "leftValue": "={{ " + expression + " }}",
-                "rightValue": "",
-                "operator": {"type": "boolean", "operation": "true", "singleValue": True},
-            }],
+            "conditions": [
+                {
+                    "id": output_key.replace(" ", "-"),
+                    "leftValue": "={{ " + expression + " }}",
+                    "rightValue": "",
+                    "operator": {"type": "boolean", "operation": "true", "singleValue": True},
+                }
+            ],
             "combinator": "and",
         },
         "renameOutput": True,
@@ -109,9 +111,13 @@ def switch_rule(output_key: str, expression: str) -> dict:
 def label_node(name: str, label_keys: list[str], position: list[int]) -> dict:
     labels = ", ".join(f"$('Guard and split').item.json.labels.{k}" for k in label_keys)
     return {
-        "name": name, "type": "n8n-nodes-base.gmail", "typeVersion": 2.1, "position": position,
+        "name": name,
+        "type": "n8n-nodes-base.gmail",
+        "typeVersion": 2.1,
+        "position": position,
         "parameters": {
-            "resource": "message", "operation": "addLabels",
+            "resource": "message",
+            "operation": "addLabels",
             "messageId": "={{ $('Guard and split').item.json.message_id }}",
             "labelIds": "={{ [" + labels + "] }}",
         },
@@ -119,15 +125,31 @@ def label_node(name: str, label_keys: list[str], position: list[int]) -> dict:
     }
 
 
-def log_node(name: str, position: list[int], step: str, level: str, message: str, source_ref: str, details: str) -> dict:
+def log_node(
+    name: str, position: list[int], step: str, level: str, message: str, source_ref: str, details: str
+) -> dict:
     return {
-        "name": name, "type": "n8n-nodes-base.postgres", "typeVersion": 2.6, "position": position,
+        "name": name,
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": position,
         "parameters": {
             "operation": "executeQuery",
             "query": LOG_SQL,
-            "options": {"queryReplacement": "={{ [" + ", ".join([
-                source_ref, "$execution.id", f"'{step}'", f"'{level}'", message, f"JSON.stringify({details})",
-            ]) + "] }}"},
+            "options": {
+                "queryReplacement": "={{ ["
+                + ", ".join(
+                    [
+                        source_ref,
+                        "$execution.id",
+                        f"'{step}'",
+                        f"'{level}'",
+                        message,
+                        f"JSON.stringify({details})",
+                    ]
+                )
+                + "] }}"
+            },
         },
         "credentials": {"postgres": "POSTGRES"},
     }
@@ -137,7 +159,10 @@ def build(cred_ids: dict | None) -> dict:
     g = "$('Guard and split').item.json"
     nodes = [
         {
-            "name": "Gmail Trigger", "type": "n8n-nodes-base.gmailTrigger", "typeVersion": 1.4, "position": [0, 300],
+            "name": "Gmail Trigger",
+            "type": "n8n-nodes-base.gmailTrigger",
+            "typeVersion": 1.4,
+            "position": [0, 300],
             "parameters": {
                 "pollTimes": {"item": [{"mode": "everyMinute"}]},
                 "simple": False,
@@ -148,36 +173,58 @@ def build(cred_ids: dict | None) -> dict:
             "credentials": {"gmailOAuth2": "GMAIL"},
         },
         {
-            "name": "Get AP labels", "type": "n8n-nodes-base.gmail", "typeVersion": 2.1, "position": [220, 300],
+            "name": "Get AP labels",
+            "type": "n8n-nodes-base.gmail",
+            "typeVersion": 2.1,
+            "position": [220, 300],
             "executeOnce": True,
             "parameters": {"resource": "label", "operation": "getAll", "returnAll": True},
             "credentials": {"gmailOAuth2": "GMAIL"},
         },
         {
-            "name": "Guard and split", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [440, 300],
+            "name": "Guard and split",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [440, 300],
             "parameters": {"mode": "runOnceForAllItems", "language": "javaScript", "jsCode": GUARD_JS},
         },
         {
-            "name": "Route intake", "type": "n8n-nodes-base.switch", "typeVersion": 3.2, "position": [660, 300],
-            "parameters": {"rules": {"values": [
-                switch_rule("invoice attachment", "$json.route === 'process'"),
-                switch_rule("no valid attachment", "$json.route === 'no_valid_attachment'"),
-                switch_rule("not for alias", "$json.route === 'not_for_alias'"),
-            ]}, "options": {}},
+            "name": "Route intake",
+            "type": "n8n-nodes-base.switch",
+            "typeVersion": 3.2,
+            "position": [660, 300],
+            "parameters": {
+                "rules": {
+                    "values": [
+                        switch_rule("invoice attachment", "$json.route === 'process'"),
+                        switch_rule("no valid attachment", "$json.route === 'no_valid_attachment'"),
+                        switch_rule("not for alias", "$json.route === 'not_for_alias'"),
+                    ]
+                },
+                "options": {},
+            },
         },
         {
-            "name": "Process invoice (core)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
-            "position": [900, 120], "onError": "continueErrorOutput",
+            "name": "Process invoice (core)",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [900, 120],
+            "onError": "continueErrorOutput",
             "parameters": {
-                "method": "POST", "url": CORE_URL,
-                "authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth",
-                "sendBody": True, "contentType": "multipart-form-data",
-                "bodyParameters": {"parameters": [
-                    {"parameterType": "formBinaryData", "name": "file", "inputDataFieldName": "file"},
-                    {"name": "channel", "value": "email"},
-                    {"name": "source_ref", "value": "={{ $json.source_ref }}"},
-                    {"name": "n8n_execution_id", "value": "={{ $execution.id }}"},
-                ]},
+                "method": "POST",
+                "url": CORE_URL,
+                "authentication": "genericCredentialType",
+                "genericAuthType": "httpHeaderAuth",
+                "sendBody": True,
+                "contentType": "multipart-form-data",
+                "bodyParameters": {
+                    "parameters": [
+                        {"parameterType": "formBinaryData", "name": "file", "inputDataFieldName": "file"},
+                        {"name": "channel", "value": "email"},
+                        {"name": "source_ref", "value": "={{ $json.source_ref }}"},
+                        {"name": "n8n_execution_id", "value": "={{ $execution.id }}"},
+                    ]
+                },
                 "options": {
                     "timeout": 300000,
                     "response": {"response": {"fullResponse": True, "neverError": True, "responseFormat": "json"}},
@@ -186,14 +233,22 @@ def build(cred_ids: dict | None) -> dict:
             "credentials": {"httpHeaderAuth": "CORE"},
         },
         {
-            "name": "Route by status", "type": "n8n-nodes-base.switch", "typeVersion": 3.2, "position": [1140, 100],
+            "name": "Route by status",
+            "type": "n8n-nodes-base.switch",
+            "typeVersion": 3.2,
+            "position": [1140, 100],
             "parameters": {
-                "rules": {"values": [
-                    switch_rule("ready", "$json.statusCode === 200 && $json.body.status === 'ready'"),
-                    switch_rule("needs_review", "$json.statusCode === 200 && $json.body.status === 'needs_review'"),
-                    # 413/415: file too large / not a supported file → nothing a human can do with it
-                    switch_rule("rejected", "($json.statusCode === 200 && $json.body.status === 'rejected') || [413, 415].includes($json.statusCode)"),
-                ]},
+                "rules": {
+                    "values": [
+                        switch_rule("ready", "$json.statusCode === 200 && $json.body.status === 'ready'"),
+                        switch_rule("needs_review", "$json.statusCode === 200 && $json.body.status === 'needs_review'"),
+                        # 413/415: file too large / not a supported file → nothing a human can do with it
+                        switch_rule(
+                            "rejected",
+                            "($json.statusCode === 200 && $json.body.status === 'rejected') || [413, 415].includes($json.statusCode)",
+                        ),
+                    ]
+                },
                 "options": {"fallbackOutput": "extra", "renameFallbackOutput": "error"},
             },
         },
@@ -201,33 +256,67 @@ def build(cred_ids: dict | None) -> dict:
         # Day 2: post ready invoices right away (the 15-minute schedule is the safety net).
         # Fire and forget: the intake doesn't wait for QuickBooks.
         {
-            "name": "Post to QuickBooks", "type": "n8n-nodes-base.executeWorkflow", "typeVersion": 1.2,
-            "position": [1620, -100], "executeOnce": True,
-            "parameters": {"source": "database",
-                           "workflowId": {"__rl": True, "value": "apPostQbo0000001", "mode": "id"},
-                           "options": {"waitForSubWorkflow": False}},
+            "name": "Post to QuickBooks",
+            "type": "n8n-nodes-base.executeWorkflow",
+            "typeVersion": 1.2,
+            "position": [1620, -100],
+            "executeOnce": True,
+            "parameters": {
+                "source": "database",
+                "workflowId": {"__rl": True, "value": "apPostQbo0000001", "mode": "id"},
+                "options": {"waitForSubWorkflow": False},
+            },
         },
         label_node("Label: review", ["review", "processed"], [1400, 40]),
         label_node("Label: rejected", ["rejected", "processed"], [1400, 180]),
         # Technical error: AP/Error only, NOT AP/Processed (re-checked on Day 3)
         label_node("Label: error", ["error"], [1400, 340]),
-        log_node("Log core error", [1620, 340], "core_call", "error", "'core service call failed'",
-                 f"{g}.source_ref",
-                 "{ status_code: $('Process invoice (core)').item.json.statusCode ?? null, "
-                 "error: $('Process invoice (core)').item.json.body?.error ?? $('Process invoice (core)').item.json.error?.message ?? null }"),
+        log_node(
+            "Log core error",
+            [1620, 340],
+            "core_call",
+            "error",
+            "'core service call failed'",
+            f"{g}.source_ref",
+            "{ status_code: $('Process invoice (core)').item.json.statusCode ?? null, "
+            "error: $('Process invoice (core)').item.json.body?.error ?? $('Process invoice (core)').item.json.error?.message ?? null }",
+        ),
         label_node("Label: no valid attachment", ["rejected", "processed"], [900, 360]),
-        log_node("Log no valid attachment", [1120, 360], "intake", "warning", "'email without a valid invoice attachment'",
-                 f"'gmail:' + {g}.message_id", f"{g}.details"),
-        log_node("Log not for alias", [900, 540], "intake", "warning", "'email not addressed to the invoices alias'",
-                 "'gmail:' + $json.message_id", "{}"),
+        log_node(
+            "Log no valid attachment",
+            [1120, 360],
+            "intake",
+            "warning",
+            "'email without a valid invoice attachment'",
+            f"'gmail:' + {g}.message_id",
+            f"{g}.details",
+        ),
+        log_node(
+            "Log not for alias",
+            [900, 540],
+            "intake",
+            "warning",
+            "'email not addressed to the invoices alias'",
+            "'gmail:' + $json.message_id",
+            "{}",
+        ),
     ]
     connections = {
         "Gmail Trigger": [[("Get AP labels", 0)]],
         "Get AP labels": [[("Guard and split", 0)]],
         "Guard and split": [[("Route intake", 0)]],
-        "Route intake": [[("Process invoice (core)", 0)], [("Label: no valid attachment", 0)], [("Log not for alias", 0)]],
+        "Route intake": [
+            [("Process invoice (core)", 0)],
+            [("Label: no valid attachment", 0)],
+            [("Log not for alias", 0)],
+        ],
         "Process invoice (core)": [[("Route by status", 0)], [("Label: error", 0)]],
-        "Route by status": [[("Label: ready", 0)], [("Label: review", 0)], [("Label: rejected", 0)], [("Label: error", 0)]],
+        "Route by status": [
+            [("Label: ready", 0)],
+            [("Label: review", 0)],
+            [("Label: rejected", 0)],
+            [("Label: error", 0)],
+        ],
         "Label: ready": [[("Post to QuickBooks", 0)]],
         "Label: error": [[("Log core error", 0)]],
         "Label: no valid attachment": [[("Log no valid attachment", 0)]],
@@ -248,8 +337,13 @@ def build(cred_ids: dict | None) -> dict:
             src: {"main": [[{"node": n, "type": "main", "index": i} for n, i in out] for out in outs]}
             for src, outs in connections.items()
         },
-        "settings": {"executionOrder": "v1", "saveDataErrorExecution": "all", "saveDataSuccessExecution": "all",
-                     "saveManualExecutions": True, "timezone": "Europe/Paris"},
+        "settings": {
+            "executionOrder": "v1",
+            "saveDataErrorExecution": "all",
+            "saveDataSuccessExecution": "all",
+            "saveManualExecutions": True,
+            "timezone": "Europe/Paris",
+        },
         "pinData": {},
         "active": False,
     }

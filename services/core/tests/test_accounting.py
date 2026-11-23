@@ -22,9 +22,16 @@ ACCOUNT = "acc-checking"
 
 @pytest.fixture
 def cfg(clean_db, tmp_path):
-    c = accounting.AccountingConfig(database_url=clean_db, storage_dir=tmp_path, home_currency="USD",
-                                    expense_account_id="20", tax_account_id="21", bank_account_id="35",
-                                    max_attempts=3, lease_minutes=10)
+    c = accounting.AccountingConfig(
+        database_url=clean_db,
+        storage_dir=tmp_path,
+        home_currency="USD",
+        expense_account_id="20",
+        tax_account_id="21",
+        bank_account_id="35",
+        max_attempts=3,
+        lease_minutes=10,
+    )
     app.dependency_overrides[get_accounting_config] = lambda: c
     yield c
     app.dependency_overrides.clear()
@@ -36,28 +43,65 @@ def sql(cfg, query, *args):
         return cur.fetchall() if cur.description else None
 
 
-def make_invoice(cfg, *, number="QM-1042", supplier="Quillmoor Paper Supply LLC", key_name="quillmoor paper supply",
-                 currency="USD", lines=("420.00", "171.00"), taxes=("50.24",), total="641.24",
-                 status="ready", document_type="invoice", day=date(2026, 11, 18), due=date(2026, 12, 18),
-                 with_file=True):
+def make_invoice(
+    cfg,
+    *,
+    number="QM-1042",
+    supplier="Quillmoor Paper Supply LLC",
+    key_name="quillmoor paper supply",
+    currency="USD",
+    lines=("420.00", "171.00"),
+    taxes=("50.24",),
+    total="641.24",
+    status="ready",
+    document_type="invoice",
+    day=date(2026, 11, 18),
+    due=date(2026, 12, 18),
+    with_file=True,
+):
     inv_id = str(uuid.uuid4())
     rel = f"2026/11/{inv_id}.pdf" if with_file else None
     if rel:
         (cfg.storage_dir / "2026/11").mkdir(parents=True, exist_ok=True)
         (cfg.storage_dir / rel).write_bytes(b"%PDF-1.4 " + inv_id.encode())
-    sql(cfg, """INSERT INTO ap.invoices (id, channel, source_ref, file_name, file_mime_type, file_size_bytes,
+    sql(
+        cfg,
+        """INSERT INTO ap.invoices (id, channel, source_ref, file_name, file_mime_type, file_size_bytes,
                   file_sha256, file_path, document_type, invoice_number, invoice_number_norm, invoice_date, due_date,
                   supplier_name, supplier_name_norm, currency, total, status, tax_mode)
                 VALUES (%s, 'email', %s, 'invoice.pdf', 'application/pdf', 100, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                         %s, %s, %s, 'exclusive')""",
-        inv_id, f"test:{inv_id}", hashlib.sha256(inv_id.encode()).hexdigest(), rel, document_type, number,
-        number.replace("-", "").upper(), day, due, supplier, key_name, currency, D(total), status)
+        inv_id,
+        f"test:{inv_id}",
+        hashlib.sha256(inv_id.encode()).hexdigest(),
+        rel,
+        document_type,
+        number,
+        number.replace("-", "").upper(),
+        day,
+        due,
+        supplier,
+        key_name,
+        currency,
+        D(total),
+        status,
+    )
     for i, a in enumerate(lines, start=1):
-        sql(cfg, "INSERT INTO ap.invoice_lines (invoice_id, line_no, amount, description) VALUES (%s, %s, %s, %s)",
-            inv_id, i, D(a), f"line {i}")
+        sql(
+            cfg,
+            "INSERT INTO ap.invoice_lines (invoice_id, line_no, amount, description) VALUES (%s, %s, %s, %s)",
+            inv_id,
+            i,
+            D(a),
+            f"line {i}",
+        )
     for a in taxes:
-        sql(cfg, "INSERT INTO ap.invoice_tax_lines (invoice_id, tax_type, label, amount) VALUES (%s, 'vat', 'Tax', %s)",
-            inv_id, D(a))
+        sql(
+            cfg,
+            "INSERT INTO ap.invoice_tax_lines (invoice_id, tax_type, label, amount) VALUES (%s, 'vat', 'Tax', %s)",
+            inv_id,
+            D(a),
+        )
     return inv_id
 
 
@@ -84,14 +128,25 @@ def register_bank(cfg, currency="USD"):
 
 def bank_page(cfg, *txs, has_more=False, removed=(), cursor="c1"):
     with db.connect(cfg.database_url) as conn:
-        return accounting.store_sync_page(conn, ITEM, list(txs), [], [{"transaction_id": t} for t in removed],
-                                          cursor, has_more)
+        return accounting.store_sync_page(
+            conn, ITEM, list(txs), [], [{"transaction_id": t} for t in removed], cursor, has_more
+        )
 
 
 def plaid_tx(tid, amount, day="2026-11-27", name="QUILLMOOR PAPER SUP ACH", account=ACCOUNT, pending=False):
-    return {"transaction_id": tid, "account_id": account, "amount": amount, "iso_currency_code": "USD",
-            "unofficial_currency_code": None, "date": day, "authorized_date": None, "name": name,
-            "merchant_name": None, "pending": pending, "pending_transaction_id": None}
+    return {
+        "transaction_id": tid,
+        "account_id": account,
+        "amount": amount,
+        "iso_currency_code": "USD",
+        "unofficial_currency_code": None,
+        "date": day,
+        "authorized_date": None,
+        "name": name,
+        "merchant_name": None,
+        "pending": pending,
+        "pending_transaction_id": None,
+    }
 
 
 def run(cfg):
@@ -109,8 +164,17 @@ def posting(cfg, invoice_id):
 def test_claim_creates_postings_for_ready_invoices_only(cfg):
     ready = make_invoice(cfg)
     make_invoice(cfg, number="X-1", status="needs_review")
-    credit = make_invoice(cfg, number="CN-1", document_type="credit_note", lines=("-100.00",), taxes=("-20.00",),
-                          total="-120.00", currency="GBP", supplier="Thistlecombe", key_name="thistlecombe")
+    credit = make_invoice(
+        cfg,
+        number="CN-1",
+        document_type="credit_note",
+        lines=("-100.00",),
+        taxes=("-20.00",),
+        total="-120.00",
+        currency="GBP",
+        supplier="Thistlecombe",
+        key_name="thistlecombe",
+    )
     items = {i["invoice_id"]: i for i in claim(cfg)}
     assert set(items) == {ready, credit}
     bill = items[ready]
@@ -118,7 +182,9 @@ def test_claim_creates_postings_for_ready_invoices_only(cfg):
     assert sum(D(str(l["Amount"])) for l in bill["document"]["Line"]) == D("641.24")
     assert bill["document"]["DocNumber"] == "QM-1042" and bill["request_id"] == f"ap-bill-{ready}"
     vc = items[credit]
-    assert vc["entity"] == "VendorCredit" and vc["needs_exchange_rate"] and vc["vendor"]["display_name"].endswith("(GBP)")
+    assert (
+        vc["entity"] == "VendorCredit" and vc["needs_exchange_rate"] and vc["vendor"]["display_name"].endswith("(GBP)")
+    )
     assert sum(D(str(l["Amount"])) for l in vc["document"]["Line"]) == D("120.00")
     assert posting(cfg, credit)["payment_status"] == "not_applicable"
 
@@ -126,7 +192,7 @@ def test_claim_creates_postings_for_ready_invoices_only(cfg):
 def test_claim_is_leased(cfg):
     make_invoice(cfg)
     assert len(claim(cfg)) == 1
-    assert claim(cfg) == []                      # leased: a second run doesn't get it
+    assert claim(cfg) == []  # leased: a second run doesn't get it
 
 
 def test_posted_home_currency_uses_rate_one(cfg):
@@ -139,12 +205,14 @@ def test_posted_home_currency_uses_rate_one(cfg):
 
 def test_foreign_currency_needs_the_rate_used(cfg):
     register_bank(cfg)
-    inv = make_invoice(cfg, number="AV-1", currency="EUR", supplier="Ateliers Verlibreux", key_name="ateliers verlibreux")
+    inv = make_invoice(
+        cfg, number="AV-1", currency="EUR", supplier="Ateliers Verlibreux", key_name="ateliers verlibreux"
+    )
     claim(cfg)
     assert result(cfg, inv, outcome="posted", external_id="7", vendor_external_id="8").status_code == 409
     p = post_ok(cfg, inv, exchange_rate="1.096876", exchange_rate_date="2026-11-20")
     assert D(p["exchange_rate"]) == D("1.096876") and p["exchange_rate_source"] == "qbo"
-    assert p["payment_reason"] == "fx_match_pending"          # bank account is USD
+    assert p["payment_reason"] == "fx_match_pending"  # bank account is USD
 
 
 def test_repeated_posted_result_is_idempotent_and_a_different_id_conflicts(cfg):
@@ -167,7 +235,7 @@ def test_attachment_deletes_the_stored_file(cfg):
 def test_missing_attachment_is_retried_as_attach_only(cfg):
     inv = make_invoice(cfg)
     claim(cfg)
-    post_ok(cfg, inv)                                        # bill created, upload failed
+    post_ok(cfg, inv)  # bill created, upload failed
     sql(cfg, "UPDATE ap.accounting_postings SET next_attempt_at = now()")
     item = claim(cfg)[0]
     assert item["action"] == "attach" and item["document"] is None and item["external_id"] == "101"
@@ -196,7 +264,7 @@ def test_permanent_failure_stops_retries(cfg):
 
 
 def test_unpostable_invoice_fails_without_any_api_call(cfg):
-    make_invoice(cfg, lines=("100.00",), taxes=(), total="641.24")      # lines don't add up
+    make_invoice(cfg, lines=("100.00",), taxes=(), total="641.24")  # lines don't add up
     assert claim(cfg) == []
     p = sql(cfg, "SELECT status, attempts, last_error FROM ap.accounting_postings")[0]
     assert p["status"] == "failed" and p["last_error"].startswith("lines_do_not_sum_to_total")
@@ -204,8 +272,11 @@ def test_unpostable_invoice_fails_without_any_api_call(cfg):
 
 def test_excluded_invoice_is_never_posted(cfg):
     inv = make_invoice(cfg)
-    r = TestClient(app).post(f"/invoices/{inv}/exclude-from-posting", headers=AUTH,
-                             json={"reason": "superseded_test_data", "note": "renamed test supplier"})
+    r = TestClient(app).post(
+        f"/invoices/{inv}/exclude-from-posting",
+        headers=AUTH,
+        json={"reason": "superseded_test_data", "note": "renamed test supplier"},
+    )
     assert r.status_code == 200 and r.json()["posting_excluded_reason"] == "superseded_test_data"
     assert claim(cfg) == []
     logs = sql(cfg, "SELECT message, details FROM ap.processing_log WHERE invoice_id = %s", inv)
@@ -224,7 +295,7 @@ def test_vendor_link_conflict(cfg):
     c = TestClient(app)
     body = {"supplier_key": "quillmoor paper supply", "currency": "USD", "external_id": "55", "display_name": "Q"}
     assert c.put("/vendor-links", headers=AUTH, json=body).status_code == 200
-    assert c.put("/vendor-links", headers=AUTH, json=body).status_code == 200        # same: idempotent
+    assert c.put("/vendor-links", headers=AUTH, json=body).status_code == 200  # same: idempotent
     assert c.put("/vendor-links", headers=AUTH, json={**body, "external_id": "56"}).status_code == 409
     # the same QuickBooks vendor can't serve another currency (a vendor's currency is fixed)
     assert c.put("/vendor-links", headers=AUTH, json={**body, "currency": "EUR"}).status_code == 409
@@ -238,7 +309,7 @@ def test_sync_keeps_only_the_matching_account_and_saves_cursor_last(cfg):
     r = bank_page(cfg, plaid_tx("t1", 10.5), plaid_tx("t2", 99, account="acc-credit-card"), has_more=True)
     assert r == {"stored": 1, "skipped_other_accounts": 1, "removed": 0, "cursor_saved": False}
     assert sql(cfg, "SELECT cursor FROM ap.bank_sync_state")[0]["cursor"] is None
-    bank_page(cfg, plaid_tx("t1", 10.5), cursor="c2")                     # page re-sent: idempotent
+    bank_page(cfg, plaid_tx("t1", 10.5), cursor="c2")  # page re-sent: idempotent
     assert sql(cfg, "SELECT cursor FROM ap.bank_sync_state")[0]["cursor"] == "c2"
     assert sql(cfg, "SELECT count(*) AS n FROM ap.bank_transactions")[0]["n"] == 1
 
@@ -274,7 +345,9 @@ def test_exact_match_is_paid(cfg):
     out = run(cfg)
     assert out["accepted"] == 1 and posting(cfg, inv)["payment_reason"] == "payment_pending"
     pay = out["payments_due"][0]
-    assert pay["document"]["TotalAmt"] == 641.24 and pay["document"]["Line"][0]["LinkedTxn"][0]["TxnId"].startswith("b-")
+    assert pay["document"]["TotalAmt"] == 641.24 and pay["document"]["Line"][0]["LinkedTxn"][0]["TxnId"].startswith(
+        "b-"
+    )
     assert pay["document"]["CheckPayment"]["BankAccountRef"]["value"] == "35"
     r = TestClient(app).post(f"/matches/{pay['match_id']}/payment", headers=AUTH, json={"external_payment_id": "P1"})
     assert r.status_code == 200 and r.json()["payment_status"] == "paid" and D(r.json()["amount_paid"]) == D("641.24")
@@ -286,13 +359,13 @@ def test_difference_within_tolerance_is_flagged(cfg, bank, applied):
     inv = posted_bill(cfg)
     bank_page(cfg, plaid_tx("t1", float(bank)))
     pay = run(cfg)["payments_due"][0]
-    assert D(str(pay["document"]["TotalAmt"])) == D(applied)          # never more than the bill
+    assert D(str(pay["document"]["TotalAmt"])) == D(applied)  # never more than the bill
     with db.connect(cfg.database_url) as conn:
         p = accounting.record_payment(conn, pay["match_id"], "P1")
     assert p["payment_status"] == "paid_with_difference" and p["payment_reason"] == "payment_difference"
     assert p["amount_paid"] == D(applied)
     m = sql(cfg, "SELECT bank_amount, difference FROM ap.matches")[0]
-    assert m["bank_amount"] == D(bank) and m["difference"] == D(bank) - D("641.24")    # actual bank amount kept
+    assert m["bank_amount"] == D(bank) and m["difference"] == D(bank) - D("641.24")  # actual bank amount kept
 
 
 def test_incoming_money_is_never_matched(cfg):
@@ -344,9 +417,9 @@ def test_database_allows_one_invoice_per_transaction(cfg):
                 VALUES (%s, %s, 'accepted', 641.24, 641.24, 0, 'USD', 9, 1, false, 'm1')"""
     sql(cfg, insert, a, "t1")
     with pytest.raises(psycopg.errors.UniqueViolation):
-        sql(cfg, insert, b, "t1")                                # same transaction, second invoice
+        sql(cfg, insert, b, "t1")  # same transaction, second invoice
     with pytest.raises(psycopg.errors.UniqueViolation):
-        sql(cfg, insert, a, "t2")                                # same invoice, second transaction
+        sql(cfg, insert, a, "t2")  # same invoice, second transaction
 
 
 def test_payments_due_are_leased(cfg):
@@ -354,7 +427,7 @@ def test_payments_due_are_leased(cfg):
     posted_bill(cfg)
     bank_page(cfg, plaid_tx("t1", 641.24))
     assert len(run(cfg)["payments_due"]) == 1
-    assert run(cfg)["payments_due"] == []                       # second run doesn't get it again
+    assert run(cfg)["payments_due"] == []  # second run doesn't get it again
 
 
 def test_concurrent_matching_runs_produce_one_payment(cfg):
@@ -388,20 +461,28 @@ def test_payment_recorded_twice_is_idempotent_and_conflicts_on_other_id(cfg):
 # Posting failures that need a person
 # =====================================================================================
 def test_vendor_currency_conflict_opens_a_posting_review(cfg):
-    inv = make_invoice(cfg, number="AV-1", currency="EUR", supplier="Ateliers Verlibreux", key_name="ateliers verlibreux")
+    inv = make_invoice(
+        cfg, number="AV-1", currency="EUR", supplier="Ateliers Verlibreux", key_name="ateliers verlibreux"
+    )
     claim(cfg)
-    r = result(cfg, inv, outcome="failed", error_code="vendor_currency_conflict",
-               error_message="vendor 58 uses USD", retryable=True)          # retryable is overridden
+    r = result(
+        cfg,
+        inv,
+        outcome="failed",
+        error_code="vendor_currency_conflict",
+        error_message="vendor 58 uses USD",
+        retryable=True,
+    )  # retryable is overridden
     assert r.status_code == 200 and r.json()["status"] == "failed" and r.json()["attempts"] == cfg.max_attempts
     review = sql(cfg, "SELECT * FROM ap.review_queue WHERE invoice_id = %s", inv)
     assert len(review) == 1 and review[0]["stage"] == "posting" and review[0]["status"] == "open"
     assert review[0]["reasons"][0]["code"] == "vendor_currency_conflict"
-    assert sql(cfg, "SELECT status FROM ap.invoices WHERE id = %s", inv)[0]["status"] == "ready"   # data is fine
+    assert sql(cfg, "SELECT status FROM ap.invoices WHERE id = %s", inv)[0]["status"] == "ready"  # data is fine
     # reported again (e.g. a manual re-run): still one open review item
     result(cfg, inv, outcome="failed", error_code="vendor_currency_conflict", error_message="again")
     assert len(sql(cfg, "SELECT id FROM ap.review_queue WHERE invoice_id = %s", inv)) == 1
     sql(cfg, "UPDATE ap.accounting_postings SET next_attempt_at = now()")
-    assert claim(cfg) == []                                            # no blind retries
+    assert claim(cfg) == []  # no blind retries
 
 
 def test_ordinary_failure_opens_no_review(cfg):
@@ -409,20 +490,23 @@ def test_ordinary_failure_opens_no_review(cfg):
     claim(cfg)
     result(cfg, inv, outcome="failed", error_code="http_503", error_message="unavailable")
     assert sql(cfg, "SELECT id FROM ap.review_queue") == []
-    assert posting(cfg, inv)["attempts"] == 1                          # will be retried
+    assert posting(cfg, inv)["attempts"] == 1  # will be retried
 
 
 def test_claim_returns_the_api_base(cfg):
     make_invoice(cfg)
     app.dependency_overrides[get_accounting_config] = lambda: accounting.AccountingConfig(
-        **{**cfg.__dict__, "qbo_base": "https://sandbox.example/v3/company/123"})
+        **{**cfg.__dict__, "qbo_base": "https://sandbox.example/v3/company/123"}
+    )
     r = TestClient(app).post("/postings/claim", headers=AUTH)
     assert r.json()["qbo_base"] == "https://sandbox.example/v3/company/123" and r.json()["count"] == 1
 
 
 def test_request_ids_fit_quickbooks_limit(cfg):
     make_invoice(cfg)
-    make_invoice(cfg, number="CN-1", document_type="credit_note", lines=("-100.00",), taxes=("-20.00",), total="-120.00")
+    make_invoice(
+        cfg, number="CN-1", document_type="credit_note", lines=("-100.00",), taxes=("-20.00",), total="-120.00"
+    )
     items = claim(cfg)
     assert {i["entity"] for i in items} == {"Bill", "VendorCredit"}
     assert all(len(i["request_id"]) <= 50 for i in items)
@@ -432,7 +516,7 @@ def test_retry_resets_a_failed_posting_only(cfg):
     inv = make_invoice(cfg)
     claim(cfg)
     c = TestClient(app)
-    assert c.post(f"/postings/{inv}/retry", headers=AUTH, json={}).status_code == 409        # still pending
+    assert c.post(f"/postings/{inv}/retry", headers=AUTH, json={}).status_code == 409  # still pending
     result(cfg, inv, outcome="failed", error_code="qbo_6000", error_message="bad", retryable=False)
     r = c.post(f"/postings/{inv}/retry", headers=AUTH, json={"note": "request id fixed"})
     assert r.status_code == 200 and r.json()["attempts"] == 0

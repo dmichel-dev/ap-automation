@@ -7,8 +7,15 @@ from pydantic import ValidationError
 
 from . import normalize as n
 from .models import (
-    CommonInvoice, DateInfo, ExtractionMeta, ExtractionResult, InvoiceLine, Issue,
-    Normalized, Party, TaxLine,
+    CommonInvoice,
+    DateInfo,
+    ExtractionMeta,
+    ExtractionResult,
+    InvoiceLine,
+    Issue,
+    Normalized,
+    Party,
+    TaxLine,
 )
 from .providers.base import ProviderResult
 
@@ -42,8 +49,9 @@ def _date(raw: str | None, field: str, issues: _Issues) -> n.ParsedDate | None:
         return None
 
 
-def _resolve_dates(inv: n.ParsedDate | None, due: n.ParsedDate | None, country: str | None,
-                   info: DateInfo, issues: _Issues):
+def _resolve_dates(
+    inv: n.ParsedDate | None, due: n.ParsedDate | None, country: str | None, info: DateInfo, issues: _Issues
+):
     """A document uses one date convention: if one date proves the order (e.g. 23/11/2026),
     it resolves the other. If still ambiguous, flag it and suggest an order from the country."""
     proven = {p.order for p in (inv, due) if p and p.order}
@@ -66,16 +74,18 @@ def _resolve_dates(inv: n.ParsedDate | None, due: n.ParsedDate | None, country: 
                 if p:
                     setattr(info, attr, pick(p) if p.ambiguous else p.value)
         for name, p in ambiguous:
-            issues.add("ambiguous_date", name,
-                       f"{p.dmy} (day first) or {p.mdy} (month first); {basis}")
+            issues.add("ambiguous_date", name, f"{p.dmy} (day first) or {p.mdy} (month first); {basis}")
     return (inv.value if inv else None), (due.value if due else None)
 
 
 def build_common_invoice(result: ProviderResult, provider_name: str) -> CommonInvoice:
     issues = _Issues()
     meta = ExtractionMeta(
-        provider=provider_name, model=result.model, pages=result.pages,
-        ocr_confidence_avg=result.ocr_confidence_avg, ocr_confidence_min=result.ocr_confidence_min,
+        provider=provider_name,
+        model=result.model,
+        pages=result.pages,
+        ocr_confidence_avg=result.ocr_confidence_avg,
+        ocr_confidence_min=result.ocr_confidence_min,
     )
 
     data: ExtractionResult | None = None
@@ -85,12 +95,22 @@ def build_common_invoice(result: ProviderResult, provider_name: str) -> CommonIn
         try:
             data = ExtractionResult.model_validate(result.annotation)
         except ValidationError as exc:
-            issues.add("extraction_invalid", None, f"provider output does not match the schema: {exc.error_count()} error(s)")
+            issues.add(
+                "extraction_invalid", None, f"provider output does not match the schema: {exc.error_count()} error(s)"
+            )
 
     if data is None:
         return CommonInvoice(
-            is_invoice=False, supplier=Party(), buyer=Party(), dates=DateInfo(), lines=[], taxes=[],
-            ocr_text=result.ocr_text, normalized=Normalized(), extraction=meta, issues=issues,
+            is_invoice=False,
+            supplier=Party(),
+            buyer=Party(),
+            dates=DateInfo(),
+            lines=[],
+            taxes=[],
+            ocr_text=result.ocr_text,
+            normalized=Normalized(),
+            extraction=meta,
+            issues=issues,
         )
 
     is_invoice = data.document_kind != "not_invoice"
@@ -99,8 +119,10 @@ def build_common_invoice(result: ProviderResult, provider_name: str) -> CommonIn
 
     country = n.resolve_country(data.supplier_country_code, data.supplier_tax_id)
     supplier = Party(
-        name=n.clean_text(data.supplier_name), tax_id=n.clean_text(data.supplier_tax_id),
-        country=country, address=n.clean_text(data.supplier_address),
+        name=n.clean_text(data.supplier_name),
+        tax_id=n.clean_text(data.supplier_tax_id),
+        country=country,
+        address=n.clean_text(data.supplier_address),
     )
     buyer = Party(name=n.clean_text(data.buyer_name), tax_id=n.clean_text(data.buyer_tax_id))
 
@@ -110,13 +132,19 @@ def build_common_invoice(result: ProviderResult, provider_name: str) -> CommonIn
     elif note:
         issues.add("currency_from_country", "currency", note)
     if currency and not n.currency_evidence(currency, result.ocr_text):
-        issues.add("currency_not_in_document", "currency",
-                   f"{currency} was extracted but neither the code nor a matching symbol is in the document text")
+        issues.add(
+            "currency_not_in_document",
+            "currency",
+            f"{currency} was extracted but neither the code nor a matching symbol is in the document text",
+        )
 
     info = DateInfo(invoice_date_raw=n.clean_text(data.invoice_date), due_date_raw=n.clean_text(data.due_date))
     invoice_date, due_date = _resolve_dates(
-        _date(data.invoice_date, "invoice_date", issues), _date(data.due_date, "due_date", issues),
-        country, info, issues,
+        _date(data.invoice_date, "invoice_date", issues),
+        _date(data.due_date, "due_date", issues),
+        country,
+        info,
+        issues,
     )
 
     lines = [
@@ -135,10 +163,15 @@ def build_common_invoice(result: ProviderResult, provider_name: str) -> CommonIn
     # and become separate bill lines in QuickBooks (Day 2)
     for adj in data.adjustments:
         i = len(lines) + 1
-        lines.append(InvoiceLine(
-            line_no=i, kind=adj.kind, tax_stage=adj.position, description=n.clean_text(adj.label),
-            amount=_amount(adj.amount, currency, f"lines[{i}].amount", issues),
-        ))
+        lines.append(
+            InvoiceLine(
+                line_no=i,
+                kind=adj.kind,
+                tax_stage=adj.position,
+                description=n.clean_text(adj.label),
+                amount=_amount(adj.amount, currency, f"lines[{i}].amount", issues),
+            )
+        )
     for li in lines:
         # A discount reduces the amount, whether or not the PDF prints a minus sign
         if li.kind == "discount" and li.amount is not None:
@@ -147,7 +180,8 @@ def build_common_invoice(result: ProviderResult, provider_name: str) -> CommonIn
 
     taxes = [
         TaxLine(
-            tax_type=t.tax_type, label=n.clean_text(t.label),
+            tax_type=t.tax_type,
+            label=n.clean_text(t.label),
             rate=_rate(t.rate, f"taxes[{i}].rate", issues),
             taxable_base=_amount(t.taxable_base, currency, f"taxes[{i}].taxable_base", issues),
             amount=_amount(t.amount, currency, f"taxes[{i}].amount", issues),
@@ -164,11 +198,13 @@ def build_common_invoice(result: ProviderResult, provider_name: str) -> CommonIn
     tax_amounts = {abs(t.amount) for t in taxes if t.amount is not None}
     kept = []
     for li in lines:
-        from_adjustments = li.line_no > len(data.line_items)     # table rows are never dropped
-        if (from_adjustments and li.kind == "other" and li.amount is not None
-                and abs(li.amount) in tax_amounts):
-            issues.add("adjustment_repeats_tax", f"lines[{li.line_no}]",
-                       f"'{li.description}' ({li.amount}) repeats a tax line; counted once, as tax")
+        from_adjustments = li.line_no > len(data.line_items)  # table rows are never dropped
+        if from_adjustments and li.kind == "other" and li.amount is not None and abs(li.amount) in tax_amounts:
+            issues.add(
+                "adjustment_repeats_tax",
+                f"lines[{li.line_no}]",
+                f"'{li.description}' ({li.amount}) repeats a tax line; counted once, as tax",
+            )
             continue
         kept.append(li)
     lines = [li.model_copy(update={"line_no": i}) for i, li in enumerate(kept, start=1)]

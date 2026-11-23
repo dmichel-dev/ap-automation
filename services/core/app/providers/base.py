@@ -7,14 +7,14 @@ from typing import Any, Protocol
 
 @dataclass
 class ProviderResult:
-    annotation: dict[str, Any] | None      # structured data, parsed from the provider's JSON
-    ocr_text: str                          # full text (markdown), all pages
+    annotation: dict[str, Any] | None  # structured data, parsed from the provider's JSON
+    ocr_text: str  # full text (markdown), all pages
     pages: int
     model: str | None = None
     ocr_confidence_avg: float | None = None
     ocr_confidence_min: float | None = None
-    raw: dict[str, Any] = field(default_factory=dict)   # trimmed raw response, kept for audit
-    annotation_error: str | None = None   # set when the annotation is missing or not valid JSON
+    raw: dict[str, Any] = field(default_factory=dict)  # trimmed raw response, kept for audit
+    annotation_error: str | None = None  # set when the annotation is missing or not valid JSON
 
 
 class ProviderError(Exception):

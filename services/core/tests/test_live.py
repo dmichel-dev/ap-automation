@@ -42,12 +42,21 @@ def test_live_pdf_us_invoice():
 def test_live_png_french_credit_note_with_ambiguous_date():
     img = Image.new("RGB", (1240, 1000), "white")
     draw = ImageDraw.Draw(img)
-    font = ImageFont.load_default(size=30)   # built-in font has no € glyph, so amounts use 'EUR'
+    font = ImageFont.load_default(size=30)  # built-in font has no € glyph, so amounts use 'EUR'
     lines = [
-        "Atelier Fictif des Lilas SARL", "8 rue Imaginaire, 69000 Lyon, France", "TVA : FR00999999999", "",
-        "AVOIR N° AV-2026-007", "Date : 03/04/2026", "Facture d'origine : F-2026-0311", "",
-        "Remise commerciale : 100,00 EUR", "",
-        "Total HT : 100,00 EUR", "TVA 20 % : 20,00 EUR", "Total TTC : 120,00 EUR",
+        "Atelier Fictif des Lilas SARL",
+        "8 rue Imaginaire, 69000 Lyon, France",
+        "TVA : FR00999999999",
+        "",
+        "AVOIR N° AV-2026-007",
+        "Date : 03/04/2026",
+        "Facture d'origine : F-2026-0311",
+        "",
+        "Remise commerciale : 100,00 EUR",
+        "",
+        "Total HT : 100,00 EUR",
+        "TVA 20 % : 20,00 EUR",
+        "Total TTC : 120,00 EUR",
     ]
     for i, line in enumerate(lines):
         draw.text((60, 60 + i * 60), line, fill="black", font=font)

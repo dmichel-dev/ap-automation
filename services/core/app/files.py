@@ -12,14 +12,14 @@ MAX_FILE_BYTES = 20 * 1024 * 1024
 class UnsupportedFile(ValueError):
     def __init__(self, code: str, message: str):
         super().__init__(message)
-        self.code = code   # unsupported_type | file_too_large | empty_file | unreadable_file
+        self.code = code  # unsupported_type | file_too_large | empty_file | unreadable_file
 
 
 @dataclass
 class PreparedFile:
-    content: bytes          # what is sent to the provider
-    mime_type: str          # application/pdf, image/png, image/jpeg, image/webp
-    detected_type: str      # type of the original file (tiff is converted to pdf)
+    content: bytes  # what is sent to the provider
+    mime_type: str  # application/pdf, image/png, image/jpeg, image/webp
+    detected_type: str  # type of the original file (tiff is converted to pdf)
 
 
 def sniff_mime(content: bytes) -> str | None:

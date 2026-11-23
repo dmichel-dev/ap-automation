@@ -112,10 +112,10 @@ def parse_rate(raw: str | None) -> Decimal | None:
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class ParsedDate:
-    value: date | None                 # set when unambiguous
-    dmy: date | None = None            # candidates when the day/month order is unknown
+    value: date | None  # set when unambiguous
+    dmy: date | None = None  # candidates when the day/month order is unknown
     mdy: date | None = None
-    order: str | None = None           # 'DMY' / 'MDY' when the numbers prove the order
+    order: str | None = None  # 'DMY' / 'MDY' when the numbers prove the order
 
     @property
     def ambiguous(self) -> bool:

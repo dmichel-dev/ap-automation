@@ -5,8 +5,10 @@ import psycopg
 import pytest
 
 MIGRATIONS = Path("/migrations")
-TABLES = ("matches, bank_transactions, bank_sync_state, accounting_postings, vendor_links, "
-          "invoice_lines, invoice_tax_lines, review_queue, processing_log, invoices")
+TABLES = (
+    "matches, bank_transactions, bank_sync_state, accounting_postings, vendor_links, "
+    "invoice_lines, invoice_tax_lines, review_queue, processing_log, invoices"
+)
 
 
 def base_annotation(**overrides):
@@ -25,14 +27,33 @@ def base_annotation(**overrides):
         "due_date": "12/18/2026",
         "currency": "$",
         "line_items": [
-            {"kind": "item", "description": "Copy paper", "quantity": "10", "unit_price": "$42.00",
-             "amount": "$420.00", "tax_rate": None},
-            {"kind": "item", "description": "Toner", "quantity": "2", "unit_price": "$85.50",
-             "amount": "$171.00", "tax_rate": None},
+            {
+                "kind": "item",
+                "description": "Copy paper",
+                "quantity": "10",
+                "unit_price": "$42.00",
+                "amount": "$420.00",
+                "tax_rate": None,
+            },
+            {
+                "kind": "item",
+                "description": "Toner",
+                "quantity": "2",
+                "unit_price": "$85.50",
+                "amount": "$171.00",
+                "tax_rate": None,
+            },
         ],
         "adjustments": [],
-        "tax_lines": [{"tax_type": "sales_tax", "label": "Sales tax 8.5%", "rate": "8.5%",
-                       "taxable_base": "$591.00", "amount": "$50.24"}],
+        "tax_lines": [
+            {
+                "tax_type": "sales_tax",
+                "label": "Sales tax 8.5%",
+                "rate": "8.5%",
+                "taxable_base": "$591.00",
+                "amount": "$50.24",
+            }
+        ],
         "subtotal": "$591.00",
         "tax_total": "$50.24",
         "total": "USD 641.24",

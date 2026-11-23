@@ -69,17 +69,23 @@ class ExtractionResult(_Strict):
         "not_invoice for anything else (letter, receipt for a payment already made, quote, order, statement)"
     )
     supplier_name: str | None = Field(description="Legal name of the company issuing the document (the seller)")
-    supplier_tax_id: str | None = Field(description="Seller's tax / VAT / GST / company registration number, exactly as printed")
+    supplier_tax_id: str | None = Field(
+        description="Seller's tax / VAT / GST / company registration number, exactly as printed"
+    )
     supplier_address: str | None = Field(description="Seller's postal address, one line")
     supplier_country_code: str | None = Field(
         description="ISO 3166-1 alpha-2 code of the seller's country, from its address or tax ID; null if unclear"
     )
     buyer_name: str | None = Field(description="Name of the customer being billed")
     buyer_tax_id: str | None = Field(description="Customer's tax / VAT number, exactly as printed")
-    invoice_number: str | None = Field(description="Invoice or credit note number exactly as printed, without a label like 'No.'")
+    invoice_number: str | None = Field(
+        description="Invoice or credit note number exactly as printed, without a label like 'No.'"
+    )
     related_invoice_number: str | None = Field(description="For a credit note: number of the invoice it refers to")
     invoice_date: str | None = Field(description="Issue date exactly as printed, do not reformat")
-    due_date: str | None = Field(description="Payment due date exactly as printed, do not reformat; null if not printed")
+    due_date: str | None = Field(
+        description="Payment due date exactly as printed, do not reformat; null if not printed"
+    )
     currency: str | None = Field(description="Currency code or symbol exactly as printed, e.g. 'EUR', '€', 'US$', '円'")
     line_items: list[ExtractedLine] = Field(description="Every row of the line item table, in document order")
     adjustments: list[ExtractedAdjustment] = Field(
@@ -129,7 +135,7 @@ def strict_json_schema(model: type[BaseModel]) -> dict[str, Any]:
 class Issue(BaseModel):
     """A problem found while normalizing; validation (step 4) decides what it means for routing."""
 
-    code: str                       # e.g. ambiguous_date, unparseable_amount, ambiguous_currency
+    code: str  # e.g. ambiguous_date, unparseable_amount, ambiguous_currency
     field: str | None = None
     message: str
 
@@ -137,7 +143,7 @@ class Issue(BaseModel):
 class Party(BaseModel):
     name: str | None = None
     tax_id: str | None = None
-    country: str | None = None      # ISO 3166-1 alpha-2
+    country: str | None = None  # ISO 3166-1 alpha-2
     address: str | None = None
 
 
@@ -147,7 +153,7 @@ class InvoiceLine(BaseModel):
 
     line_no: int
     kind: LineKind = "item"
-    tax_stage: TaxStage = "before_tax"   # after_tax: printed between the tax and the grand total
+    tax_stage: TaxStage = "before_tax"  # after_tax: printed between the tax and the grand total
     description: str | None = None
     quantity: Decimal | None = None
     unit_price: Decimal | None = None
@@ -158,7 +164,7 @@ class InvoiceLine(BaseModel):
 class TaxLine(BaseModel):
     tax_type: TaxType
     label: str | None = None
-    rate: Decimal | None = None      # percent
+    rate: Decimal | None = None  # percent
     taxable_base: Decimal | None = None
     amount: Decimal | None = None
 
@@ -191,22 +197,22 @@ class ExtractionMeta(BaseModel):
 
 
 class CommonInvoice(BaseModel):
-    is_invoice: bool                         # false = not an invoice / credit note
+    is_invoice: bool  # false = not an invoice / credit note
     document_type: DocumentType | None = None
     supplier: Party
     buyer: Party
     invoice_number: str | None = None
     related_invoice_number: str | None = None
-    invoice_date: date | None = None         # null when missing or ambiguous
+    invoice_date: date | None = None  # null when missing or ambiguous
     due_date: date | None = None
     dates: DateInfo
-    currency: str | None = None              # ISO 4217
+    currency: str | None = None  # ISO 4217
     lines: list[InvoiceLine]
     taxes: list[TaxLine]
-    subtotal: Decimal | None = None          # signed: credit notes are negative
+    subtotal: Decimal | None = None  # signed: credit notes are negative
     tax_total: Decimal | None = None
     total: Decimal | None = None
-    language: str | None = None              # BCP 47
+    language: str | None = None  # BCP 47
     ocr_text: str
     normalized: Normalized
     extraction: ExtractionMeta

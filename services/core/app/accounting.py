@@ -39,7 +39,7 @@ class AccountingConfig:
     expense_account_id: str
     tax_account_id: str
     bank_account_id: str
-    qbo_base: str = ""                     # https://…/v3/company/<realm>
+    qbo_base: str = ""  # https://…/v3/company/<realm>
     max_attempts: int = 5
     lease_minutes: int = 10
 
@@ -53,23 +53,36 @@ def _object_type(inv: dict) -> str:
 
 def _build_document(conn, inv: dict, cfg: AccountingConfig) -> dict:
     """QuickBooks body without VendorRef/ExchangeRate (the workflow adds those)."""
-    lines = conn.execute("SELECT line_no, kind, description, amount FROM invoice_lines WHERE invoice_id = %s "
-                         "ORDER BY line_no", (inv["id"],)).fetchall()
-    taxes = conn.execute("SELECT tax_type, label, amount FROM invoice_tax_lines WHERE invoice_id = %s ORDER BY id",
-                         (inv["id"],)).fetchall()
+    lines = conn.execute(
+        "SELECT line_no, kind, description, amount FROM invoice_lines WHERE invoice_id = %s ORDER BY line_no",
+        (inv["id"],),
+    ).fetchall()
+    taxes = conn.execute(
+        "SELECT tax_type, label, amount FROM invoice_tax_lines WHERE invoice_id = %s ORDER BY id", (inv["id"],)
+    ).fetchall()
     doc_lines = postings.document_lines(
-        lines=lines, taxes=taxes, tax_mode=inv["tax_mode"], total=inv["total"], currency=inv["currency"],
-        is_credit_note=inv["document_type"] == "credit_note")
+        lines=lines,
+        taxes=taxes,
+        tax_mode=inv["tax_mode"],
+        total=inv["total"],
+        currency=inv["currency"],
+        is_credit_note=inv["document_type"] == "credit_note",
+    )
     accounts = {"expense": cfg.expense_account_id, "tax": cfg.tax_account_id}
     body: dict[str, Any] = {
         "CurrencyRef": {"value": inv["currency"]},
         "DocNumber": postings.doc_number(inv["invoice_number"]),
         "TxnDate": inv["invoice_date"].isoformat(),
         "PrivateNote": f"AP Automation · invoice {inv['invoice_number']} · id {inv['id']}",
-        "Line": [{"DetailType": "AccountBasedExpenseLineDetail", "Amount": float(l.amount),
-                  "Description": l.description,
-                  "AccountBasedExpenseLineDetail": {"AccountRef": {"value": accounts[l.account]}}}
-                 for l in doc_lines],
+        "Line": [
+            {
+                "DetailType": "AccountBasedExpenseLineDetail",
+                "Amount": float(l.amount),
+                "Description": l.description,
+                "AccountBasedExpenseLineDetail": {"AccountRef": {"value": accounts[l.account]}},
+            }
+            for l in doc_lines
+        ],
     }
     if inv["due_date"] and inv["document_type"] != "credit_note":
         body["DueDate"] = inv["due_date"].isoformat()
@@ -87,23 +100,41 @@ def _create_missing_postings(conn, cfg: AccountingConfig, limit: int) -> None:
         """SELECT i.* FROM invoices i
             WHERE i.status = 'ready' AND i.posting_excluded_reason IS NULL
               AND NOT EXISTS (SELECT 1 FROM accounting_postings p WHERE p.invoice_id = i.id)
-            ORDER BY i.created_at LIMIT %s FOR UPDATE OF i SKIP LOCKED""", (limit,)).fetchall()
+            ORDER BY i.created_at LIMIT %s FOR UPDATE OF i SKIP LOCKED""",
+        (limit,),
+    ).fetchall()
     for inv in rows:
         kind = _object_type(inv)
-        values = {"invoice_id": inv["id"], "object_type": kind, "currency": inv["currency"],
-                  "amount": abs(inv["total"]), "doc_number": postings.doc_number(inv["invoice_number"]),
-                  "payment_status": "not_applicable" if kind == "vendor_credit" else "unpaid",
-                  "payment_reason": None if kind == "vendor_credit" else "no_match_yet",
-                  "status": "pending", "attempts": 0, "last_error": None}
+        values = {
+            "invoice_id": inv["id"],
+            "object_type": kind,
+            "currency": inv["currency"],
+            "amount": abs(inv["total"]),
+            "doc_number": postings.doc_number(inv["invoice_number"]),
+            "payment_status": "not_applicable" if kind == "vendor_credit" else "unpaid",
+            "payment_reason": None if kind == "vendor_credit" else "no_match_yet",
+            "status": "pending",
+            "attempts": 0,
+            "last_error": None,
+        }
         try:
             _build_document(conn, inv, cfg)
-        except postings.PostingError as e:            # can't be posted correctly: stop, a person decides
+        except postings.PostingError as e:  # can't be posted correctly: stop, a person decides
             values.update(status="failed", attempts=cfg.max_attempts, last_error=f"{e.code}: {e}")
-            db.log(conn, step="post", level="error", message="invoice cannot be posted", invoice_id=str(inv["id"]),
-                   details={"code": e.code})
+            db.log(
+                conn,
+                step="post",
+                level="error",
+                message="invoice cannot be posted",
+                invoice_id=str(inv["id"]),
+                details={"code": e.code},
+            )
         cols = list(values)
-        conn.execute(f"INSERT INTO accounting_postings ({', '.join(cols)}) VALUES "
-                     f"({', '.join('%(' + c + ')s' for c in cols)}) ON CONFLICT (invoice_id) DO NOTHING", values)
+        conn.execute(
+            f"INSERT INTO accounting_postings ({', '.join(cols)}) VALUES "
+            f"({', '.join('%(' + c + ')s' for c in cols)}) ON CONFLICT (invoice_id) DO NOTHING",
+            values,
+        )
 
 
 def claim_postings(conn, cfg: AccountingConfig, limit: int = 10) -> list[dict]:
@@ -117,44 +148,63 @@ def claim_postings(conn, cfg: AccountingConfig, limit: int = 10) -> list[dict]:
               AND (p.status IN ('pending', 'failed')
                    OR (p.status = 'posted' AND p.attachment_external_id IS NULL AND i.file_path IS NOT NULL))
             ORDER BY p.created_at LIMIT %(limit)s FOR UPDATE OF p SKIP LOCKED""",
-        {"max": cfg.max_attempts, "limit": limit}).fetchall()
+        {"max": cfg.max_attempts, "limit": limit},
+    ).fetchall()
     out = []
     for p in due:
         conn.execute(
             """UPDATE accounting_postings
                   SET claimed_until = now() + make_interval(mins => %(lease)s), attempts = attempts + 1,
                       next_attempt_at = now() + make_interval(mins => least(%(lease)s * power(2, attempts)::int, 720))
-                WHERE id = %(id)s""", {"lease": cfg.lease_minutes, "id": p["id"]})
+                WHERE id = %(id)s""",
+            {"lease": cfg.lease_minutes, "id": p["id"]},
+        )
         out.append(_work_item(conn, cfg, p))
     return out
 
 
 def _work_item(conn, cfg: AccountingConfig, p: dict) -> dict:
     inv = conn.execute("SELECT * FROM invoices WHERE id = %s", (p["invoice_id"],)).fetchone()
-    link = conn.execute("SELECT external_id FROM vendor_links WHERE system = 'qbo' AND supplier_key = %s "
-                        "AND currency = %s", (inv["supplier_key"], inv["currency"])).fetchone()
+    link = conn.execute(
+        "SELECT external_id FROM vendor_links WHERE system = 'qbo' AND supplier_key = %s AND currency = %s",
+        (inv["supplier_key"], inv["currency"]),
+    ).fetchone()
     display = postings.vendor_display_name(inv["supplier_name"], inv["currency"], cfg.home_currency)
     entity = "VendorCredit" if p["object_type"] == "vendor_credit" else "Bill"
     ext = (inv["file_name"].rsplit(".", 1)[-1] if "." in inv["file_name"] else "pdf").lower()
     return {
-        "posting_id": p["id"], "invoice_id": str(inv["id"]),
+        "posting_id": p["id"],
+        "invoice_id": str(inv["id"]),
         "action": "attach" if p["status"] == "posted" else "create",
         "attempt": p["attempts"] + 1,
-        "object_type": p["object_type"], "entity": entity, "endpoint": entity.lower(),
+        "object_type": p["object_type"],
+        "entity": entity,
+        "endpoint": entity.lower(),
         # QuickBooks limits requestid to 50 characters
         "request_id": f"ap-{'vc' if p['object_type'] == 'vendor_credit' else 'bill'}-{inv['id']}",
-        "currency": inv["currency"], "home_currency": cfg.home_currency,
+        "currency": inv["currency"],
+        "home_currency": cfg.home_currency,
         "needs_exchange_rate": inv["currency"] != cfg.home_currency,
         "exchange_rate_date": inv["invoice_date"].isoformat(),
         "amount": str(p["amount"]),
-        "doc_number": p["doc_number"], "doc_number_q": postings.qbo_quote(p["doc_number"]),
-        "external_id": p["external_id"], "vendor_external_id": p["vendor_external_id"],
-        "vendor": {"external_id": link["external_id"] if link else None, "supplier_key": inv["supplier_key"],
-                   "display_name": display, "display_name_q": postings.qbo_quote(display),
-                   "company_name": inv["supplier_name"][:100]},
+        "doc_number": p["doc_number"],
+        "doc_number_q": postings.qbo_quote(p["doc_number"]),
+        "external_id": p["external_id"],
+        "vendor_external_id": p["vendor_external_id"],
+        "vendor": {
+            "external_id": link["external_id"] if link else None,
+            "supplier_key": inv["supplier_key"],
+            "display_name": display,
+            "display_name_q": postings.qbo_quote(display),
+            "company_name": inv["supplier_name"][:100],
+        },
         "document": _build_document(conn, inv, cfg) if p["status"] != "posted" else None,
-        "file": {"available": inv["file_path"] is not None, "path": f"/invoices/{inv['id']}/file",
-                 "file_name": f"{p['doc_number']}.{ext}".replace("/", "-"), "mime_type": inv["file_mime_type"]},
+        "file": {
+            "available": inv["file_path"] is not None,
+            "path": f"/invoices/{inv['id']}/file",
+            "file_name": f"{p['doc_number']}.{ext}".replace("/", "-"),
+            "mime_type": inv["file_mime_type"],
+        },
     }
 
 
@@ -171,7 +221,7 @@ def record_result(conn, cfg: AccountingConfig, invoice_id: str, r: dict) -> tupl
         if p["status"] == "posted":
             if p["external_id"] != r["external_id"]:
                 raise Conflict(f"already posted as {p['external_id']}")
-            return p, None                                          # idempotent repeat
+            return p, None  # idempotent repeat
         if p["currency"] == cfg.home_currency:
             rate, rate_date, source = Decimal(1), inv["invoice_date"], "home_currency"
         else:
@@ -188,54 +238,89 @@ def record_result(conn, cfg: AccountingConfig, invoice_id: str, r: dict) -> tupl
                       exchange_rate_date = %s, exchange_rate_source = %s, payment_reason = %s,
                       attachment_external_id = COALESCE(%s, attachment_external_id)
                 WHERE id = %s""",
-            (r["external_id"], r["vendor_external_id"], rate, rate_date, source, reason,
-             r.get("attachment_external_id"), p["id"]))
-        db.log(conn, step="post", level="info", message=f"posted as {p['object_type']}", **ctx,
-               details={"external_id": r["external_id"], "currency": p["currency"], "exchange_rate": str(rate),
-                        "attachment": bool(r.get("attachment_external_id"))})
+            (
+                r["external_id"],
+                r["vendor_external_id"],
+                rate,
+                rate_date,
+                source,
+                reason,
+                r.get("attachment_external_id"),
+                p["id"],
+            ),
+        )
+        db.log(
+            conn,
+            step="post",
+            level="info",
+            message=f"posted as {p['object_type']}",
+            **ctx,
+            details={
+                "external_id": r["external_id"],
+                "currency": p["currency"],
+                "exchange_rate": str(rate),
+                "attachment": bool(r.get("attachment_external_id")),
+            },
+        )
         if r.get("attachment_external_id"):
             to_delete = _mark_file_deleted(conn, inv)
     elif outcome == "attached":
         if p["status"] != "posted":
             raise Conflict("cannot attach a file before the document is posted")
-        conn.execute("UPDATE accounting_postings SET attachment_external_id = %s, claimed_until = NULL, "
-                     "last_error = NULL WHERE id = %s", (r["attachment_external_id"], p["id"]))
+        conn.execute(
+            "UPDATE accounting_postings SET attachment_external_id = %s, claimed_until = NULL, "
+            "last_error = NULL WHERE id = %s",
+            (r["attachment_external_id"], p["id"]),
+        )
         db.log(conn, step="post", level="info", message="original file attached", **ctx)
         to_delete = _mark_file_deleted(conn, inv)
-    else:                                                           # failed
+    else:  # failed
         error = f"{r.get('error_code') or 'error'}: {(r.get('error_message') or '')[:500]}"
         if r.get("error_code") in REVIEW_ERRORS:
-            r["retryable"] = False                                  # a person must decide; no blind retries
+            r["retryable"] = False  # a person must decide; no blind retries
             _open_posting_review(conn, invoice_id, r["error_code"], r.get("error_message"))
         conn.execute(
             """UPDATE accounting_postings
                   SET status = CASE WHEN status = 'posted' THEN 'posted' ELSE 'failed' END,
                       claimed_until = NULL, last_error = %s,
                       attempts = CASE WHEN %s THEN attempts ELSE %s END
-                WHERE id = %s""", (error, r.get("retryable", True), cfg.max_attempts, p["id"]))
-        db.log(conn, step="post", level="error" if not r.get("retryable", True) else "warning",
-               message="posting failed" if p["status"] != "posted" else "attachment failed", **ctx,
-               details={"code": r.get("error_code"), "retryable": r.get("retryable", True)})
+                WHERE id = %s""",
+            (error, r.get("retryable", True), cfg.max_attempts, p["id"]),
+        )
+        db.log(
+            conn,
+            step="post",
+            level="error" if not r.get("retryable", True) else "warning",
+            message="posting failed" if p["status"] != "posted" else "attachment failed",
+            **ctx,
+            details={"code": r.get("error_code"), "retryable": r.get("retryable", True)},
+        )
     return conn.execute("SELECT * FROM accounting_postings WHERE id = %s", (p["id"],)).fetchone(), to_delete
 
 
 # Posting failures that need a person (Day 3 review flow), not retries
 REVIEW_ERRORS = {
     "vendor_currency_conflict": "A vendor with this name already exists in the accounting system in another "
-                                "currency; vendor currencies are fixed, so a different vendor must be chosen or created.",
+    "currency; vendor currencies are fixed, so a different vendor must be chosen or created.",
     "vendor_inactive": "The matching vendor in the accounting system is inactive.",
 }
 
 
 def _open_posting_review(conn, invoice_id: str, code: str, detail: str | None) -> None:
-    reason = {"code": code, "field": "supplier_name", "message": REVIEW_ERRORS[code],
-              "detail": (detail or "")[:300]}
+    reason = {"code": code, "field": "supplier_name", "message": REVIEW_ERRORS[code], "detail": (detail or "")[:300]}
     row = conn.execute(
         """INSERT INTO review_queue (invoice_id, reasons, stage) VALUES (%s, %s, 'posting')
            ON CONFLICT (invoice_id) WHERE status = 'open' DO NOTHING RETURNING id""",
-        (invoice_id, Jsonb([reason]))).fetchone()
-    db.log(conn, step="post", level="warning", message="posting needs review", invoice_id=invoice_id,
-           details={"code": code, "review_id": row["id"] if row else None})
+        (invoice_id, Jsonb([reason])),
+    ).fetchone()
+    db.log(
+        conn,
+        step="post",
+        level="warning",
+        message="posting needs review",
+        invoice_id=invoice_id,
+        details={"code": code, "review_id": row["id"] if row else None},
+    )
 
 
 def retry_posting(conn, invoice_id: str, note: str | None = None) -> dict:
@@ -245,14 +330,23 @@ def retry_posting(conn, invoice_id: str, note: str | None = None) -> dict:
         raise NotFound("no posting for this invoice")
     if p["status"] != "failed":
         raise Conflict(f"only a failed posting can be retried (status is {p['status']})")
-    review = conn.execute("SELECT 1 FROM review_queue WHERE invoice_id = %s AND status = 'open' AND stage = 'posting'",
-                          (invoice_id,)).fetchone()
+    review = conn.execute(
+        "SELECT 1 FROM review_queue WHERE invoice_id = %s AND status = 'open' AND stage = 'posting'", (invoice_id,)
+    ).fetchone()
     if review:
         raise Conflict("an open posting review decides this invoice")
-    conn.execute("UPDATE accounting_postings SET attempts = 0, next_attempt_at = now(), claimed_until = NULL "
-                 "WHERE id = %s", (p["id"],))
-    db.log(conn, step="post", level="info", message="posting retry requested", invoice_id=invoice_id,
-           details={"previous_error": (p["last_error"] or "")[:200], "note": (note or "")[:200]})
+    conn.execute(
+        "UPDATE accounting_postings SET attempts = 0, next_attempt_at = now(), claimed_until = NULL WHERE id = %s",
+        (p["id"],),
+    )
+    db.log(
+        conn,
+        step="post",
+        level="info",
+        message="posting retry requested",
+        invoice_id=invoice_id,
+        details={"previous_error": (p["last_error"] or "")[:200], "note": (note or "")[:200]},
+    )
     return conn.execute("SELECT * FROM accounting_postings WHERE id = %s", (p["id"],)).fetchone()
 
 
@@ -260,8 +354,10 @@ def _mark_file_deleted(conn, inv: dict) -> str | None:
     """Privacy: once the original is attached in the accounting system, our copy goes."""
     if inv["file_path"] is None:
         return None
-    conn.execute("UPDATE invoices SET file_path = NULL, file_deleted_at = now(), file_deletion_reason = 'posted' "
-                 "WHERE id = %s", (inv["id"],))
+    conn.execute(
+        "UPDATE invoices SET file_path = NULL, file_deleted_at = now(), file_deletion_reason = 'posted' WHERE id = %s",
+        (inv["id"],),
+    )
     return inv["file_path"]
 
 
@@ -285,8 +381,9 @@ def _safe_path(storage_dir: Path, rel_path: str) -> Path:
 
 
 def stored_file(conn, storage_dir: Path, invoice_id: str) -> tuple[Path, str, str]:
-    row = conn.execute("SELECT file_path, file_mime_type, file_name FROM invoices WHERE id = %s",
-                       (invoice_id,)).fetchone()
+    row = conn.execute(
+        "SELECT file_path, file_mime_type, file_name FROM invoices WHERE id = %s", (invoice_id,)
+    ).fetchone()
     if row is None or row["file_path"] is None:
         raise NotFound("no stored file for this invoice")
     path = _safe_path(storage_dir, row["file_path"])
@@ -296,46 +393,72 @@ def stored_file(conn, storage_dir: Path, invoice_id: str) -> tuple[Path, str, st
 
 
 def link_vendor(conn, supplier_key: str, currency: str, external_id: str, display_name: str) -> dict:
-    taken = conn.execute("SELECT supplier_key, currency FROM vendor_links WHERE system = 'qbo' AND external_id = %s",
-                         (external_id,)).fetchone()
+    taken = conn.execute(
+        "SELECT supplier_key, currency FROM vendor_links WHERE system = 'qbo' AND external_id = %s", (external_id,)
+    ).fetchone()
     if taken and (taken["supplier_key"], taken["currency"]) != (supplier_key, currency):
         # A QuickBooks vendor has exactly one currency and belongs to one supplier
         raise Conflict(f"vendor {external_id} is already linked to another supplier or currency")
     row = conn.execute(
         """INSERT INTO vendor_links (supplier_key, currency, external_id, display_name) VALUES (%s, %s, %s, %s)
            ON CONFLICT (system, supplier_key, currency) DO NOTHING RETURNING *""",
-        (supplier_key, currency, external_id, display_name)).fetchone()
+        (supplier_key, currency, external_id, display_name),
+    ).fetchone()
     if row is None:
-        row = conn.execute("SELECT * FROM vendor_links WHERE system = 'qbo' AND supplier_key = %s AND currency = %s",
-                           (supplier_key, currency)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM vendor_links WHERE system = 'qbo' AND supplier_key = %s AND currency = %s",
+            (supplier_key, currency),
+        ).fetchone()
         if row["external_id"] != external_id:
             raise Conflict(f"supplier already linked to vendor {row['external_id']} in {currency}")
     return row
 
 
 def exclude_from_posting(conn, invoice_id: str, reason: str, note: str | None = None) -> dict:
-    inv = conn.execute("SELECT id, posting_excluded_reason FROM invoices WHERE id = %s FOR UPDATE",
-                       (invoice_id,)).fetchone()
+    inv = conn.execute(
+        "SELECT id, posting_excluded_reason FROM invoices WHERE id = %s FOR UPDATE", (invoice_id,)
+    ).fetchone()
     if inv is None:
         raise NotFound("unknown invoice")
-    posted = conn.execute("SELECT 1 FROM accounting_postings WHERE invoice_id = %s AND status = 'posted'",
-                          (invoice_id,)).fetchone()
+    posted = conn.execute(
+        "SELECT 1 FROM accounting_postings WHERE invoice_id = %s AND status = 'posted'", (invoice_id,)
+    ).fetchone()
     if posted:
         raise Conflict("already posted; reverse it in the accounting system instead")
     if inv["posting_excluded_reason"] is None:
-        conn.execute("UPDATE invoices SET posting_excluded_reason = %s, posting_excluded_at = now() WHERE id = %s",
-                     (reason, invoice_id))
-        db.log(conn, step="post", level="info", message="excluded from posting", invoice_id=invoice_id,
-               details={"reason": reason, "note": (note or "")[:200]})
-    return conn.execute("SELECT id, posting_excluded_reason, posting_excluded_at FROM invoices WHERE id = %s",
-                        (invoice_id,)).fetchone()
+        conn.execute(
+            "UPDATE invoices SET posting_excluded_reason = %s, posting_excluded_at = now() WHERE id = %s",
+            (reason, invoice_id),
+        )
+        db.log(
+            conn,
+            step="post",
+            level="info",
+            message="excluded from posting",
+            invoice_id=invoice_id,
+            details={"reason": reason, "note": (note or "")[:200]},
+        )
+    return conn.execute(
+        "SELECT id, posting_excluded_reason, posting_excluded_at FROM invoices WHERE id = %s", (invoice_id,)
+    ).fetchone()
 
 
 # =====================================================================================
 # Bank sync (Plaid transactions as received; positive amount = money out)
 # =====================================================================================
-TX_FIELDS = ("transaction_id", "account_id", "amount", "iso_currency_code", "unofficial_currency_code", "date",
-             "authorized_date", "name", "merchant_name", "pending", "pending_transaction_id")
+TX_FIELDS = (
+    "transaction_id",
+    "account_id",
+    "amount",
+    "iso_currency_code",
+    "unofficial_currency_code",
+    "date",
+    "authorized_date",
+    "name",
+    "merchant_name",
+    "pending",
+    "pending_transaction_id",
+)
 
 
 def register_account(conn, item_key: str, account_id: str, account_currency: str) -> dict:
@@ -344,19 +467,24 @@ def register_account(conn, item_key: str, account_id: str, account_currency: str
            ON CONFLICT (item_key) DO UPDATE SET account_id = EXCLUDED.account_id,
                                                 account_currency = EXCLUDED.account_currency
            RETURNING item_key, account_id, account_currency, cursor, last_synced_at""",
-        (item_key, account_id, account_currency)).fetchone()
+        (item_key, account_id, account_currency),
+    ).fetchone()
 
 
 def sync_state(conn, item_key: str) -> dict:
-    row = conn.execute("SELECT item_key, account_id, account_currency, cursor, last_synced_at FROM bank_sync_state "
-                       "WHERE item_key = %s", (item_key,)).fetchone()
+    row = conn.execute(
+        "SELECT item_key, account_id, account_currency, cursor, last_synced_at FROM bank_sync_state "
+        "WHERE item_key = %s",
+        (item_key,),
+    ).fetchone()
     if row is None:
         raise NotFound("unknown bank item")
     return row
 
 
-def store_sync_page(conn, item_key: str, added: list[dict], modified: list[dict], removed: list[dict],
-                    next_cursor: str, has_more: bool) -> dict:
+def store_sync_page(
+    conn, item_key: str, added: list[dict], modified: list[dict], removed: list[dict], next_cursor: str, has_more: bool
+) -> dict:
     """Idempotent: a page can be stored twice (Plaid asks to restart a failed pagination loop)."""
     state = conn.execute("SELECT * FROM bank_sync_state WHERE item_key = %s FOR UPDATE", (item_key,)).fetchone()
     if state is None:
@@ -364,51 +492,72 @@ def store_sync_page(conn, item_key: str, added: list[dict], modified: list[dict]
     stored = skipped = 0
     for tx in [*added, *modified]:
         if tx.get("account_id") != state["account_id"]:
-            skipped += 1                                  # other accounts (credit card, loans) aren't kept
+            skipped += 1  # other accounts (credit card, loans) aren't kept
             continue
         row = {k: tx.get(k) for k in TX_FIELDS}
         row["amount"] = Decimal(str(row["amount"]))
         conn.execute(
-            f"""INSERT INTO bank_transactions (item_key, {', '.join(TX_FIELDS)}, raw)
-                VALUES (%(item_key)s, {', '.join('%(' + k + ')s' for k in TX_FIELDS)}, %(raw)s)
+            f"""INSERT INTO bank_transactions (item_key, {", ".join(TX_FIELDS)}, raw)
+                VALUES (%(item_key)s, {", ".join("%(" + k + ")s" for k in TX_FIELDS)}, %(raw)s)
                 ON CONFLICT (transaction_id) DO UPDATE SET
-                  {', '.join(f'{k} = EXCLUDED.{k}' for k in TX_FIELDS if k != 'transaction_id')},
+                  {", ".join(f"{k} = EXCLUDED.{k}" for k in TX_FIELDS if k != "transaction_id")},
                   raw = EXCLUDED.raw, removed_at = NULL""",
-            {**row, "item_key": item_key, "raw": Jsonb(tx)})
+            {**row, "item_key": item_key, "raw": Jsonb(tx)},
+        )
         stored += 1
     removed_ids = [r["transaction_id"] for r in removed if r.get("transaction_id")]
     if removed_ids:
-        conn.execute("UPDATE bank_transactions SET removed_at = now() WHERE transaction_id = ANY(%s) "
-                     "AND removed_at IS NULL", (removed_ids,))
-        paid = conn.execute("SELECT count(*) AS n FROM matches WHERE bank_transaction_id = ANY(%s) "
-                            "AND status = 'accepted'", (removed_ids,)).fetchone()["n"]
+        conn.execute(
+            "UPDATE bank_transactions SET removed_at = now() WHERE transaction_id = ANY(%s) AND removed_at IS NULL",
+            (removed_ids,),
+        )
+        paid = conn.execute(
+            "SELECT count(*) AS n FROM matches WHERE bank_transaction_id = ANY(%s) AND status = 'accepted'",
+            (removed_ids,),
+        ).fetchone()["n"]
         if paid:
-            db.log(conn, step="bank", level="warning", message="matched transaction removed by the bank",
-                   channel="system", details={"count": paid})
-    if not has_more:                                      # cursor only after the last page
-        conn.execute("UPDATE bank_sync_state SET cursor = %s, last_synced_at = now() WHERE item_key = %s",
-                     (next_cursor, item_key))
-    return {"stored": stored, "skipped_other_accounts": skipped, "removed": len(removed_ids),
-            "cursor_saved": not has_more}
+            db.log(
+                conn,
+                step="bank",
+                level="warning",
+                message="matched transaction removed by the bank",
+                channel="system",
+                details={"count": paid},
+            )
+    if not has_more:  # cursor only after the last page
+        conn.execute(
+            "UPDATE bank_sync_state SET cursor = %s, last_synced_at = now() WHERE item_key = %s",
+            (next_cursor, item_key),
+        )
+    return {
+        "stored": stored,
+        "skipped_other_accounts": skipped,
+        "removed": len(removed_ids),
+        "cursor_saved": not has_more,
+    }
 
 
 # =====================================================================================
 # Matching
 # =====================================================================================
 def run_matching(conn, cfg: AccountingConfig, item_key: str, rules: matching.Rules) -> dict:
-    db.lock(conn, f"matching:{item_key}")                 # one run at a time per account
+    db.lock(conn, f"matching:{item_key}")  # one run at a time per account
     state = sync_state(conn, item_key)
     rows = conn.execute(
         """SELECT p.id AS posting_id, p.invoice_id, p.currency, p.amount, p.payment_reason,
                   i.invoice_date, i.due_date, i.supplier_name_norm, i.invoice_number_norm
              FROM accounting_postings p JOIN invoices i ON i.id = p.invoice_id
             WHERE p.status = 'posted' AND p.object_type = 'bill' AND p.payment_status = 'unpaid'
-              AND p.payment_reason <> 'payment_pending' AND i.posting_excluded_reason IS NULL""").fetchall()
+              AND p.payment_reason <> 'payment_pending' AND i.posting_excluded_reason IS NULL"""
+    ).fetchall()
 
     def set_reason(posting_ids: list[int], reason: str) -> None:
         if posting_ids:
-            conn.execute("UPDATE accounting_postings SET payment_reason = %s WHERE id = ANY(%s) "
-                         "AND payment_reason IS DISTINCT FROM %s", (reason, posting_ids, reason))
+            conn.execute(
+                "UPDATE accounting_postings SET payment_reason = %s WHERE id = ANY(%s) "
+                "AND payment_reason IS DISTINCT FROM %s",
+                (reason, posting_ids, reason),
+            )
 
     # Constraint until FX matching (Day 4): only bills in the bank account's currency
     foreign = [r for r in rows if r["currency"] != state["account_currency"]]
@@ -421,52 +570,112 @@ def run_matching(conn, cfg: AccountingConfig, item_key: str, rules: matching.Rul
               AND t.removed_at IS NULL AND t.iso_currency_code = %s
               AND NOT EXISTS (SELECT 1 FROM matches m WHERE m.bank_transaction_id = t.transaction_id
                                                          AND m.status = 'accepted')""",
-        (item_key, state["account_id"], state["account_currency"])).fetchall()
-    bills = [matching.OpenBill(str(r["invoice_id"]), r["currency"], r["amount"], r["invoice_date"], r["due_date"],
-                               r["supplier_name_norm"], r["invoice_number_norm"]) for r in same]
-    bank = [matching.BankTx(t["transaction_id"], t["amount"], t["iso_currency_code"], t["date"], t["name"],
-                            t["merchant_name"], t["pending"]) for t in txs]
+        (item_key, state["account_id"], state["account_currency"]),
+    ).fetchall()
+    bills = [
+        matching.OpenBill(
+            str(r["invoice_id"]),
+            r["currency"],
+            r["amount"],
+            r["invoice_date"],
+            r["due_date"],
+            r["supplier_name_norm"],
+            r["invoice_number_norm"],
+        )
+        for r in same
+    ]
+    bank = [
+        matching.BankTx(
+            t["transaction_id"],
+            t["amount"],
+            t["iso_currency_code"],
+            t["date"],
+            t["name"],
+            t["merchant_name"],
+            t["pending"],
+        )
+        for t in txs
+    ]
     decision = matching.decide(bills, bank, rules)
     by_invoice = {str(r["invoice_id"]): r for r in same}
 
     for bill, tx, ev in decision.accepted:
         _save_match(conn, bill, tx, ev, "accepted")
-        conn.execute("UPDATE matches SET status = 'dismissed' WHERE invoice_id = %s AND status = 'candidate'",
-                     (bill.invoice_id,))
+        conn.execute(
+            "UPDATE matches SET status = 'dismissed' WHERE invoice_id = %s AND status = 'candidate'", (bill.invoice_id,)
+        )
         set_reason([by_invoice[bill.invoice_id]["posting_id"]], "payment_pending")
-        db.log(conn, step="match", level="info", message="bank transaction matched", invoice_id=bill.invoice_id,
-               channel="system", details={"difference": str(ev.difference), "days": ev.days_from_invoice,
-                                          "name_similarity": ev.name_similarity, "rule_version": matching.RULE_VERSION})
+        db.log(
+            conn,
+            step="match",
+            level="info",
+            message="bank transaction matched",
+            invoice_id=bill.invoice_id,
+            channel="system",
+            details={
+                "difference": str(ev.difference),
+                "days": ev.days_from_invoice,
+                "name_similarity": ev.name_similarity,
+                "rule_version": matching.RULE_VERSION,
+            },
+        )
     for invoice_id, found in decision.ambiguous.items():
         bill = next(b for b in bills if b.invoice_id == invoice_id)
         for tx, ev in found:
             _save_match(conn, bill, tx, ev, "candidate")
         set_reason([by_invoice[invoice_id]["posting_id"]], "ambiguous_match")
-        db.log(conn, step="match", level="warning", message="several possible bank transactions",
-               invoice_id=invoice_id, channel="system", details={"candidates": len(found)})
+        db.log(
+            conn,
+            step="match",
+            level="warning",
+            message="several possible bank transactions",
+            invoice_id=invoice_id,
+            channel="system",
+            details={"candidates": len(found)},
+        )
     set_reason([by_invoice[i]["posting_id"] for i in decision.unmatched], "no_match_yet")
 
-    return {"account_currency": state["account_currency"], "open_bills": len(rows),
-            "fx_match_pending": len(foreign), "accepted": len(decision.accepted),
-            "ambiguous": len(decision.ambiguous), "unmatched": len(decision.unmatched),
-            "payments_due": payments_due(conn, cfg)}
+    return {
+        "account_currency": state["account_currency"],
+        "open_bills": len(rows),
+        "fx_match_pending": len(foreign),
+        "accepted": len(decision.accepted),
+        "ambiguous": len(decision.ambiguous),
+        "unmatched": len(decision.unmatched),
+        "payments_due": payments_due(conn, cfg),
+    }
 
 
 def _save_match(conn, bill: matching.OpenBill, tx: matching.BankTx, ev: matching.Evaluation, status: str) -> None:
-    values = (bill.invoice_id, tx.transaction_id, status, bill.amount, ev.bank_amount, ev.difference, bill.currency,
-              ev.days_from_invoice, ev.name_similarity, ev.invoice_number_found, matching.RULE_VERSION)
+    values = (
+        bill.invoice_id,
+        tx.transaction_id,
+        status,
+        bill.amount,
+        ev.bank_amount,
+        ev.difference,
+        bill.currency,
+        ev.days_from_invoice,
+        ev.name_similarity,
+        ev.invoice_number_found,
+        matching.RULE_VERSION,
+    )
     if status == "accepted":
         conn.execute(
             """INSERT INTO matches (invoice_id, bank_transaction_id, status, invoice_amount, bank_amount, difference,
                                     currency, days_from_invoice, name_similarity, invoice_number_found, rule_version)
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-               ON CONFLICT (invoice_id, bank_transaction_id) DO UPDATE SET status = 'accepted'""", values)
+               ON CONFLICT (invoice_id, bank_transaction_id) DO UPDATE SET status = 'accepted'""",
+            values,
+        )
     else:
         conn.execute(
             """INSERT INTO matches (invoice_id, bank_transaction_id, status, invoice_amount, bank_amount, difference,
                                     currency, days_from_invoice, name_similarity, invoice_number_found, rule_version)
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-               ON CONFLICT (invoice_id, bank_transaction_id) DO NOTHING""", values)
+               ON CONFLICT (invoice_id, bank_transaction_id) DO NOTHING""",
+            values,
+        )
 
 
 def payments_due(conn, cfg: AccountingConfig) -> list[dict]:
@@ -483,25 +692,33 @@ def payments_due(conn, cfg: AccountingConfig) -> list[dict]:
              FROM due, accounting_postings p, bank_transactions t
             WHERE m.id = due.id AND p.invoice_id = m.invoice_id AND t.transaction_id = m.bank_transaction_id
         RETURNING m.*, p.external_id AS bill_id, p.vendor_external_id, p.amount AS bill_amount, t.date AS tx_date""",
-        {"max": cfg.max_attempts, "lease": cfg.lease_minutes}).fetchall()
+        {"max": cfg.max_attempts, "lease": cfg.lease_minutes},
+    ).fetchall()
     rows.sort(key=lambda r: r["id"])
     out = []
     for m in rows:
-        applied = min(m["bank_amount"], m["bill_amount"])     # never apply more than the bill amount
-        out.append({
-            "match_id": m["id"], "invoice_id": str(m["invoice_id"]), "request_id": f"ap-billpay-{m['id']}",
-            "bank_amount": str(m["bank_amount"]), "bill_amount": str(m["bill_amount"]),
-            "difference": str(m["difference"]),
-            "document": {
-                "VendorRef": {"value": m["vendor_external_id"]}, "PayType": "Check",
-                "CheckPayment": {"BankAccountRef": {"value": cfg.bank_account_id}, "PrintStatus": "NotSet"},
-                "CurrencyRef": {"value": m["currency"]}, "TotalAmt": float(applied),
-                "TxnDate": m["tx_date"].isoformat(),
-                "PrivateNote": f"AP Automation · bank transaction {m['bank_transaction_id']} · "
-                               f"bank amount {m['bank_amount']} {m['currency']}",
-                "Line": [{"Amount": float(applied), "LinkedTxn": [{"TxnId": m["bill_id"], "TxnType": "Bill"}]}],
-            },
-        })
+        applied = min(m["bank_amount"], m["bill_amount"])  # never apply more than the bill amount
+        out.append(
+            {
+                "match_id": m["id"],
+                "invoice_id": str(m["invoice_id"]),
+                "request_id": f"ap-billpay-{m['id']}",
+                "bank_amount": str(m["bank_amount"]),
+                "bill_amount": str(m["bill_amount"]),
+                "difference": str(m["difference"]),
+                "document": {
+                    "VendorRef": {"value": m["vendor_external_id"]},
+                    "PayType": "Check",
+                    "CheckPayment": {"BankAccountRef": {"value": cfg.bank_account_id}, "PrintStatus": "NotSet"},
+                    "CurrencyRef": {"value": m["currency"]},
+                    "TotalAmt": float(applied),
+                    "TxnDate": m["tx_date"].isoformat(),
+                    "PrivateNote": f"AP Automation · bank transaction {m['bank_transaction_id']} · "
+                    f"bank amount {m['bank_amount']} {m['currency']}",
+                    "Line": [{"Amount": float(applied), "LinkedTxn": [{"TxnId": m["bill_id"], "TxnType": "Bill"}]}],
+                },
+            }
+        )
     return out
 
 
@@ -515,19 +732,31 @@ def record_payment(conn, match_id: int, external_payment_id: str, execution_id: 
         if m["external_payment_id"] != external_payment_id:
             raise Conflict(f"payment already recorded as {m['external_payment_id']}")
         return conn.execute("SELECT * FROM accounting_postings WHERE invoice_id = %s", (m["invoice_id"],)).fetchone()
-    conn.execute("UPDATE matches SET external_payment_id = %s, payment_recorded_at = now(), "
-                 "payment_claimed_until = NULL WHERE id = %s",
-                 (external_payment_id, match_id))
+    conn.execute(
+        "UPDATE matches SET external_payment_id = %s, payment_recorded_at = now(), "
+        "payment_claimed_until = NULL WHERE id = %s",
+        (external_payment_id, match_id),
+    )
     applied = min(m["bank_amount"], m["invoice_amount"])
     exact = m["difference"] == 0
     conn.execute(
         """UPDATE accounting_postings SET payment_status = %s, payment_reason = %s, amount_paid = %s
             WHERE invoice_id = %s""",
-        ("paid" if exact else "paid_with_difference", None if exact else "payment_difference",
-         applied, m["invoice_id"]))
-    db.log(conn, step="match", level="info" if exact else "warning",
-           message="payment recorded" if exact else "payment recorded with a difference",
-           invoice_id=str(m["invoice_id"]), channel="system", execution_id=execution_id,
-           details={"external_payment_id": external_payment_id, "difference": str(m["difference"])})
+        (
+            "paid" if exact else "paid_with_difference",
+            None if exact else "payment_difference",
+            applied,
+            m["invoice_id"],
+        ),
+    )
+    db.log(
+        conn,
+        step="match",
+        level="info" if exact else "warning",
+        message="payment recorded" if exact else "payment recorded with a difference",
+        invoice_id=str(m["invoice_id"]),
+        channel="system",
+        execution_id=execution_id,
+        details={"external_payment_id": external_payment_id, "difference": str(m["difference"])},
+    )
     return conn.execute("SELECT * FROM accounting_postings WHERE invoice_id = %s", (m["invoice_id"],)).fetchone()
-
