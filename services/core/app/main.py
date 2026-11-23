@@ -6,7 +6,7 @@ Endpoints:
   POST /invoices/process  file + source → extract, check, store; returns the status for n8n routing
   POST /extract           file → common invoice format (no persistence; tests and debugging)
 
-Day 2 (n8n does the QuickBooks/Plaid calls; the core keeps state and rules):
+Accounting and bank (n8n does the QuickBooks/Plaid calls; the core keeps state and rules):
   GET  /invoices/{id}/file               original file, for the accounting attachment
   POST /invoices/{id}/exclude-from-posting
   POST /postings/claim                   invoices to post now, with the document to send (leased)
@@ -143,7 +143,7 @@ def extract(
 
 
 # =====================================================================================
-# Day 2: accounting postings, bank sync, matching
+# Accounting postings, bank sync, matching
 # =====================================================================================
 def get_accounting_config() -> accounting.AccountingConfig:
     s = get_settings()
@@ -405,7 +405,7 @@ def match_payment(match_id: int, body: PaymentRecorded, cfg: AcctCfg) -> JsonDic
 
 
 # =====================================================================================
-# Day 3: QuickBooks reference data (accounts, vendors) and review decisions
+# QuickBooks reference data (accounts, vendors) and review decisions
 # =====================================================================================
 @app.exception_handler(qbo_reference.SyncError)
 def _sync_error(_: Request, exc: qbo_reference.SyncError) -> JSONResponse:

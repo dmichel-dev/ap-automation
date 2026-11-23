@@ -1,4 +1,4 @@
--- 009 (Day 3 step 2): expense coding, supplier onboarding control, review decisions, scope.
+-- 009: expense coding, supplier onboarding control, review decisions, scope.
 SET search_path = ap;
 
 -- ---------------------------------------------------------------------------
@@ -64,7 +64,7 @@ ALTER TABLE review_queue
   ADD COLUMN corrections jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(corrections) = 'array');
 
 -- ---------------------------------------------------------------------------
--- scope: live data, the daily end-to-end test, or the public demo (Day 6).
+-- scope: live data, the daily end-to-end test, or the public demo.
 -- Summaries, alerts and the review page filter on it.
 -- ---------------------------------------------------------------------------
 ALTER TABLE invoices

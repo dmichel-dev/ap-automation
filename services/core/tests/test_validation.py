@@ -399,7 +399,7 @@ def test_prior_period_service_at_materiality_goes_to_review():
 
 
 def test_prior_period_service_in_a_foreign_currency_goes_to_review():
-    """No home-currency amount before FX conversion (Day 4): a person checks it."""
+    """No home-currency amount before FX conversion exists: a person checks it."""
     v = check(
         service_period_start="01/10/2026",
         service_period_end="31/10/2026",

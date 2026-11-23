@@ -197,7 +197,7 @@ def qbo_send(node: Node, body: str) -> Node:
 
 
 def stop(name: str, pos: list[int], message: str) -> Node:
-    """Ends the run as failed (visible in the executions list; Day 3 adds the alert)."""
+    """Ends the run as failed (visible in the executions list)."""
     return {
         "name": name,
         "type": "n8n-nodes-base.stopAndError",

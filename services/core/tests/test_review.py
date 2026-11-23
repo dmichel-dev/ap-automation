@@ -1,4 +1,4 @@
-"""Day 3 step 2: supplier onboarding and expense coding, the second duplicate rule, the QuickBooks
+"""Supplier onboarding and expense coding, the second duplicate rule, the QuickBooks
 reference copy, and review decisions (approve / verify / correct / reject). Real Postgres."""
 
 import json

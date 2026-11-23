@@ -397,7 +397,7 @@ def build(cred_ids: dict[str, str] | None) -> dict[str, Any]:
     nodes = (
         _trigger_nodes() + _vendor_nodes() + _rate_nodes() + _document_nodes() + _attachment_nodes() + _report_nodes()
     )
-    for node in nodes:  # room for the two nodes added before the claim (Day 3)
+    for node in nodes:  # room for the preferences nodes before the claim
         if node["position"][0] >= 460 and node["name"] not in ("Preferences (QBO)", "Claim postings (core)"):
             node["position"] = [node["position"][0] + 440, node["position"][1]]
     return workflow("AP – Post to QuickBooks", nodes, CONNECTIONS, cred_ids)

@@ -70,7 +70,7 @@ Run on 2026-11-23 after tax ID labels (`EIN`, `VAT`, `USt-IdNr.`, `登録番号`
 ```bash
 python3 scripts/plaid_sandbox.py setup [--replace]        # test bank login, checking account registered in the core,
                                                          # token in .env + n8n credential "Plaid – Sandbox" (never printed)
-python3 scripts/plaid_sandbox.py transactions test-data/bank/day2-transactions.json   # custom test transactions
+python3 scripts/plaid_sandbox.py transactions test-data/bank/matching-transactions.json   # custom test transactions
 python3 scripts/plaid_sandbox.py remove
 ```
 

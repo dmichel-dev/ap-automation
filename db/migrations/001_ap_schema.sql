@@ -71,7 +71,7 @@ CREATE TABLE invoices (
   tax_total               numeric(18,4),
   total                   numeric(18,4),
 
-  -- Home-currency conversion (Day 4, Frankfurter/ECB)
+  -- Home-currency conversion (Frankfurter/ECB)
   home_currency           char(3) CHECK (home_currency ~ '^[A-Z]{3}$'),
   home_amount             numeric(18,4),
   fx_rate                 numeric(18,8) CHECK (fx_rate > 0),
@@ -154,7 +154,7 @@ CREATE TABLE invoice_tax_lines (
 CREATE INDEX invoice_tax_lines_invoice_idx ON invoice_tax_lines (invoice_id);
 
 -- ---------------------------------------------------------------------------
--- review_queue: human review (workflow built on Day 3)
+-- review_queue: human review (decided by a person)
 -- ---------------------------------------------------------------------------
 CREATE TABLE review_queue (
   id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

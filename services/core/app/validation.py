@@ -328,7 +328,7 @@ def _cutoff_check(inv: CommonInvoice, policy: Policy, f: _Findings) -> None:
 
 def _material(inv: CommonInvoice, policy: Policy) -> tuple[bool, str]:
     if inv.currency != policy.home_currency or inv.total is None:
-        # No home-currency amount before FX conversion (Day 4): a person looks at it
+        # No home-currency amount before FX conversion exists: a person looks at it
         return True, "amount in the home currency not known yet"
     if abs(inv.total) >= policy.cutoff_materiality:
         return True, f"amount at or above the materiality of {policy.cutoff_materiality} {policy.home_currency}"
@@ -341,7 +341,7 @@ def _capex_check(inv: CommonInvoice, policy: Policy, f: _Findings) -> None:
     if inv.document_type != "invoice":
         return
     if inv.currency != policy.home_currency:
-        f.checks["capex"] = {"checked": False, "why": "foreign currency: checked once converted (Day 4)"}
+        f.checks["capex"] = {"checked": False, "why": "foreign currency: checked once FX conversion exists"}
         return
     found = []
     for li in inv.lines:
@@ -388,7 +388,7 @@ def _supplier_check(inv: CommonInvoice, supplier: SupplierStatus | None, f: _Fin
 def _confidence_check(
     confidence: float | None, ocr: float | None, completeness: float, threshold: float, f: _Findings
 ) -> None:
-    """The threshold is provisional, calibrated on the test set on Day 3."""
+    """The threshold is provisional until it is calibrated on the test set."""
     f.checks["confidence"] = {
         "passed": confidence is not None and confidence >= threshold,
         "score": confidence,

@@ -1,4 +1,4 @@
-"""Database side of Day 2: postings to the accounting system, bank sync storage, matching runs.
+"""Database side of accounting: postings to the accounting system, bank sync storage, matching runs.
 
 n8n makes every external call (QuickBooks, Plaid). The core keeps the state and the rules:
   claim_postings   → which invoices to post now, with the exact document to send (leased, retried)
@@ -301,7 +301,7 @@ def _record_posted(conn: Conn, cfg: AccountingConfig, p: Row, inv: Row, r: Row, 
     rate, rate_date, source = _exchange_rate(cfg, p, inv, r)
     reason = None
     if p["object_type"] == "bill":
-        # Until FX matching (Day 4), only bills in the bank account's currency can be matched. Before any
+        # Until FX matching exists, only bills in the bank account's currency can be matched. Before any
         # bank account is registered, the payments account is assumed to be in the home currency.
         account_ccy = _account_currency(conn) or cfg.home_currency
         reason = "fx_match_pending" if p["currency"] != account_ccy else "no_match_yet"
@@ -375,7 +375,7 @@ def _record_failed(conn: Conn, cfg: AccountingConfig, p: Row, r: Row, ctx: LogCo
     )
 
 
-# Posting failures that need a person (Day 3 review flow), not retries: code → (field, explanation)
+# Posting failures that need a person (review), not retries: code → (field, explanation)
 REVIEW_ERRORS = {
     "vendor_currency_conflict": (
         "supplier_name",
@@ -408,7 +408,7 @@ def lookup_decision(
     return postings.existing_document_decision(status, body, entity, vendor_id or "")
 
 
-# Matching outcomes a person must settle (Day 3 review flow)
+# Matching outcomes a person must settle (review)
 MATCHING_REVIEWS = {
     "ambiguous_match": (
         "payment",
@@ -683,7 +683,7 @@ def run_matching(conn: Conn, cfg: AccountingConfig, item_key: str, rules: matchi
                 (reason, posting_ids, reason),
             )
 
-    # Constraint until FX matching (Day 4): only bills in the bank account's currency
+    # Constraint until FX matching exists: only bills in the bank account's currency
     foreign = [r for r in rows if r["currency"] != state["account_currency"]]
     set_reason([r["posting_id"] for r in foreign], "fx_match_pending")
     same = [r for r in rows if r["currency"] == state["account_currency"]]

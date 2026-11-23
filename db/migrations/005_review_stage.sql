@@ -1,4 +1,4 @@
--- 005: review items can come from validation (Day 1) or from posting (Day 2), e.g. a
+-- 005: review items can come from validation or from posting, e.g. a
 -- vendor with the same name already exists in QuickBooks in another currency.
 SET search_path = ap;
 

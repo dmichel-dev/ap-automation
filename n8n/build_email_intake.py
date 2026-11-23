@@ -243,7 +243,7 @@ def _processing_nodes() -> list[Node]:
         },
         label_node("Label: review", ["review", "processed"], [1840, 40]),
         label_node("Label: rejected", ["rejected", "processed"], [1840, 180]),
-        # Technical error: AP/Error only, NOT AP/Processed (re-checked on Day 3)
+        # Technical error: AP/Error only, NOT AP/Processed (re-checked later)
         label_node("Label: error", ["error"], [1840, 340]),
         log_node(
             "Log core error",
