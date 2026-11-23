@@ -4,6 +4,9 @@ Run with scripts/run_e2e.sh (it passes the database URLs from .env). Read-only.
   --since   ISO timestamp of the start of the run (only rows created after it count)
   --timeout seconds to wait for all results (emails are polled once a minute)
 
+Status: the routing decision at intake (from the log), not the current status, which a
+reviewer may have changed since.
+
 Matching: by the attachment's SHA-256, because the Gmail message ID differs between the
 sending and the receiving mailbox. 'occurrence' picks the n-th row with the same file
 (used by the duplicate test).
@@ -37,7 +40,9 @@ def load_expectations() -> list[dict]:
 
 def fetch_row(conn, e: dict, since: datetime) -> dict | None:
     rows = conn.execute(
-        """SELECT i.*, (SELECT count(*) FROM ap.invoice_lines l WHERE l.invoice_id = i.id) AS line_count
+        """SELECT i.*, (SELECT count(*) FROM ap.invoice_lines l WHERE l.invoice_id = i.id) AS line_count,
+                  (SELECT substring(g.message FROM '^status (.*)$') FROM ap.processing_log g
+                    WHERE g.invoice_id = i.id AND g.step = 'validate' ORDER BY g.logged_at LIMIT 1) AS routed_status
              FROM ap.invoices i WHERE file_sha256 = %s AND created_at >= %s ORDER BY created_at""",
         (e["sha256"], since),
     ).fetchall()
@@ -63,7 +68,8 @@ def actual_values(row: dict) -> dict:
     """Every value an expected result can name, read from the invoice row in comparable form."""
     out = {key: (row[key] or "").strip() or None if isinstance(row[key], str) else row[key] for key in TEXT_KEYS}
     out.update({key: _iso(row[key]) for key in DATE_KEYS})
-    out["status"] = row["status"]
+    # The routing decision at intake (a reviewer may have approved or rejected it since)
+    out["status"] = row["routed_status"] or row["status"]
     out["reasons"] = sorted(r["code"] for r in row["status_reasons"])
     # information-only flags (posted anyway), e.g. cutoff_prior_period
     out["info"] = sorted(i["code"] for i in (row["checks"] or {}).get("info", []))
