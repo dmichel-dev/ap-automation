@@ -7,7 +7,7 @@ Defined in [`db/migrations/`](../db/migrations). Migrations run as the `ap_app` 
 | `invoices` | One row per received document (invoice or credit note): source, file, parties, amounts, extraction, status |
 | `invoice_lines` | Line items |
 | `invoice_tax_lines` | Generic tax breakdown: `vat`, `gst`, `sales_tax`, `withholding`, `other`, `none` |
-| `review_queue` | Human review items (at most one open item per invoice) |
+| `review_queue` | Human review items (at most one open item per invoice); `stage` = `validation` (extraction/checks) or `posting` (e.g. `vendor_currency_conflict`, `vendor_inactive`, `duplicate_in_accounting`) |
 | `processing_log` | Append-only audit trail; `invoice_id` is optional so events without an invoice are logged too |
 | `vendor_links` | Supplier + currency → accounting vendor (QuickBooks fixes a vendor's currency, so one supplier can have one vendor per currency) |
 | `accounting_postings` | One per invoice sent to QuickBooks: bill or vendor credit, rate used, attachment, payment status and reason; created **before** any API call |

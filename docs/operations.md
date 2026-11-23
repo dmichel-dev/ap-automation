@@ -59,3 +59,7 @@ Migration 004 (Day 2) was applied this way on 2026-11-22, after backup `pg_dumpa
 `POST /invoices/{id}/exclude-from-posting` with `{"reason": "superseded_test_data" | "manual", "note": "…"}`. It is logged and refused once the invoice is posted (reverse it in QuickBooks instead).
 
 Used once on 2026-11-22 for invoice `f6a94cb0-…` (BW-1042, Step 5 test of Day 1): its fictional supplier name was too close to a real company and was renamed in the test set, and it has the same amount as the renamed invoice, so posting it would also confuse bank matching.
+
+## Retrying a failed posting
+
+A posting that failed permanently (validation error in QuickBooks, attempts used up) is retried after the cause is fixed with `POST /postings/{invoice_id}/retry` (`{"note": "…"}`): attempts go back to 0 and the request is logged. It is refused while an open `posting` review item exists for the invoice: the reviewer decides those (Day 3).

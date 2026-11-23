@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     file_retention_days: int = 30
 
     # Accounting (QuickBooks Online). Account IDs are the sandbox defaults; see docs/integrations.md
+    qbo_api_host: str = "https://sandbox-quickbooks.api.intuit.com"
+    qbo_realm_id: str = ""                  # QuickBooks company ID (not a secret, but kept out of git)
     qbo_expense_account_id: str = "20"      # Supplies
     qbo_tax_account_id: str = "21"          # Taxes & Licenses
     qbo_bank_account_id: str = "35"         # Checking (mapped to the Plaid account)

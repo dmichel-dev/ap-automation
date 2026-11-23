@@ -382,3 +382,65 @@ def test_payment_recorded_twice_is_idempotent_and_conflicts_on_other_id(cfg):
     assert c.post(f"/matches/{mid}/payment", headers=AUTH, json={"external_payment_id": "P1"}).status_code == 200
     assert c.post(f"/matches/{mid}/payment", headers=AUTH, json={"external_payment_id": "P1"}).status_code == 200
     assert c.post(f"/matches/{mid}/payment", headers=AUTH, json={"external_payment_id": "P2"}).status_code == 409
+
+
+# =====================================================================================
+# Posting failures that need a person
+# =====================================================================================
+def test_vendor_currency_conflict_opens_a_posting_review(cfg):
+    inv = make_invoice(cfg, number="AV-1", currency="EUR", supplier="Ateliers Verlibreux", key_name="ateliers verlibreux")
+    claim(cfg)
+    r = result(cfg, inv, outcome="failed", error_code="vendor_currency_conflict",
+               error_message="vendor 58 uses USD", retryable=True)          # retryable is overridden
+    assert r.status_code == 200 and r.json()["status"] == "failed" and r.json()["attempts"] == cfg.max_attempts
+    review = sql(cfg, "SELECT * FROM ap.review_queue WHERE invoice_id = %s", inv)
+    assert len(review) == 1 and review[0]["stage"] == "posting" and review[0]["status"] == "open"
+    assert review[0]["reasons"][0]["code"] == "vendor_currency_conflict"
+    assert sql(cfg, "SELECT status FROM ap.invoices WHERE id = %s", inv)[0]["status"] == "ready"   # data is fine
+    # reported again (e.g. a manual re-run): still one open review item
+    result(cfg, inv, outcome="failed", error_code="vendor_currency_conflict", error_message="again")
+    assert len(sql(cfg, "SELECT id FROM ap.review_queue WHERE invoice_id = %s", inv)) == 1
+    sql(cfg, "UPDATE ap.accounting_postings SET next_attempt_at = now()")
+    assert claim(cfg) == []                                            # no blind retries
+
+
+def test_ordinary_failure_opens_no_review(cfg):
+    inv = make_invoice(cfg)
+    claim(cfg)
+    result(cfg, inv, outcome="failed", error_code="http_503", error_message="unavailable")
+    assert sql(cfg, "SELECT id FROM ap.review_queue") == []
+    assert posting(cfg, inv)["attempts"] == 1                          # will be retried
+
+
+def test_claim_returns_the_api_base(cfg):
+    make_invoice(cfg)
+    app.dependency_overrides[get_accounting_config] = lambda: accounting.AccountingConfig(
+        **{**cfg.__dict__, "qbo_base": "https://sandbox.example/v3/company/123"})
+    r = TestClient(app).post("/postings/claim", headers=AUTH)
+    assert r.json()["qbo_base"] == "https://sandbox.example/v3/company/123" and r.json()["count"] == 1
+
+
+def test_request_ids_fit_quickbooks_limit(cfg):
+    make_invoice(cfg)
+    make_invoice(cfg, number="CN-1", document_type="credit_note", lines=("-100.00",), taxes=("-20.00",), total="-120.00")
+    items = claim(cfg)
+    assert {i["entity"] for i in items} == {"Bill", "VendorCredit"}
+    assert all(len(i["request_id"]) <= 50 for i in items)
+
+
+def test_retry_resets_a_failed_posting_only(cfg):
+    inv = make_invoice(cfg)
+    claim(cfg)
+    c = TestClient(app)
+    assert c.post(f"/postings/{inv}/retry", headers=AUTH, json={}).status_code == 409        # still pending
+    result(cfg, inv, outcome="failed", error_code="qbo_6000", error_message="bad", retryable=False)
+    r = c.post(f"/postings/{inv}/retry", headers=AUTH, json={"note": "request id fixed"})
+    assert r.status_code == 200 and r.json()["attempts"] == 0
+    assert claim(cfg)[0]["invoice_id"] == inv
+
+
+def test_retry_refused_while_a_posting_review_is_open(cfg):
+    inv = make_invoice(cfg)
+    claim(cfg)
+    result(cfg, inv, outcome="failed", error_code="vendor_currency_conflict", error_message="x")
+    assert TestClient(app).post(f"/postings/{inv}/retry", headers=AUTH, json={}).status_code == 409

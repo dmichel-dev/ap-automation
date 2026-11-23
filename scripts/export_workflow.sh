@@ -1,21 +1,25 @@
 #!/bin/sh
-# Exports the live "AP – Email intake" workflow from n8n into n8n/workflows/, without
-# credentials or instance data, and shows what changed compared with the committed file.
-#   scripts/export_workflow.sh [workflow-id]
+# Exports the live n8n workflows into n8n/workflows/, without credentials or instance data,
+# and shows what changed compared with the committed files.
+#   scripts/export_workflow.sh            # all project workflows
+#   scripts/export_workflow.sh <id>       # one workflow
 set -eu
 cd "$(dirname "$0")/.."
-ID="${1:-apEmailIntake001}"
-OUT="n8n/workflows/ap-email-intake.json"
+
+# workflow ID → committed file
+WORKFLOWS="apEmailIntake001:ap-email-intake.json apPostQbo0000001:ap-post-to-quickbooks.json"
 RAW="$(mktemp)"; trap 'rm -f "$RAW"' EXIT
 
-# Export inside the container to a temp file, then stream it out (nothing secret is in a
-# workflow export: credentials are stored separately and encrypted)
-docker compose exec -T n8n sh -c \
-  "n8n export:workflow --id='$ID' --output=/tmp/wf-export.json >/dev/null && cat /tmp/wf-export.json && rm -f /tmp/wf-export.json" > "$RAW"
-
-python3 scripts/export_workflow.py "$RAW" "$OUT"
-if git diff --quiet -- "$OUT"; then
-  echo "no change compared with the committed workflow"
-else
-  git --no-pager diff --stat -- "$OUT"
-fi
+for entry in $WORKFLOWS; do
+  ID="${entry%%:*}"; OUT="n8n/workflows/${entry#*:}"
+  [ $# -gt 0 ] && [ "$1" != "$ID" ] && continue
+  # Export inside the container and stream it out (credentials are stored separately, encrypted)
+  docker compose exec -T n8n sh -c \
+    "n8n export:workflow --id='$ID' --output=/tmp/wf-export.json >/dev/null && cat /tmp/wf-export.json && rm -f /tmp/wf-export.json" > "$RAW"
+  python3 scripts/export_workflow.py "$RAW" "$OUT"
+  if [ -z "$(git status --porcelain -- "$OUT")" ]; then
+    echo "  no change compared with the committed $OUT"
+  else
+    git --no-pager diff --stat -- "$OUT" 2>/dev/null || true
+  fi
+done

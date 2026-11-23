@@ -64,7 +64,7 @@ First run (2026-11-22): 7/8 as expected. The Spanish invoice exposed a double-co
 
 ## Updating the n8n workflow
 
-The workflow is generated from code (`n8n/build_email_intake.py`) and committed without credentials. After a change made in the n8n editor, `scripts/export_workflow.sh` exports the live workflow, strips credential IDs and instance data, refuses to write it if a secret scan matches, and shows the diff.
+The workflows are generated from code (`n8n/build_email_intake.py`, `n8n/build_post_qbo.py`) and committed without credentials. After a change made in the n8n editor, `scripts/export_workflow.sh` exports the live workflows, strips credential IDs and instance data, refuses to write a file if a secret scan matches, and shows the diff.
 
 ## Repository layout
 

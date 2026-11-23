@@ -1,0 +1,1844 @@
+{
+  "active": false,
+  "connections": {
+    "Build result": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Report result (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Called by intake": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Claim postings (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Claim postings (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Split postings",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Create document (QBO)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Created?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Create vendor (QBO)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Vendor created?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Created?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Document ready",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Describe failure",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Describe failure": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Report result (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Document ready": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "File available?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Every 15 minutes": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Claim postings (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Existing?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Route document",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "File OK?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Prepare upload",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Build result",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "File available?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Get file (core)",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Build result",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Find existing document (QBO)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Existing?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Find vendor (QBO)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Vendor lookup",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Get exchange rate (QBO)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Rate OK?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Get file (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "File OK?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Link vendor (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Linked?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Linked?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Vendor ready",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Describe failure",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Manual run": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Claim postings (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Needs exchange rate?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Get exchange rate (QBO)",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Rate",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "One at a time": {
+      "main": [
+        [],
+        [
+          {
+            "index": 0,
+            "node": "Route action",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Prepare upload": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Upload attachment (QBO)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Rate": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Find existing document (QBO)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Rate OK?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Rate",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Describe failure",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Report result (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "One at a time",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Route action": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Vendor linked?",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "File available?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Route document": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Create document (QBO)",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Document ready",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Describe failure",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Describe failure",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Route vendor": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Link vendor (core)",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Create vendor (QBO)",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Describe failure",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Describe failure",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Split postings": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "One at a time",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Upload attachment (QBO)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Upload result",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Upload result": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Build result",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Vendor created?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Link vendor (core)",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Describe failure",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Vendor linked?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Vendor ready",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Find vendor (QBO)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Vendor lookup": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Route vendor",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Vendor ready": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Needs exchange rate?",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "AP – Post to QuickBooks",
+  "nodes": [
+    {
+      "id": "every-15-minutes",
+      "name": "Every 15 minutes",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "position": [
+        0,
+        200
+      ],
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2
+    },
+    {
+      "id": "called-by-intake",
+      "name": "Called by intake",
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "position": [
+        0,
+        400
+      ],
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1
+    },
+    {
+      "id": "manual-run",
+      "name": "Manual run",
+      "parameters": {},
+      "position": [
+        0,
+        600
+      ],
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "executeOnce": true,
+      "id": "claim-postings-core",
+      "name": "Claim postings (core)",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "method": "POST",
+        "options": {},
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "10"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "url": "http://core:8000/postings/claim"
+      },
+      "position": [
+        240,
+        400
+      ],
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2
+    },
+    {
+      "id": "split-postings",
+      "name": "Split postings",
+      "parameters": {
+        "fieldToSplitOut": "items",
+        "options": {}
+      },
+      "position": [
+        460,
+        400
+      ],
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1
+    },
+    {
+      "id": "one-at-a-time",
+      "name": "One at a time",
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "position": [
+        680,
+        400
+      ],
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3
+    },
+    {
+      "id": "route-action",
+      "name": "Route action",
+      "parameters": {
+        "options": {},
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.action === 'create' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "create",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.action === 'attach' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "attach",
+              "renameOutput": true
+            }
+          ]
+        }
+      },
+      "position": [
+        900,
+        420
+      ],
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2
+    },
+    {
+      "id": "vendor-linked",
+      "name": "Vendor linked?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ !!$json.vendor.external_id }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1120,
+        200
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "name": "QuickBooks – Sandbox US"
+        }
+      },
+      "id": "find-vendor-qbo",
+      "maxTries": 3,
+      "name": "Find vendor (QBO)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "method": "GET",
+        "nodeCredentialType": "quickBooksOAuth2Api",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchInterval": 300,
+              "batchSize": 1
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "minorversion",
+              "value": "={{ $('Claim postings (core)').first().json.minorversion }}"
+            },
+            {
+              "name": "query",
+              "value": "={{ \"select Id, DisplayName, CurrencyRef, Active from Vendor where DisplayName = '\" + $('One at a time').first().json.vendor.display_name_q + \"' and Active in (true, false)\" }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "sendQuery": true,
+        "url": "={{ $('Claim postings (core)').first().json.qbo_base }}/query"
+      },
+      "position": [
+        1340,
+        300
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "vendor-lookup",
+      "name": "Vendor lookup",
+      "parameters": {
+        "jsCode": "// Decide what to do with the vendor search result. Only IDs and currencies go into messages.\nconst r = $json, item = $('One at a time').first().json;\nif (r.statusCode !== 200) return [{ json: { decision: 'error', statusCode: r.statusCode, body: r.body } }];\nconst found = r.body?.QueryResponse?.Vendor ?? [];\nif (found.length === 0) return [{ json: { decision: 'create' } }];\nconst v = found[0];\nconst currency = v.CurrencyRef?.value;\nif (currency !== item.currency) {\n  return [{ json: { decision: 'review', error_code: 'vendor_currency_conflict',\n    error_message: `vendor ${v.Id} with this name uses ${currency}; the invoice is in ${item.currency}` } }];\n}\nif (v.Active === false) {\n  return [{ json: { decision: 'review', error_code: 'vendor_inactive', error_message: `vendor ${v.Id} is inactive` } }];\n}\nreturn [{ json: { decision: 'use', vendor_id: v.Id } }];",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        1560,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "route-vendor",
+      "name": "Route vendor",
+      "parameters": {
+        "options": {},
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.decision === 'use' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "use",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.decision === 'create' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "create",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.decision === 'review' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "review",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.decision === 'error' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "error",
+              "renameOutput": true
+            }
+          ]
+        }
+      },
+      "position": [
+        1780,
+        300
+      ],
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2
+    },
+    {
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "name": "QuickBooks – Sandbox US"
+        }
+      },
+      "id": "create-vendor-qbo",
+      "maxTries": 3,
+      "name": "Create vendor (QBO)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "jsonBody": "={{ JSON.stringify({ DisplayName: $('One at a time').first().json.vendor.display_name, CompanyName: $('One at a time').first().json.vendor.company_name, CurrencyRef: { value: $('One at a time').first().json.currency } }) }}",
+        "method": "POST",
+        "nodeCredentialType": "quickBooksOAuth2Api",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchInterval": 300,
+              "batchSize": 1
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "minorversion",
+              "value": "={{ $('Claim postings (core)').first().json.minorversion }}"
+            },
+            {
+              "name": "requestid",
+              "value": "={{ 'ap-vendor-' + $('One at a time').first().json.posting_id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "sendHeaders": true,
+        "sendQuery": true,
+        "specifyBody": "json",
+        "url": "={{ $('Claim postings (core)').first().json.qbo_base }}/vendor"
+      },
+      "position": [
+        2000,
+        320
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "vendor-created",
+      "name": "Vendor created?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 && !!$json.body?.Vendor?.Id }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        2220,
+        320
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "link-vendor-core",
+      "maxTries": 3,
+      "name": "Link vendor (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ supplier_key: $('One at a time').first().json.vendor.supplier_key, currency: $('One at a time').first().json.currency, external_id: String($json.vendor_id ?? $json.body.Vendor.Id), display_name: $('One at a time').first().json.vendor.display_name }) }}",
+        "method": "PUT",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "=http://core:8000/vendor-links"
+      },
+      "position": [
+        2440,
+        220
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "linked",
+      "name": "Linked?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        2660,
+        220
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "vendor-ready",
+      "name": "Vendor ready",
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "vendor_id",
+              "name": "vendor_id",
+              "type": "string",
+              "value": "={{ String($json.body?.external_id ?? $('One at a time').first().json.vendor.external_id) }}"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "mode": "manual",
+        "options": {}
+      },
+      "position": [
+        2880,
+        120
+      ],
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4
+    },
+    {
+      "id": "needs-exchange-rate",
+      "name": "Needs exchange rate?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $('One at a time').first().json.needs_exchange_rate }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        3100,
+        120
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "name": "QuickBooks – Sandbox US"
+        }
+      },
+      "id": "get-exchange-rate-qbo",
+      "maxTries": 3,
+      "name": "Get exchange rate (QBO)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "method": "GET",
+        "nodeCredentialType": "quickBooksOAuth2Api",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchInterval": 300,
+              "batchSize": 1
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "minorversion",
+              "value": "={{ $('Claim postings (core)').first().json.minorversion }}"
+            },
+            {
+              "name": "sourcecurrencycode",
+              "value": "={{ $('One at a time').first().json.currency }}"
+            },
+            {
+              "name": "asofdate",
+              "value": "={{ $('One at a time').first().json.exchange_rate_date }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "sendQuery": true,
+        "url": "={{ $('Claim postings (core)').first().json.qbo_base }}/exchangerate"
+      },
+      "position": [
+        3320,
+        20
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "rate-ok",
+      "name": "Rate OK?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 && Number($json.body?.ExchangeRate?.Rate) > 0 }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        3540,
+        20
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "rate",
+      "name": "Rate",
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "vendor_id",
+              "name": "vendor_id",
+              "type": "string",
+              "value": "={{ $('Vendor ready').first().json.vendor_id }}"
+            },
+            {
+              "id": "exchange_rate",
+              "name": "exchange_rate",
+              "type": "string",
+              "value": "={{ $json.body?.ExchangeRate?.Rate ?? '' }}"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "mode": "manual",
+        "options": {}
+      },
+      "position": [
+        3760,
+        120
+      ],
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4
+    },
+    {
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "name": "QuickBooks – Sandbox US"
+        }
+      },
+      "id": "find-existing-document-qbo",
+      "maxTries": 3,
+      "name": "Find existing document (QBO)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "method": "GET",
+        "nodeCredentialType": "quickBooksOAuth2Api",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchInterval": 300,
+              "batchSize": 1
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "minorversion",
+              "value": "={{ $('Claim postings (core)').first().json.minorversion }}"
+            },
+            {
+              "name": "query",
+              "value": "={{ 'select Id, VendorRef, TotalAmt from ' + $('One at a time').first().json.entity + \" where DocNumber = '\" + $('One at a time').first().json.doc_number_q + \"'\" }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "sendQuery": true,
+        "url": "={{ $('Claim postings (core)').first().json.qbo_base }}/query"
+      },
+      "position": [
+        3980,
+        120
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "existing",
+      "name": "Existing?",
+      "parameters": {
+        "jsCode": "// Was this document already created (an earlier run that crashed after the call)? Number + vendor.\nconst r = $json, vendorId = $('Rate').first().json.vendor_id, entity = $('One at a time').first().json.entity;\nif (r.statusCode !== 200) return [{ json: { decision: 'error', statusCode: r.statusCode, body: r.body } }];\nconst docs = (r.body?.QueryResponse?.[entity] ?? []).filter(d => d.VendorRef?.value === vendorId);\nif (docs.length > 1) {\n  return [{ json: { decision: 'review_dup', error_code: 'duplicate_in_accounting',\n    error_message: `${docs.length} ${entity} records with this number for vendor ${vendorId}` } }];\n}\nreturn [{ json: docs.length ? { decision: 'exists', external_id: docs[0].Id } : { decision: 'create' } }];",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        4200,
+        120
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "route-document",
+      "name": "Route document",
+      "parameters": {
+        "options": {},
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.decision === 'create' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "create",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.decision === 'exists' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "exists",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.decision === 'review_dup' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "review_dup",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.decision === 'error' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "error",
+              "renameOutput": true
+            }
+          ]
+        }
+      },
+      "position": [
+        4420,
+        120
+      ],
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2
+    },
+    {
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "name": "QuickBooks – Sandbox US"
+        }
+      },
+      "id": "create-document-qbo",
+      "maxTries": 3,
+      "name": "Create document (QBO)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "jsonBody": "={{ JSON.stringify(Object.assign({}, $('One at a time').first().json.document, { VendorRef: { value: $('Rate').first().json.vendor_id } }, $('One at a time').first().json.needs_exchange_rate ? { ExchangeRate: Number($('Rate').first().json.exchange_rate) } : {})) }}",
+        "method": "POST",
+        "nodeCredentialType": "quickBooksOAuth2Api",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchInterval": 300,
+              "batchSize": 1
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "minorversion",
+              "value": "={{ $('Claim postings (core)').first().json.minorversion }}"
+            },
+            {
+              "name": "requestid",
+              "value": "={{ $('One at a time').first().json.request_id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "sendHeaders": true,
+        "sendQuery": true,
+        "specifyBody": "json",
+        "url": "={{ $('Claim postings (core)').first().json.qbo_base + '/' + $('One at a time').first().json.endpoint }}"
+      },
+      "position": [
+        4640,
+        40
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "created",
+      "name": "Created?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 && !!$json.body?.[$('One at a time').first().json.entity]?.Id }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        4860,
+        40
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "document-ready",
+      "name": "Document ready",
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "external_id",
+              "name": "external_id",
+              "type": "string",
+              "value": "={{ String($json.external_id ?? $json.body[$('One at a time').first().json.entity].Id) }}"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "mode": "manual",
+        "options": {}
+      },
+      "position": [
+        5080,
+        120
+      ],
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4
+    },
+    {
+      "id": "file-available",
+      "name": "File available?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $('One at a time').first().json.file.available }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        5300,
+        120
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "get-file-core",
+      "maxTries": 3,
+      "name": "Get file (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "method": "GET",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "outputPropertyName": "data",
+              "responseFormat": "file"
+            }
+          }
+        },
+        "url": "=http://core:8000{{ $('One at a time').first().json.file.path }}"
+      },
+      "position": [
+        5520,
+        40
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "file-ok",
+      "name": "File OK?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        5740,
+        40
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "prepare-upload",
+      "name": "Prepare upload",
+      "parameters": {
+        "jsCode": "// The metadata part must be sent as application/json (as text/plain QuickBooks fails with HTTP 200 + Fault),\n// so it is added as a second binary field typed application/json.\nconst item = $('One at a time').first().json;\nlet externalId = item.external_id;\nif (item.action === 'create') externalId = $('Document ready').first().json.external_id;\nconst meta = { AttachableRef: [{ EntityRef: { type: item.entity, value: externalId } }],\n               FileName: item.file.file_name, ContentType: item.file.mime_type };\nconst binary = { ...$input.first().binary };\nbinary.meta = { data: Buffer.from(JSON.stringify(meta)).toString('base64'), mimeType: 'application/json',\n                fileName: 'metadata.json', fileExtension: 'json' };\nreturn [{ json: { external_id: externalId }, binary }];",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        5960,
+        -40
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "name": "QuickBooks – Sandbox US"
+        }
+      },
+      "id": "upload-attachment-qbo",
+      "maxTries": 3,
+      "name": "Upload attachment (QBO)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "inputDataFieldName": "meta",
+              "name": "file_metadata_0",
+              "parameterType": "formBinaryData"
+            },
+            {
+              "inputDataFieldName": "data",
+              "name": "file_content_0",
+              "parameterType": "formBinaryData"
+            }
+          ]
+        },
+        "contentType": "multipart-form-data",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "method": "POST",
+        "nodeCredentialType": "quickBooksOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "minorversion",
+              "value": "={{ $('Claim postings (core)').first().json.minorversion }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "sendHeaders": true,
+        "sendQuery": true,
+        "url": "={{ $('Claim postings (core)').first().json.qbo_base }}/upload"
+      },
+      "position": [
+        6180,
+        -40
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "upload-result",
+      "name": "Upload result",
+      "parameters": {
+        "jsCode": "// Keep only the attachment ID: the response also holds a temporary signed download URL (never stored).\nconst r = $json;\nconst att = r.body?.AttachableResponse?.[0];\nconst id = r.statusCode === 200 && !r.body?.Fault && !att?.Fault ? att?.Attachable?.Id ?? null : null;\nconst fault = r.body?.Fault?.Error?.[0] ?? att?.Fault?.Error?.[0];\nreturn [{ json: { attachment_id: id, upload_error: id ? null : (fault ? `qbo_${fault.code}` : `http_${r.statusCode}`) } }];",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        6400,
+        -40
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "build-result",
+      "name": "Build result",
+      "parameters": {
+        "jsCode": "// Outcome for the core service. The bill/credit exists at this point; the attachment may not.\nconst item = $('One at a time').first().json;\nconst node = $prevNode.name;\nconst att = node === 'Upload result' ? $json : { attachment_id: null, upload_error: node === 'File OK?' ? 'file_fetch_failed' : null };\nlet body;\nif (item.action === 'create') {\n  const rate = $('Rate').first().json;\n  body = { outcome: 'posted', external_id: $('Document ready').first().json.external_id,\n           vendor_external_id: rate.vendor_id,\n           exchange_rate: item.needs_exchange_rate ? rate.exchange_rate : null,\n           exchange_rate_date: item.needs_exchange_rate ? item.exchange_rate_date : null,\n           attachment_external_id: att.attachment_id };\n} else if (att.attachment_id) {\n  body = { outcome: 'attached', attachment_external_id: att.attachment_id };\n} else {\n  body = { outcome: 'failed', error_code: att.upload_error ?? 'attachment_failed', error_message: 'attachment not uploaded',\n           retryable: true };\n}\nreturn [{ json: { invoice_id: item.invoice_id, body: { ...body, execution_id: $execution.id } } }];",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        6620,
+        120
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "describe-failure",
+      "name": "Describe failure",
+      "parameters": {
+        "jsCode": "// Turns any failed step into a result for the core: error code, short message, retryable or not.\n// Retryable: network errors, 401 (token refresh), 425 (request already sent: the next run finds it),\n// 429 and 5xx. Validation errors (other 4xx) are permanent: retrying the same data can't help.\nconst item = $('One at a time').first().json;\nconst step = $prevNode.name;\nconst r = $json;\nlet code, message, retryable;\nif (r.error_code) {                                  // decided upstream (vendor conflict, duplicates)\n  code = r.error_code; message = r.error_message; retryable = false;\n} else if (step === 'Rate OK?' && r.statusCode === 200) {\n  code = 'exchange_rate_unavailable'; message = `no ${item.currency} rate for ${item.exchange_rate_date}`; retryable = true;\n} else {\n  const status = r.statusCode ?? 0;\n  const fault = r.body?.Fault?.Error?.[0];\n  code = fault?.code ? `qbo_${fault.code}` : `http_${status}`;\n  message = fault ? `${fault.Message ?? ''} ${fault.Detail ?? ''}`.trim() : (r.body?.message ?? r.error?.message ?? '');\n  retryable = status === 0 || status === 401 || status === 425 || status === 429 || status >= 500;\n}\nreturn [{ json: { invoice_id: item.invoice_id, body: {\n  outcome: 'failed', error_code: code, error_message: `${step}: ${message}`.slice(0, 1000), retryable,\n  execution_id: $execution.id } } }];",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        5960,
+        560
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "report-result-core",
+      "maxTries": 3,
+      "name": "Report result (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "=http://core:8000/postings/{{ $json.invoice_id }}/result"
+      },
+      "position": [
+        6840,
+        400
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    }
+  ],
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "timezone": "Europe/Paris"
+  }
+}

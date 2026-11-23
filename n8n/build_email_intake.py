@@ -198,6 +198,15 @@ def build(cred_ids: dict | None) -> dict:
             },
         },
         label_node("Label: ready", ["ready", "processed"], [1400, -100]),
+        # Day 2: post ready invoices right away (the 15-minute schedule is the safety net).
+        # Fire and forget: the intake doesn't wait for QuickBooks.
+        {
+            "name": "Post to QuickBooks", "type": "n8n-nodes-base.executeWorkflow", "typeVersion": 1.2,
+            "position": [1620, -100], "executeOnce": True,
+            "parameters": {"source": "database",
+                           "workflowId": {"__rl": True, "value": "apPostQbo0000001", "mode": "id"},
+                           "options": {"waitForSubWorkflow": False}},
+        },
         label_node("Label: review", ["review", "processed"], [1400, 40]),
         label_node("Label: rejected", ["rejected", "processed"], [1400, 180]),
         # Technical error: AP/Error only, NOT AP/Processed (re-checked on Day 3)
@@ -219,6 +228,7 @@ def build(cred_ids: dict | None) -> dict:
         "Route intake": [[("Process invoice (core)", 0)], [("Label: no valid attachment", 0)], [("Log not for alias", 0)]],
         "Process invoice (core)": [[("Route by status", 0)], [("Label: error", 0)]],
         "Route by status": [[("Label: ready", 0)], [("Label: review", 0)], [("Label: rejected", 0)], [("Label: error", 0)]],
+        "Label: ready": [[("Post to QuickBooks", 0)]],
         "Label: error": [[("Log core error", 0)]],
         "Label: no valid attachment": [[("Log no valid attachment", 0)]],
     }

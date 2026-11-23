@@ -1,6 +1,6 @@
 # Integrations: verified behaviour (Plaid, QuickBooks Online)
 
-Each fact below was checked on **2026-11-22**: against the vendor documentation where it was readable, and with live sandbox calls in every case. The design of Day 2 depends on these facts, so if one changes, the matching design or the workflows must change too.
+Each fact below was checked on **2026-11-22** (and 2026-11-23 for the n8n posting workflow): against the vendor documentation where it was readable, and with live sandbox calls in every case. The design of Day 2 depends on these facts, so if one changes, the matching design or the workflows must change too.
 
 ## Plaid (sandbox)
 
@@ -50,6 +50,10 @@ Accounts used by default (sandbox IDs, configurable): expense **Supplies** (20),
 | The native node covers Vendor, Bill, Payment (customer), Purchase…; not BillPayment, VendorCredit, Attachable or ExchangeRate | Those use HTTP Request nodes with the same QuickBooks credential |
 | The HTTP Request node sends items **concurrently** unless batching is set | QuickBooks calls use batch size 1 |
 | QuickBooks calls must go through n8n: Intuit rotates the refresh token on every refresh | No script uses the tokens directly |
+| The native QuickBooks node can't set a vendor's `CurrencyRef` (checked in the node's source, n8n 2.48.7) | Vendors are created with an HTTP Request node, otherwise they would all be USD |
+| `requestid` is limited to **50 characters** (error 6000) | Request IDs are `ap-bill-<uuid>`, `ap-vc-<uuid>`, `ap-vendor-<n>`, `ap-billpay-<n>` (tested ≤ 50) |
+| "Never error" covers HTTP error responses, **not network errors** (a DNS failure stopped the whole run on 2026-11-23) | QuickBooks and core calls use *continue on error* + 3 tries for network errors; an item without status code is treated as retryable |
+| `query` can't select `HomeBalance` on Bill (error 4001) | Not queried; `Balance` and `ExchangeRate` are |
 
 ## Probe cleanup
 

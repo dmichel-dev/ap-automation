@@ -56,6 +56,17 @@
         ]
       ]
     },
+    "Label: ready": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Post to QuickBooks",
+            "type": "main"
+          }
+        ]
+      ]
+    },
     "Process invoice (core)": {
       "main": [
         [
@@ -466,6 +477,28 @@
       ],
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1
+    },
+    {
+      "executeOnce": true,
+      "id": "post-to-quickbooks",
+      "name": "Post to QuickBooks",
+      "parameters": {
+        "options": {
+          "waitForSubWorkflow": false
+        },
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apPostQbo0000001"
+        }
+      },
+      "position": [
+        1620,
+        -100
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2
     },
     {
       "credentials": {

@@ -39,6 +39,7 @@ class AccountingConfig:
     expense_account_id: str
     tax_account_id: str
     bank_account_id: str
+    qbo_base: str = ""                     # https://…/v3/company/<realm>
     max_attempts: int = 5
     lease_minutes: int = 10
 
@@ -140,7 +141,8 @@ def _work_item(conn, cfg: AccountingConfig, p: dict) -> dict:
         "action": "attach" if p["status"] == "posted" else "create",
         "attempt": p["attempts"] + 1,
         "object_type": p["object_type"], "entity": entity, "endpoint": entity.lower(),
-        "request_id": f"ap-{p['object_type']}-{inv['id']}",
+        # QuickBooks limits requestid to 50 characters
+        "request_id": f"ap-{'vc' if p['object_type'] == 'vendor_credit' else 'bill'}-{inv['id']}",
         "currency": inv["currency"], "home_currency": cfg.home_currency,
         "needs_exchange_rate": inv["currency"] != cfg.home_currency,
         "exchange_rate_date": inv["invoice_date"].isoformat(),
@@ -184,7 +186,7 @@ def record_result(conn, cfg: AccountingConfig, invoice_id: str, r: dict) -> tupl
             """UPDATE accounting_postings SET status = 'posted', posted_at = now(), claimed_until = NULL,
                       last_error = NULL, external_id = %s, vendor_external_id = %s, exchange_rate = %s,
                       exchange_rate_date = %s, exchange_rate_source = %s, payment_reason = %s,
-                      attachment_external_id = %s
+                      attachment_external_id = COALESCE(%s, attachment_external_id)
                 WHERE id = %s""",
             (r["external_id"], r["vendor_external_id"], rate, rate_date, source, reason,
              r.get("attachment_external_id"), p["id"]))
@@ -202,6 +204,9 @@ def record_result(conn, cfg: AccountingConfig, invoice_id: str, r: dict) -> tupl
         to_delete = _mark_file_deleted(conn, inv)
     else:                                                           # failed
         error = f"{r.get('error_code') or 'error'}: {(r.get('error_message') or '')[:500]}"
+        if r.get("error_code") in REVIEW_ERRORS:
+            r["retryable"] = False                                  # a person must decide; no blind retries
+            _open_posting_review(conn, invoice_id, r["error_code"], r.get("error_message"))
         conn.execute(
             """UPDATE accounting_postings
                   SET status = CASE WHEN status = 'posted' THEN 'posted' ELSE 'failed' END,
@@ -212,6 +217,43 @@ def record_result(conn, cfg: AccountingConfig, invoice_id: str, r: dict) -> tupl
                message="posting failed" if p["status"] != "posted" else "attachment failed", **ctx,
                details={"code": r.get("error_code"), "retryable": r.get("retryable", True)})
     return conn.execute("SELECT * FROM accounting_postings WHERE id = %s", (p["id"],)).fetchone(), to_delete
+
+
+# Posting failures that need a person (Day 3 review flow), not retries
+REVIEW_ERRORS = {
+    "vendor_currency_conflict": "A vendor with this name already exists in the accounting system in another "
+                                "currency; vendor currencies are fixed, so a different vendor must be chosen or created.",
+    "vendor_inactive": "The matching vendor in the accounting system is inactive.",
+}
+
+
+def _open_posting_review(conn, invoice_id: str, code: str, detail: str | None) -> None:
+    reason = {"code": code, "field": "supplier_name", "message": REVIEW_ERRORS[code],
+              "detail": (detail or "")[:300]}
+    row = conn.execute(
+        """INSERT INTO review_queue (invoice_id, reasons, stage) VALUES (%s, %s, 'posting')
+           ON CONFLICT (invoice_id) WHERE status = 'open' DO NOTHING RETURNING id""",
+        (invoice_id, Jsonb([reason]))).fetchone()
+    db.log(conn, step="post", level="warning", message="posting needs review", invoice_id=invoice_id,
+           details={"code": code, "review_id": row["id"] if row else None})
+
+
+def retry_posting(conn, invoice_id: str, note: str | None = None) -> dict:
+    """Operator action after a fix: a failed posting gets a fresh set of attempts."""
+    p = conn.execute("SELECT * FROM accounting_postings WHERE invoice_id = %s FOR UPDATE", (invoice_id,)).fetchone()
+    if p is None:
+        raise NotFound("no posting for this invoice")
+    if p["status"] != "failed":
+        raise Conflict(f"only a failed posting can be retried (status is {p['status']})")
+    review = conn.execute("SELECT 1 FROM review_queue WHERE invoice_id = %s AND status = 'open' AND stage = 'posting'",
+                          (invoice_id,)).fetchone()
+    if review:
+        raise Conflict("an open posting review decides this invoice")
+    conn.execute("UPDATE accounting_postings SET attempts = 0, next_attempt_at = now(), claimed_until = NULL "
+                 "WHERE id = %s", (p["id"],))
+    db.log(conn, step="post", level="info", message="posting retry requested", invoice_id=invoice_id,
+           details={"previous_error": (p["last_error"] or "")[:200], "note": (note or "")[:200]})
+    return conn.execute("SELECT * FROM accounting_postings WHERE id = %s", (p["id"],)).fetchone()
 
 
 def _mark_file_deleted(conn, inv: dict) -> str | None:

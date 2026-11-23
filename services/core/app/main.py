@@ -10,6 +10,7 @@ Day 2 (n8n does the QuickBooks/Plaid calls; the core keeps state and rules):
   POST /invoices/{id}/exclude-from-posting
   POST /postings/claim                   invoices to post now, with the document to send (leased)
   POST /postings/{invoice_id}/result     outcome of a posting / attachment
+  POST /postings/{invoice_id}/retry      operator: fresh attempts for a failed posting (logged)
   PUT  /vendor-links                     supplier + currency → accounting vendor
   PUT  /bank/accounts/{item_key}         the bank account used for matching
   GET  /bank/sync-state/{item_key}       cursor for Plaid /transactions/sync
@@ -134,6 +135,7 @@ def get_accounting_config() -> accounting.AccountingConfig:
         home_currency=s.home_currency, expense_account_id=s.qbo_expense_account_id,
         tax_account_id=s.qbo_tax_account_id, bank_account_id=s.qbo_bank_account_id,
         max_attempts=s.posting_max_attempts, lease_minutes=s.posting_lease_minutes,
+        qbo_base=f"{s.qbo_api_host.rstrip('/')}/v3/company/{s.qbo_realm_id}" if s.qbo_realm_id else "",
     )
 
 
@@ -193,7 +195,7 @@ def exclude_from_posting(invoice_id: str, body: Exclusion, cfg: AcctCfg) -> dict
 def claim_postings(cfg: AcctCfg, limit: int = 10) -> dict:
     with db.connect(cfg.database_url) as conn:
         items = accounting.claim_postings(conn, cfg, max(1, min(limit, 50)))
-    return {"count": len(items), "items": items}
+    return {"count": len(items), "qbo_base": cfg.qbo_base, "minorversion": "75", "items": items}
 
 
 class PostingResult(BaseModel):
@@ -219,6 +221,16 @@ def posting_result(invoice_id: str, body: PostingResult, cfg: AcctCfg) -> dict:
         posting, to_delete = accounting.record_result(conn, cfg, invoice_id, body.model_dump())
     accounting.delete_stored_file(cfg.storage_dir, to_delete)      # after COMMIT
     return _json(posting)
+
+
+class Retry(BaseModel):
+    note: str | None = Field(default=None, max_length=200)
+
+
+@app.post("/postings/{invoice_id}/retry", dependencies=Auth)
+def posting_retry(invoice_id: str, body: Retry, cfg: AcctCfg) -> dict:
+    with db.connect(cfg.database_url) as conn:
+        return _json(accounting.retry_posting(conn, invoice_id, body.note))
 
 
 class VendorLink(BaseModel):

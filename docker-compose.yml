@@ -90,6 +90,8 @@ services:
       FILE_STORAGE_DIR: /data/files
       FILE_RETENTION_DAYS: ${FILE_RETENTION_DAYS}
       # Day 2: accounting accounts (QuickBooks IDs) and matching rules, see docs/matching.md
+      QBO_REALM_ID: ${QBO_REALM_ID:-}
+      QBO_API_HOST: ${QBO_API_HOST:-https://sandbox-quickbooks.api.intuit.com}
       QBO_EXPENSE_ACCOUNT_ID: ${QBO_EXPENSE_ACCOUNT_ID:-20}
       QBO_TAX_ACCOUNT_ID: ${QBO_TAX_ACCOUNT_ID:-21}
       QBO_BANK_ACCOUNT_ID: ${QBO_BANK_ACCOUNT_ID:-35}
