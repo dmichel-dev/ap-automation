@@ -106,10 +106,15 @@ US_TAX = D("0.085")
 
 
 def us_invoice(
-    supplier: tuple[str, str, str], number: str, dates: tuple[str, str], lines: list, extra: str | None = None
+    supplier: tuple[str, str, str],
+    number: str,
+    dates: tuple[str, str],
+    lines: list,
+    extra: str | None = None,
+    footer: str | None = None,
 ) -> tuple[bytes, D]:
     """supplier = (name, address, tax ID and contact line); dates = (invoice, due) as MM/DD/YYYY;
-    extra = one more header line (e.g. the service period)."""
+    extra = one more header line (e.g. the service period); footer = text under the totals."""
     subtotal = sum((qty * price for _, qty, price in lines), D(0))
     tax = q(subtotal * US_TAX)
     total = subtotal + tax
@@ -137,6 +142,10 @@ def us_invoice(
             ("Total due", f"USD {fmt_en(total)}", True),
         ]
     )
+    if footer:
+        pdf.ln(8)
+        pdf.set_font("main", "", 10)
+        pdf.multi_cell(0, 6, footer)
     return bytes(pdf.output()), total
 
 
@@ -800,6 +809,25 @@ def doc_n_o() -> None:
     )
 
 
+# =====================================================================================
+# Review-page samples (core service test fixtures, not part of the end-to-end set)
+# =====================================================================================
+def review_samples() -> None:
+    """Tarnbrook invoice that asks to pay a new bank account: the review page's fraud sample.
+    The other review samples reuse invoices of the set above (see services/core/tests/review_samples.py)."""
+    lines = [("Same-day courier, flat monthly route", 1, D("80.00")), ("Saturday deliveries", 4, D("22.50"))]
+    footer = (
+        "PAYMENT DETAILS HAVE CHANGED. We have moved banks: please pay this and all future invoices to our "
+        "new account.\n"
+        "    Bank: Fictional Savings Bank (test)\n"
+        "    Routing number: 000000000    Account number: 0000-FAKE-0017\n"
+        "(Fictional document for a demo.)"
+    )
+    pdf, total = us_invoice(TARNBROOK, "TB-5547", ("11/21/2026", "12/21/2026"), lines, footer=footer)
+    assert total == D("184.45")
+    (FIXTURES / "tarnbrook_new_bank_account.pdf").write_bytes(pdf)
+
+
 if __name__ == "__main__":
     OUT.mkdir(exist_ok=True)
     for old in OUT.glob("*"):
@@ -817,5 +845,7 @@ if __name__ == "__main__":
     doc_i_k(us)
     doc_l_m()
     doc_n_o()
+    if FIXTURES.is_dir():
+        review_samples()
     for p in sorted(OUT.iterdir()):
         print(f"{p.stat().st_size:>8}  {p.name}")

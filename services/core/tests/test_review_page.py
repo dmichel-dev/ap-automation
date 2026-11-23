@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 from html import escape as _escape
 from pathlib import Path
 
+import pypdfium2 as pdfium
 import pytest
 from app import accounting, review
 from app.web import display
@@ -17,8 +18,9 @@ from app.web.reasons import REASONS
 from app.web.settings import WebSettings
 from pydantic import ValidationError
 
+from .review_samples import SAMPLES, seed
 from .test_processing import env  # noqa: F401  (fixture)
-from .test_web import INTERNAL, browser, csrf, items, q, review_row, settings, sign_in  # noqa: F401
+from .test_web import INTERNAL, add_user, browser, csrf, items, q, review_row, settings, sign_in  # noqa: F401
 
 APP = Path(review.__file__).parent
 CODE = re.compile(r"[a-z]+(_[a-z]+)*")
@@ -81,6 +83,24 @@ def page_of(c, review_id):
     return r.text
 
 
+@pytest.fixture
+def samples(clean_db, tmp_path):
+    """The five sample suppliers' review items (each its own file), a reviewer signed in."""
+    ids = seed(clean_db, tmp_path)
+    add_user(clean_db)
+    c = browser(settings(clean_db, tmp_path), INTERNAL)
+    assert sign_in(c).status_code == 303
+    return c, clean_db, ids
+
+
+def pdf_text(path):
+    pdf = pdfium.PdfDocument(path)
+    try:
+        return " ".join(page.get_textpage().get_text_range() for page in pdf)
+    finally:
+        pdf.close()
+
+
 # =====================================================================================
 # Plain-language reasons: one place, every code
 # =====================================================================================
@@ -100,14 +120,13 @@ def test_reasons_read_as_plain_language(code):
     assert sentence[0].isupper() and sentence.endswith(".")
 
 
-def test_the_item_page_explains_why_in_sentences_without_codes(items):
-    c, url, live, _demo = items
-    set_reasons(url, live, ("possible_capex", "Line 1 costs 4,800.00 USD."), ("ambiguous_date", "Printed 04/11/2026."))
-    page = page_of(c, live)
+def test_the_item_page_explains_why_in_sentences_without_codes(samples):
+    c, _url, ids = samples
+    page = page_of(c, ids["pellingham"])
     why = page[page.index('class="why') : page.index("</div>", page.index('class="why'))]
     assert "Why it needs review" in why
-    assert escape(REASONS["possible_capex"].sentence) in why and escape(REASONS["ambiguous_date"].sentence) in why
-    assert "Line 1 costs 4,800.00 USD." in why  # the core's specific detail, under the sentence
+    assert escape(REASONS["possible_capex"].sentence) in why
+    assert "line 1: item cost 4800.00 USD reaches the capitalisation threshold" in why  # the core's detail
     assert "possible_capex" not in page and "possible capex" not in page
 
 
@@ -132,13 +151,22 @@ def test_confidence_bands_follow_the_review_threshold(score, shown, level):
     assert badge.label == display.LEVEL_LABELS[level]  # the colour is always said in words too
 
 
-def test_the_badge_sits_next_to_the_extracted_data_title(items):
+def test_the_badge_shows_the_routed_score_and_says_how_it_is_made(items):
     c, _url, live, _demo = items  # the test invoice: OCR 0.97 × all required fields = 0.97
     page = page_of(c, live)
     head = page[page.index('class="extracted-head"') : page.index('class="why') if 'class="why' in page else None]
-    assert "Extracted data (OCR)" in head and "OCR confidence" in head
-    assert 'class="conf level-high"' in head and "97.00%" in head and ">high<" in head
-    assert "threshold 85.00%" in head
+    badge = head[head.index('class="conf level-high"') : head.index("</p>", head.index('class="conf level-high"'))]
+    assert "Extracted data (OCR)" in head and "OCR confidence" not in page
+    assert " ".join(re.sub(r"<[^>]+>", " ", badge.split(">", 1)[1]).split()) == "Confidence 97.00% · high"
+    assert "OCR average × required fields found · threshold 85.00%" in head
+
+
+def test_the_raw_ocr_average_stays_under_the_raw_values(samples):
+    c, _url, ids = samples  # Quillmoor: OCR 0.81 × all required fields = 0.81, below the threshold
+    page = page_of(c, ids["quillmoor"])
+    assert 'class="conf level-low"' in page and "81.00%" in page
+    raw = page[page.index("Show details: raw values") : page.index("Show details: history")]
+    assert "<dt>Raw OCR average</dt><dd>0.8100</dd>" in raw and "<dt>Required fields found</dt>" in raw
 
 
 @pytest.mark.parametrize("threshold, high, level", [(0.9, 0.98, "medium"), (0.98, 0.99, "low")])
@@ -209,12 +237,44 @@ def radios(page):
 
 
 def test_the_panel_offers_only_allowed_actions_with_approve_chosen(items):
-    c, url, live, _demo = items
+    c, _url, live, _demo = items
     assert radios(page_of(c, live)) == [("approve", "checked"), ("correct", ""), ("reject", "")]
-    set_reasons(url, live, ("possible_bank_detail_change", "New bank account requested."))
-    page = page_of(c, live)
-    assert radios(page) == [("verify", "checked"), ("reject", "")]  # fraud: verify (never approve) or reject
-    assert ">Possible fraud<" in page
+
+
+def test_a_fraud_item_has_no_action_chosen_for_the_reviewer(samples):
+    c, _url, ids = samples
+    page = page_of(c, ids["tarnbrook"])
+    assert radios(page) == [("verify", ""), ("reject", "")]  # verify (never approve) or reject, neither picked
+    assert ">Possible fraud<" in page and '<button class="go" data-needs-action>' in page
+    assert '<span class="go-none">Choose an action first</span>' in page
+    # the warning: once with the reasons, once in the decision panel (shown before any choice)
+    assert page.count("Possible fraud: the") == 2
+    panel = page[page.index('id="decision-title"') :]
+    assert panel.index('class="note fraud"') < panel.index("<fieldset>")
+
+
+def test_a_fraud_item_posted_without_an_action_is_refused_with_a_clear_error(samples):
+    c, url, ids = samples  # what a browser without scripts sends: the button isn't disabled there
+    data = {"csrf": csrf(c), "verify.account_id": "20", "verify.note": "phoned them", "reject.note": ""}
+    r = c.post(f"/items/{ids['tarnbrook']}", data=data)
+    assert r.status_code == 422
+    assert escape("Possible fraud: choose “Verified with the supplier” or “Reject”, then confirm.") in r.text
+    assert radios(r.text) == [("verify", ""), ("reject", "")]  # still nothing chosen
+    assert review_row(url, ids["tarnbrook"])["status"] == "open"
+
+
+def test_a_fraud_item_is_settled_once_the_reviewer_picks_verified(samples):
+    c, url, ids = samples
+    r = c.post(
+        f"/items/{ids['tarnbrook']}",
+        data={
+            "csrf": csrf(c),
+            "action": "verify",
+            "verify.account_id": "20",
+            "verify.note": "Called the number on file: no bank change.",
+        },
+    )
+    assert r.status_code == 303 and review_row(url, ids["tarnbrook"])["status"] == "verified"
 
 
 def test_a_decided_item_has_no_panel(items):
@@ -319,7 +379,7 @@ def test_list_rows_are_coloured_by_status_and_say_it_in_words(items):
     c, url, live, _demo = items
     assert f'<a class="row tone-review" href="/items/{live}">' in c.get("/items").text
     set_reasons(url, live, ("possible_bank_detail_change", "New bank account requested."))
-    assert f'<a class="row tone-fraud" href="/items/{live}">' in c.get("/items").text
+    assert f'<a class="row tone-fraud" href="/items/{live}">' in c.get("/items").text  # said as "Possible fraud"
     q(
         url,
         "UPDATE ap.review_queue SET status = 'approved', resolved_at = now(), reviewer = 'Rita Reviewer' WHERE id = %s",
@@ -333,3 +393,76 @@ def test_list_rows_are_coloured_by_status_and_say_it_in_words(items):
 def test_age_is_counted_in_whole_days(days, shown):
     now = datetime(2026, 11, 23, 9, 0, tzinfo=UTC)
     assert display.age((now - timedelta(days=days, hours=1)).isoformat(), now) == shown
+
+
+# =====================================================================================
+# Sample items: each supplier its own document, amount and reason
+# =====================================================================================
+@pytest.mark.parametrize("sample", SAMPLES, ids=[s.key for s in SAMPLES])
+def test_each_sample_file_shows_what_its_extraction_says(sample):
+    text = pdf_text(sample.file)
+    a = sample.annotation
+    amount = sample.total.split()[0]
+    printed = amount if a["currency"] != "€" else amount.replace(",", "X").replace(".", ",").replace("X", ".")
+    assert a["supplier_name"] in text and a["invoice_number"] in text and printed in text
+    assert "@example.com" in text and "0000" in text  # fictional contact and tax ID
+
+
+def test_the_list_shows_each_supplier_with_its_own_amount_and_reason(samples):
+    c, _url, ids = samples
+    page = c.get("/items").text
+    expected = {
+        "quillmoor": "low_confidence",
+        "tarnbrook": "possible_bank_detail_change",
+        "pellingham": "possible_capex",
+        "nubeazul": "ambiguous_date",
+        "halvercombe": "new_vendor",
+    }
+    for sample in SAMPLES:
+        start = page.index(f'href="/items/{ids[sample.key]}"')
+        row = page[start : page.index("</a>", start)]
+        assert sample.annotation["supplier_name"] in row and sample.total in row
+        assert escape(REASONS[expected[sample.key]].label) in row
+
+
+def test_each_sample_item_shows_its_own_document(samples):
+    c, _url, ids = samples
+    images = {key: c.get(f"/items/{review_id}/pages/1").content for key, review_id in ids.items()}
+    assert len(set(images.values())) == len(SAMPLES)
+
+
+# =====================================================================================
+# Header: which data this is
+# =====================================================================================
+@pytest.mark.parametrize(
+    "environment, scope, shown",
+    [
+        ("test", "live", "test data"),
+        ("test", "e2e", "test data"),
+        ("production", "live", "live data"),
+        ("production", "e2e", "end-to-end test data"),
+        ("production", "demo", "demo data"),
+    ],
+)
+def test_the_data_label_says_which_data_it_is(environment, scope, shown):
+    assert display.data_label(environment, scope)[0] == shown
+
+
+@pytest.mark.parametrize("environment, shown", [("test", "test data"), ("production", "live data")])
+def test_the_header_reflects_the_environment(items, environment, shown):
+    signed_in, url, live, _demo = items
+    s = settings(url, signed_in.app.state.settings.file_storage_dir, environment=environment)
+    c = browser(s, INTERNAL)
+    assert sign_in(c).status_code == 303
+    for page in (c.get("/items").text, page_of(c, live)):
+        who = page[page.index('class="who-role"') : page.index("</div>", page.index('class="who-role"'))]
+        assert f">{shown}</span>" in who and "Reviewer, " in who
+
+
+def test_the_environment_defaults_to_production_and_takes_nothing_else(clean_db):
+    s = WebSettings(ap_database_url=clean_db, review_listener="internal", review_origins=INTERNAL)
+    assert s.review_environment == "production"
+    with pytest.raises(ValidationError):
+        WebSettings(
+            ap_database_url=clean_db, review_listener="internal", review_origins=INTERNAL, review_environment="staging"
+        )

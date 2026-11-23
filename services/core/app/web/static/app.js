@@ -148,6 +148,15 @@ function accountCombobox(select) {
 document.addEventListener("DOMContentLoaded", () => {
   for (const select of document.querySelectorAll("select[data-combobox]")) accountCombobox(select);
 
+  // A panel without a chosen action (possible fraud: nothing is pre-selected) can't be confirmed.
+  // Without scripts the button stays enabled and the server refuses the empty choice.
+  for (const button of document.querySelectorAll("button[data-needs-action]")) {
+    const form = button.form;
+    const update = () => { button.disabled = !form.querySelector('input[name="action"]:checked'); };
+    form.addEventListener("change", update);
+    update();
+  }
+
   // Rejecting is irreversible: ask first
   for (const form of document.querySelectorAll("form[data-confirm-reject]")) {
     form.addEventListener("submit", (event) => {

@@ -116,17 +116,21 @@ def base_annotation(**overrides):
     return base
 
 
-@pytest.fixture(scope="session")
-def test_db_url():
-    url = os.environ.get("AP_TEST_DATABASE_URL")
-    if not url:
-        pytest.skip("AP_TEST_DATABASE_URL not set")
-    # Rebuild the ap schema from the migrations, once per test session
+def rebuild_schema(url: str) -> None:
+    """Drops the ap schema and builds it again from the migrations (test database only)."""
     with psycopg.connect(url, autocommit=True) as conn:
         conn.execute("DROP SCHEMA IF EXISTS ap CASCADE")
         conn.execute("CREATE SCHEMA ap")
         for f in sorted(MIGRATIONS.glob("*.sql")):
             conn.execute(f.read_text())
+
+
+@pytest.fixture(scope="session")
+def test_db_url():
+    url = os.environ.get("AP_TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("AP_TEST_DATABASE_URL not set")
+    rebuild_schema(url)  # once per test session
     return url
 
 

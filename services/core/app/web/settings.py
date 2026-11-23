@@ -18,6 +18,7 @@ from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings
 
 Listener = Literal["internal", "public"]
+Environment = Literal["production", "test"]
 LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "[::1]"})
 
 
@@ -40,6 +41,8 @@ class WebSettings(BaseSettings):
     review_listener: Listener = "public"
     review_origins: str  # comma-separated origins the page is served from, e.g. https://review.example.com
     review_trusted_proxies: str = ""  # public only: proxy addresses whose X-Forwarded-For is used
+    # What the database holds, said in the page header: "test" for a test or sample database
+    review_environment: Environment = "production"
     # Confidence badge (display only). CONFIDENCE_THRESHOLD is the core's review threshold, so red always
     # means "below the threshold the core routes on"; green starts at REVIEW_CONFIDENCE_HIGH.
     confidence_threshold: float = 0.85

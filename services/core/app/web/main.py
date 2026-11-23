@@ -69,6 +69,7 @@ ACCOUNT_GROUPS = {
     "Fixed Asset": "Fixed assets (capitalised)",
     "Other Current Asset": "Other current assets (e.g. prepaid)",
 }
+NO_ACTION_ON_FRAUD = "Possible fraud: choose “Verified with the supplier” or “Reject”, then confirm. Nothing was saved."
 ListStatus = Literal["open", "approved", "corrected", "verified", "rejected", "written_off", "all"]
 
 router = APIRouter()
@@ -319,9 +320,17 @@ def health(request: Request) -> Response:
 
 @router.get("/items")
 def items(request: Request, viewer: CurrentViewer, status: ListStatus = "open") -> Response:
-    with _connect(settings(request)) as conn:
+    s = settings(request)
+    with _connect(s) as conn:
         rows = review.list_items(conn, viewer.scope, status)
-    return _page("items.html", viewer=viewer, items=rows, current=status, statuses=get_args(ListStatus))
+    return _page(
+        "items.html",
+        viewer=viewer,
+        data_label=display.data_label(s.review_environment, viewer.scope),
+        items=rows,
+        current=status,
+        statuses=get_args(ListStatus),
+    )
 
 
 def _page_count(s: WebSettings, conn: db.Conn, data: dict[str, Any]) -> int | None:
@@ -366,6 +375,7 @@ def _item_page(
         "item.html",
         status,
         viewer=viewer,
+        data_label=display.data_label(s.review_environment, viewer.scope),
         item=data,
         inv=data["invoice"],
         account_groups=account_groups(qbo_reference.coding_accounts(conn), default and default["id"])
@@ -466,7 +476,8 @@ def _decide_in_panel(s: WebSettings, viewer: Viewer, review_id: int, form: FormD
         action = forms.chosen_action(form)
     except forms.FormError as e:
         with _connect(s) as conn:
-            return _item_page(s, conn, viewer, review_id, 422, error=str(e))
+            fraud = "verify" in review.detail(conn, review_id, viewer.scope)["actions"]
+            return _item_page(s, conn, viewer, review_id, 422, error=NO_ACTION_ON_FRAUD if fraud else str(e))
     return _decide(s, viewer, review_id, action, forms.fields_for(form, action))
 
 

@@ -29,13 +29,14 @@ EVIL = "https://evil.test"
 # =====================================================================================
 # Helpers
 # =====================================================================================
-def settings(url, storage, listener="internal", origins=INTERNAL, proxies=""):
+def settings(url, storage, listener="internal", origins=INTERNAL, proxies="", environment="test"):
     return WebSettings(
         ap_database_url=url,
         file_storage_dir=str(storage),
         review_listener=listener,
         review_origins=origins,
         review_trusted_proxies=proxies,
+        review_environment=environment,
     )
 
 

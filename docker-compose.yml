@@ -133,6 +133,7 @@ services:
       REVIEW_ORIGINS: http://localhost:8081,http://127.0.0.1:8081
       CONFIDENCE_THRESHOLD: ${CONFIDENCE_THRESHOLD}          # the core's review threshold: the badge turns red below it
       REVIEW_CONFIDENCE_HIGH: ${REVIEW_CONFIDENCE_HIGH:-0.95}
+      REVIEW_ENVIRONMENT: ${REVIEW_ENVIRONMENT:-production}  # "test" on a test database: the header says so
     volumes:
       - ap_files:/data/files     # page images are rendered from the stored originals; a rejection deletes one
     ports:

@@ -47,11 +47,12 @@
     <h2 id="extracted-title">Extracted data (OCR)</h2>
     <div class="conf-wrap">
       <p class="conf level-{{ confidence.level }}" title="Review threshold {{ confidence.threshold }}; high from {{ confidence.high_from }}">
-        <span class="conf-name">OCR confidence</span>
+        <span class="conf-name">Confidence</span>
         <strong class="conf-value">{{ confidence.percent }}</strong>
+        <span class="conf-sep" aria-hidden="true">·</span>
         <span class="conf-level">{{ confidence.label }}</span>
       </p>
-      <p class="conf-threshold">threshold {{ confidence.threshold }}</p>
+      <p class="conf-threshold">OCR average × required fields found · threshold {{ confidence.threshold }}</p>
     </div>
   </div>
 
@@ -121,7 +122,7 @@
         <div><dt>Due date as printed</dt><dd>“{{ inv.due_date_raw or "–" }}”</dd></div>
         <div><dt>Currency</dt><dd>{{ inv.currency or "–" }}</dd></div>
         <div><dt>Confidence score</dt><dd>{{ inv.confidence or "–" }}</dd></div>
-        <div><dt>OCR page average</dt><dd>{{ inv.ocr_confidence_avg or "–" }}</dd></div>
+        <div><dt>Raw OCR average</dt><dd>{{ inv.ocr_confidence_avg or "–" }}</dd></div>
         <div><dt>Required fields found</dt><dd>{{ inv.confidence_completeness or "–" }}</dd></div>
       </dl>
       <p class="hint">The confidence score is the OCR page average times the share of required fields found.</p>
@@ -146,12 +147,14 @@
 
 {% if item.actions %}
 {% set decide = "verify" if "verify" in item.actions else "approve" %}
-{% set first = decide if decide in item.actions else item.actions[0] %}
+{# A possible fraud is never pre-decided: the reviewer picks "verified" or "reject" themselves #}
+{% set first = none if decide == "verify" else (decide if decide in item.actions else item.actions[0]) %}
 {% set picked = chosen if chosen in item.actions else first %}
 <section class="decision" aria-labelledby="decision-title">
   <h2 id="decision-title">Your decision</h2>
   <form method="post" action="/items/{{ item.id }}" class="decide" data-confirm-reject="Reject this invoice? It won't be posted and its stored file will be deleted.">
     <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+    {% if decide == "verify" %}<p class="note fraud">Possible fraud: the bank details may have changed. Confirm with the supplier through a contact you already had, not one given in this document, then say how. Choose “Verified with the supplier” or “Reject”: nothing is chosen for you.</p>{% endif %}
     <fieldset>
       <legend class="sr">Choose one action</legend>
       {% for a in item.actions %}<input type="radio" class="act" name="action" value="{{ a }}" id="act-{{ a }}" {% if a == picked %}checked{% endif %}>{% endfor %}
@@ -165,7 +168,6 @@
 
       {% if decide in item.actions %}
       <div class="fields fields-{{ decide }}">
-        {% if decide == "verify" %}<p class="note fraud">Possible fraud: the bank details may have changed. Confirm with the supplier through a contact you already had, not one given in this document, then say how.</p>{% endif %}
         {% if item.blockers %}
         <div class="note">
           <p><strong>Approving now would be refused.</strong> Correct these first:</p>
@@ -232,8 +234,8 @@
       {% endif %}
 
       <div class="confirm">
-        <button class="go">
-          <span class="go-approve">Approve and post</span><span class="go-verify">Post as verified</span><span class="go-correct">Save corrections</span><span class="go-reject">Reject the invoice</span>
+        <button class="go" data-needs-action>
+          <span class="go-none">Choose an action first</span><span class="go-approve">Approve and post</span><span class="go-verify">Post as verified</span><span class="go-correct">Save corrections</span><span class="go-reject">Reject the invoice</span>
         </button>
       </div>
     </fieldset>

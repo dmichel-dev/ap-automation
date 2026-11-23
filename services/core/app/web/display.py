@@ -7,6 +7,7 @@ from typing import Any, Literal, NamedTuple
 
 Level = Literal["high", "medium", "low", "unknown"]
 Tone = Literal["review", "fraud", "ready", "closed"]
+SCOPE_LABELS = {"live": "live data", "e2e": "end-to-end test data", "demo": "demo data"}
 LEVEL_LABELS: dict[Level, str] = {
     "high": "high",
     "medium": "close to the threshold",
@@ -50,6 +51,14 @@ def confidence_badge(score: Any, threshold: float, high: float) -> ConfidenceBad
         level = "low"
     shown = "–" if score is None else percent(score)
     return ConfidenceBadge(shown, level, LEVEL_LABELS[level], percent(threshold), percent(high))
+
+
+def data_label(environment: str, scope: str) -> tuple[str, str]:
+    """(words, css class) for the header: which data the signed-in person is looking at. A test
+    environment says "test data" whatever the account's scope, so test data never reads as live."""
+    if environment == "test":
+        return "test data", "data-test"
+    return SCOPE_LABELS.get(scope, f"{scope} data"), f"data-{scope}"
 
 
 def age(created_at: str, now: datetime | None = None) -> str:

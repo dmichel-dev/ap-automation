@@ -14,7 +14,7 @@
   {% if viewer %}
   <div class="who">
     <span class="who-name">{{ viewer.display_name }}</span>
-    <span class="who-role">{{ viewer.role | capitalize }}, <span class="scope scope-{{ viewer.scope }}">{{ viewer.scope }} data</span></span>
+    <span class="who-role">{{ viewer.role | capitalize }}, <span class="scope {{ data_label[1] }}">{{ data_label[0] }}</span></span>
   </div>
   <form method="post" action="/logout" class="signout">
     <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
