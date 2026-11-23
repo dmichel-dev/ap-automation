@@ -441,7 +441,9 @@ def test_the_picker_shows_the_supplier_default_first_then_accounts_by_type(items
     known_supplier(url, account="20")  # the supplier's default account is Supplies (20)
     html = c.get(f"/items/{live}").text
     select = html[
-        html.index('<select name="account_id"') : html.index("</select>", html.index('<select name="account_id"'))
+        html.index('<select name="approve.account_id"') : html.index(
+            "</select>", html.index('<select name="approve.account_id"')
+        )
     ]
     groups = re.findall(r'<optgroup label="([^"]+)">(.*?)</optgroup>', select, re.S)
     assert [label for label, _ in groups] == ["Supplier&#39;s default", "Expenses", "Fixed assets (capitalised)"]

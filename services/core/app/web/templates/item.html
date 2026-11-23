@@ -6,187 +6,242 @@
   "subtotal": "Subtotal", "tax_total": "Tax total", "total": "Total"} %}
 {% set dates = ("invoice_date", "due_date", "service_period_start", "service_period_end") %}
 {% set amounts = ("subtotal", "tax_total", "total") %}
-{% block title %}Review #{{ item.id }}{% endblock %}
+{% set tone = item | tone %}
+{% set is_open = item.status == "open" %}
+{% block title %}{{ inv.supplier_name or "Review item" }}{% endblock %}
 {% block main %}
-<p><a href="/items">← Review items</a></p>
-<h1>{{ inv.supplier_name or "(no supplier name)" }} · {{ inv.invoice_number or "(no number)" }}</h1>
-<p class="muted">Review #{{ item.id }} · {{ item.stage }} review · <strong>{{ item.status | replace("_", " ") }}</strong>
-  · opened {{ item.created_at[:16] | replace("T", " ") }} · received by {{ inv.channel }}</p>
+<a class="back" href="/items">All review items</a>
 
-{% if done %}<p class="alert ok" role="status">{{ done }}</p>{% endif %}
-{% if error %}<p class="alert error" role="alert">{{ error }}</p>{% endif %}
+<header class="item-head">
+  <div>
+    <h1>{{ inv.supplier_name or "Supplier name missing" }}</h1>
+    <p class="item-sub">{{ "Credit note" if inv.document_type == "credit_note" else "Invoice" }} {{ inv.invoice_number or "without a number" }}{% if inv.related_invoice_number %}, for invoice {{ inv.related_invoice_number }}{% endif %}, <span class="num">{{ inv.total | money(inv.currency) }}</span></p>
+  </div>
+  <p class="state tone-{{ tone }}">{{ item | status_label }}{% if not is_open and item.reviewer %}<span class="state-by"> by {{ item.reviewer }}</span>{% endif %}</p>
+</header>
+<p class="item-meta">Opened {{ item.created_at[:10] }} ({{ item.created_at | age }}{{ " ago" if item.created_at | age != "today" }}), received by {{ inv.channel }}, {{ item.stage }} review number {{ item.id }}.</p>
+
+{% if done %}<p class="note ok" role="status">{{ done }}</p>{% endif %}
+{% if error %}<p class="note error" role="alert">{{ error }}</p>{% endif %}
 
 <div class="split">
-<section class="document" aria-label="Document">
+<section class="original" aria-labelledby="original-title">
+  <h2 id="original-title">Original invoice (as received)</h2>
+  <div class="desk">
   {% if pages is none %}
-    <p class="alert">The document can't be shown here (damaged, protected or too large).{% if inv.has_file %} You can still download the original.{% endif %}</p>
+    <p class="desk-note">The document can't be shown here: it's damaged, protected or too large.{% if inv.has_file %} You can still download the original.{% endif %}</p>
   {% elif pages == 0 %}
-    <p class="muted">The original file is no longer stored (it is deleted once attached to the bill in QuickBooks, after a rejection, or at the end of the retention period).</p>
+    <p class="desk-note">The original file is no longer stored. It's deleted once attached to the bill in QuickBooks, after a rejection, or at the end of the retention period.</p>
   {% else %}
     {% for n in range(1, pages + 1) %}
-    <img src="/items/{{ item.id }}/pages/{{ n }}" alt="Page {{ n }} of the document" loading="lazy">
+    <img src="/items/{{ item.id }}/pages/{{ n }}" alt="Page {{ n }} of the original document" loading="lazy">
     {% endfor %}
   {% endif %}
-  {% if inv.has_file %}<p><a href="/items/{{ item.id }}/original">Download the original file</a> <span class="muted">(opens outside this page)</span></p>{% endif %}
+  </div>
+  {% if inv.has_file %}<p class="download"><a href="/items/{{ item.id }}/original">Download the original file</a> <span class="muted">It opens outside this page.</span></p>{% endif %}
 </section>
 
-<section class="facts">
-  <h2>Why it needs a person</h2>
-  <ul class="reasons">
-  {% for r in item.reasons %}<li><span class="tag reason">{{ r.code | replace("_", " ") }}</span> {{ r.get("message") or "" }}</li>{% endfor %}
-  </ul>
+<div class="side">
+<section class="extracted" aria-labelledby="extracted-title">
+  <div class="extracted-head">
+    <h2 id="extracted-title">Extracted data (OCR)</h2>
+    <div class="conf-wrap">
+      <p class="conf level-{{ confidence.level }}" title="Review threshold {{ confidence.threshold }}; high from {{ confidence.high_from }}">
+        <span class="conf-name">OCR confidence</span>
+        <strong class="conf-value">{{ confidence.percent }}</strong>
+        <span class="conf-level">{{ confidence.label }}</span>
+      </p>
+      <p class="conf-threshold">threshold {{ confidence.threshold }}</p>
+    </div>
+  </div>
 
-  {% if item.blockers and item.actions %}
-  <div class="alert">
-    <strong>Approving now would be refused.</strong> Correct these first:
-    <ul>{% for b in item.blockers %}<li><span class="tag">{{ b.code | replace("_", " ") }}</span> {{ b.get("message") or "" }}</li>{% endfor %}</ul>
-    {% if inv.dates_ambiguous and inv.invoice_date_suggested %}<p class="small">A missing invoice date is solved by ticking “accept the suggested reading of the dates” when approving.</p>{% endif %}
+  {% if item.reasons %}
+  <div class="why tone-{{ tone }}">
+    <h3>{{ "Why it needs review" if is_open else "Why it was sent for review" }}</h3>
+    <ul>
+    {% for r in item.reasons %}
+      <li><p class="why-sentence">{{ (r.code | explain).sentence }}</p>{% if r.get("message") %}<p class="why-detail">{{ r.message }}</p>{% endif %}</li>
+    {% endfor %}
+    </ul>
   </div>
   {% endif %}
 
-  <h2>Invoice</h2>
-  <table class="kv">
-    <tr><th>Document type</th><td>{{ inv.document_type | replace("_", " ") }}{% if inv.related_invoice_number %} (for {{ inv.related_invoice_number }}){% endif %}</td></tr>
-    <tr><th>Supplier</th><td>{{ inv.supplier_name or "–" }}{% if inv.supplier_country %} · {{ inv.supplier_country }}{% endif %}</td></tr>
-    <tr><th>Supplier tax ID</th><td>{{ inv.supplier_tax_id or "–" }}</td></tr>
-    <tr><th>Invoice number</th><td>{{ inv.invoice_number or "–" }}</td></tr>
-    <tr><th>Invoice date</th><td>{{ inv.invoice_date or "–" }} <span class="muted">printed “{{ inv.invoice_date_raw or "–" }}”</span>
-      {% if inv.dates_ambiguous %}<br><span class="tag reason">ambiguous</span>
-        {% if inv.invoice_date_suggested %} suggested reading: <strong>{{ inv.invoice_date_suggested }}</strong> <span class="muted">({{ inv.date_suggestion_basis or "" }})</span>{% else %} no suggestion: correct the date by hand{% endif %}
-      {% endif %}</td></tr>
-    <tr><th>Due date</th><td>{{ inv.due_date or inv.due_date_suggested or "–" }} <span class="muted">printed “{{ inv.due_date_raw or "–" }}”</span></td></tr>
+  <dl class="facts">
+    <div><dt>Supplier</dt><dd>{{ inv.supplier_name or "–" }}{% if inv.supplier_country %} <span class="muted">({{ inv.supplier_country }})</span>{% endif %}</dd></div>
+    <div><dt>Supplier tax ID</dt><dd>{{ inv.supplier_tax_id or "–" }}</dd></div>
+    <div><dt>Invoice number</dt><dd>{{ inv.invoice_number or "–" }}</dd></div>
+    <div><dt>Invoice date</dt><dd>{{ inv.invoice_date or "–" }}
+      {% if inv.dates_ambiguous %}<span class="flag">{% if inv.invoice_date_suggested %}Printed “{{ inv.invoice_date_raw or "–" }}”, which reads two ways. Suggested: <strong>{{ inv.invoice_date_suggested }}</strong>{% if inv.date_suggestion_basis %} ({{ inv.date_suggestion_basis }}){% endif %}.{% else %}Printed “{{ inv.invoice_date_raw or "–" }}”, which reads two ways. Correct the date by hand.{% endif %}</span>{% endif %}</dd></div>
+    <div><dt>Due date</dt><dd>{{ inv.due_date or inv.due_date_suggested or "–" }}</dd></div>
     {% if inv.service_period_start or inv.service_period_end %}
-    <tr><th>Service period</th><td>{{ inv.service_period_start or "?" }} → {{ inv.service_period_end or "?" }}</td></tr>
+    <div><dt>Service period</dt><dd>{{ inv.service_period_start or "?" }} to {{ inv.service_period_end or "?" }}</dd></div>
     {% endif %}
-    <tr><th>Subtotal</th><td class="num">{{ inv.subtotal | money(inv.currency) }}</td></tr>
-    <tr><th>Tax</th><td class="num">{{ inv.tax_total | money(inv.currency) }}</td></tr>
-    <tr><th>Total</th><td class="num"><strong>{{ inv.total | money(inv.currency) }}</strong></td></tr>
-    <tr><th>Confidence</th><td>{{ inv.confidence or "–" }} <span class="muted">(OCR {{ inv.ocr_confidence_avg or "–" }} × completeness {{ inv.confidence_completeness or "–" }})</span></td></tr>
-    <tr><th>Expense account</th><td>{% if inv.expense_account_id %}{{ inv.expense_account_id }} ({{ inv.expense_account_source | replace("_", " ") }}){% elif item.supplier_default_account %}supplier default: {{ item.supplier_default_account.name or item.supplier_default_account.id }}{% else %}none yet: choose one when approving{% endif %}</td></tr>
-  </table>
-  <p class="muted small">Dates are shown as YYYY-MM-DD, so they can't be misread.</p>
+    <div><dt>Subtotal</dt><dd class="num">{{ inv.subtotal | money(inv.currency) }}</dd></div>
+    <div><dt>Tax</dt><dd class="num">{{ inv.tax_total | money(inv.currency) }}</dd></div>
+    <div class="total"><dt>Total</dt><dd class="num">{{ inv.total | money(inv.currency) }}</dd></div>
+    <div><dt>Expense account</dt><dd>{% if inv.expense_account_id %}{{ inv.expense_account_id }} <span class="muted">({{ inv.expense_account_source | replace("_", " ") }})</span>{% elif item.supplier_default_account %}Supplier's default: {{ item.supplier_default_account.name or item.supplier_default_account.id }}{% else %}None yet: choose one when approving{% endif %}</dd></div>
+  </dl>
+  <p class="hint">Dates are shown as year-month-day, so they can't be misread.</p>
 
-  {% if item.lines %}
-  <h2>Lines</h2>
-  <table class="list">
-    <thead><tr><th>#</th><th>Description</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Amount</th><th class="num">Tax rate</th></tr></thead>
-    <tbody>
-    {% for l in item.lines %}
-    <tr><td>{{ l.line_no }}</td><td>{{ l.description or "" }}{% if l.kind != "item" %} <span class="tag">{{ l.kind }}</span>{% endif %}</td>
-      <td class="num">{{ l.quantity | number }}</td><td class="num">{{ l.unit_price | money if l.unit_price is not none else "" }}</td>
-      <td class="num">{{ l.amount | money }}</td><td class="num">{{ l.tax_rate | number }}</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  {% endif %}
-
-  {% if item.taxes %}
-  <h2>Taxes</h2>
-  <table class="list">
-    <thead><tr><th>Type</th><th>Label</th><th class="num">Rate</th><th class="num">Base</th><th class="num">Amount</th></tr></thead>
-    <tbody>
-    {% for t in item.taxes %}
-    <tr><td>{{ t.tax_type | replace("_", " ") }}</td><td>{{ t.label or "" }}</td><td class="num">{{ t.rate | number }}</td>
-      <td class="num">{{ t.taxable_base | money if t.taxable_base is not none else "" }}</td><td class="num">{{ t.amount | money }}</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  {% endif %}
-
-  {% if item.corrections %}
-  <h2>Corrections</h2>
-  <ul class="history">
-  {% for c in item.corrections %}
-    <li><span class="muted">{{ c.at[:16] | replace("T", " ") }} · {{ c.by }}</span>
-      <ul>{% for field, value in c.after.items() %}<li>{{ labels.get(field, field) }}: “{{ c.before.get(field) if c.before.get(field) is not none else "empty" }}” → “{{ value if value is not none else "empty" }}”</li>{% endfor %}</ul>
-    </li>
-  {% endfor %}
-  </ul>
-  {% endif %}
-
-  {% if item.decision %}
-  <h2>Decision</h2>
-  <table class="kv">
-    <tr><th>Decision</th><td>{{ item.status | replace("_", " ") }} by {{ item.reviewer }} on {{ (item.resolved_at or "")[:16] | replace("T", " ") }}</td></tr>
-    {% if item.decision.get("account_id") %}<tr><th>Account</th><td>{{ item.decision.get("account_name") or item.decision.account_id }} ({{ item.decision.get("account_source", "") | replace("_", " ") }}){% if item.decision.get("supplier_default") %}, supplier default {{ item.decision.supplier_default }}{% endif %}</td></tr>{% endif %}
-  </table>
-  {% endif %}
-
-  {% if "approve" in item.actions or "verify" in item.actions %}
-  {% set verifying = "verify" in item.actions %}
-  <h2>{{ "Verified with the supplier" if verifying else "Approve" }}</h2>
-  <form method="post" action="/items/{{ item.id }}/{{ 'verify' if verifying else 'approve' }}" class="card">
-    <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
-    {% if verifying %}<p class="alert">Possible fraud: bank details may have changed. Confirm with the supplier through a contact you already had (not one given in this document), then say how.</p>{% endif %}
-    <label>Expense account
-      <input type="search" class="filter" data-filter-for="account_id" placeholder="Type to filter the accounts" aria-label="Filter the accounts">
-      <select name="account_id" id="account_id">
-        {% set chosen = inv.expense_account_id or (item.supplier_default_account.id if item.supplier_default_account else "") %}
-        {% if not chosen %}<option value="" selected>Choose an account</option>{% endif %}
-        {% for label, group in account_groups %}
-        <optgroup label="{{ label }}">
-          {% for a in group %}<option value="{{ a.id }}" {% if a.id == chosen %}selected{% endif %}>{{ a.name }}</option>{% endfor %}
-        </optgroup>
+  <div class="more-details">
+    {% if item.lines %}
+    <details>
+      <summary>Show details: line items ({{ item.lines | length }})</summary>
+      <div class="scroll"><table>
+        <thead><tr><th>#</th><th>Description</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Amount</th><th class="num">Tax rate</th></tr></thead>
+        <tbody>
+        {% for l in item.lines %}
+        <tr><td>{{ l.line_no }}</td><td>{{ l.description or "" }}{% if l.kind != "item" %} <span class="chip">{{ l.kind }}</span>{% endif %}</td>
+          <td class="num">{{ l.quantity | number }}</td><td class="num">{{ l.unit_price | money if l.unit_price is not none else "" }}</td>
+          <td class="num">{{ l.amount | money }}</td><td class="num">{{ l.tax_rate | number }}</td></tr>
         {% endfor %}
-      </select>
-    </label>
-    <fieldset>
-      <legend>Supplier's default account</legend>
-      {% if item.supplier_default_account %}
-      <label class="choice"><input type="radio" name="default" value="keep" checked> Keep {{ item.supplier_default_account.name or item.supplier_default_account.id }} as the default</label>
-      <label class="choice"><input type="radio" name="default" value="update"> Make the chosen account the new default</label>
-      {% else %}
-      <label class="choice"><input type="radio" name="default" value="keep" checked> Save the chosen account as this supplier's default</label>
-      <label class="choice"><input type="radio" name="default" value="dont"> Use it for this invoice only</label>
-      {% endif %}
-    </fieldset>
-    {% if inv.dates_ambiguous and inv.invoice_date_suggested %}
-    <label class="choice"><input type="checkbox" name="accept_suggested_dates" value="1"> Accept the suggested reading of the dates ({{ inv.invoice_date_suggested }})</label>
+        </tbody>
+      </table></div>
+    </details>
     {% endif %}
-    <label>{{ "How was it verified? (required)" if verifying else "Note (optional)" }}
-      <textarea name="note" maxlength="1000" rows="2" {% if verifying %}required minlength="10"{% endif %}></textarea>
-    </label>
-    <button class="primary">{{ "Verified: post the invoice" if verifying else "Approve: post the invoice" }}</button>
-  </form>
-  {% endif %}
-
-  {% if "correct" in item.actions %}
-  <details class="card">
-    <summary><strong>Correct a field</strong> <span class="muted">(printed or read wrongly; the item stays open)</span></summary>
-    <form method="post" action="/items/{{ item.id }}/correct" class="grid">
-      <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
-      {% for f in correctable %}
-      <label>{{ labels.get(f, f) }}
-        {% if f == "document_type" %}
-        <select name="{{ f }}">{% for v in ("invoice", "credit_note") %}<option value="{{ v }}" {% if inv[f] == v %}selected{% endif %}>{{ v | replace("_", " ") }}</option>{% endfor %}</select>
-        {% elif f in dates %}
-        <input type="date" name="{{ f }}" value="{{ inv[f] or '' }}">
-        {% elif f in amounts %}
-        <input type="text" inputmode="decimal" name="{{ f }}" value="{{ inv[f] if inv[f] is not none else '' }}" maxlength="30">
-        {% else %}
-        <input type="text" name="{{ f }}" value="{{ inv[f] or '' }}" maxlength="{{ 3 if f == 'currency' else 200 }}">
+    {% if item.taxes %}
+    <details>
+      <summary>Show details: tax lines ({{ item.taxes | length }})</summary>
+      <div class="scroll"><table>
+        <thead><tr><th>Type</th><th>Label</th><th class="num">Rate</th><th class="num">Base</th><th class="num">Amount</th></tr></thead>
+        <tbody>
+        {% for t in item.taxes %}
+        <tr><td>{{ t.tax_type | replace("_", " ") }}</td><td>{{ t.label or "" }}</td><td class="num">{{ t.rate | number }}</td>
+          <td class="num">{{ t.taxable_base | money if t.taxable_base is not none else "" }}</td><td class="num">{{ t.amount | money }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+    </details>
+    {% endif %}
+    <details>
+      <summary>Show details: raw values</summary>
+      <dl class="facts compact">
+        <div><dt>Document type</dt><dd>{{ inv.document_type | replace("_", " ") }}</dd></div>
+        <div><dt>Invoice date as printed</dt><dd>“{{ inv.invoice_date_raw or "–" }}”</dd></div>
+        <div><dt>Due date as printed</dt><dd>“{{ inv.due_date_raw or "–" }}”</dd></div>
+        <div><dt>Currency</dt><dd>{{ inv.currency or "–" }}</dd></div>
+        <div><dt>Confidence score</dt><dd>{{ inv.confidence or "–" }}</dd></div>
+        <div><dt>OCR page average</dt><dd>{{ inv.ocr_confidence_avg or "–" }}</dd></div>
+        <div><dt>Required fields found</dt><dd>{{ inv.confidence_completeness or "–" }}</dd></div>
+      </dl>
+      <p class="hint">The confidence score is the OCR page average times the share of required fields found.</p>
+    </details>
+    <details>
+      <summary>Show details: history</summary>
+      <ol class="history">
+        <li><span class="when">{{ item.created_at[:16] | replace("T", " ") }}</span> Sent for review.</li>
+        {% for c in item.corrections %}
+        <li><span class="when">{{ c.at[:16] | replace("T", " ") }}</span> Corrected by {{ c.by }}:
+          <ul>{% for field, value in c.after.items() %}<li>{{ labels.get(field, field) }} changed from “{{ c.before.get(field) if c.before.get(field) is not none else "empty" }}” to “{{ value if value is not none else "empty" }}”</li>{% endfor %}</ul>
+        </li>
+        {% endfor %}
+        {% if item.decision %}
+        <li><span class="when">{{ (item.resolved_at or "")[:16] | replace("T", " ") }}</span> {{ item | status_label }} by {{ item.reviewer }}.
+          {% if item.decision.get("account_id") %}Account {{ item.decision.get("account_name") or item.decision.account_id }} ({{ item.decision.get("account_source", "") | replace("_", " ") }}){% if item.decision.get("supplier_default") %}, supplier default {{ item.decision.supplier_default }}{% endif %}.{% endif %}</li>
         {% endif %}
-      </label>
-      {% endfor %}
-      <button>Save corrections</button>
-    </form>
-  </details>
-  {% endif %}
-
-  {% if "reject" in item.actions %}
-  <details class="card">
-    <summary><strong>Reject</strong> <span class="muted">(not posted; the stored file is deleted)</span></summary>
-    <form method="post" action="/items/{{ item.id }}/reject" data-confirm="Reject this invoice? It won't be posted and its file will be deleted.">
-      <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
-      <label>Reason (required) <textarea name="note" required minlength="3" maxlength="1000" rows="2"></textarea></label>
-      <button class="danger">Reject</button>
-    </form>
-  </details>
-  {% endif %}
-
-  {% if not item.actions and item.status == "open" %}
-  <p class="muted">This {{ item.stage }} review is decided with QuickBooks actions, which are not on this page yet.</p>
-  {% endif %}
+      </ol>
+    </details>
+  </div>
 </section>
+
+{% if item.actions %}
+{% set decide = "verify" if "verify" in item.actions else "approve" %}
+{% set first = decide if decide in item.actions else item.actions[0] %}
+{% set picked = chosen if chosen in item.actions else first %}
+<section class="decision" aria-labelledby="decision-title">
+  <h2 id="decision-title">Your decision</h2>
+  <form method="post" action="/items/{{ item.id }}" class="decide" data-confirm-reject="Reject this invoice? It won't be posted and its stored file will be deleted.">
+    <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
+    <fieldset>
+      <legend class="sr">Choose one action</legend>
+      {% for a in item.actions %}<input type="radio" class="act" name="action" value="{{ a }}" id="act-{{ a }}" {% if a == picked %}checked{% endif %}>{% endfor %}
+      <div class="choices">
+        {% if decide in item.actions %}
+        <label for="act-{{ decide }}" class="choice main">{{ "Verified with the supplier" if decide == "verify" else "Approve" }}<span>{{ "Post it once the bank details are confirmed" if decide == "verify" else "Post the bill to QuickBooks" }}</span></label>
+        {% endif %}
+        {% if "correct" in item.actions %}<label for="act-correct" class="choice">Correct the data<span>Fix what was read wrongly; the item stays open</span></label>{% endif %}
+        {% if "reject" in item.actions %}<label for="act-reject" class="choice">Reject<span>Don't post it; the stored file is deleted</span></label>{% endif %}
+      </div>
+
+      {% if decide in item.actions %}
+      <div class="fields fields-{{ decide }}">
+        {% if decide == "verify" %}<p class="note fraud">Possible fraud: the bank details may have changed. Confirm with the supplier through a contact you already had, not one given in this document, then say how.</p>{% endif %}
+        {% if item.blockers %}
+        <div class="note">
+          <p><strong>Approving now would be refused.</strong> Correct these first:</p>
+          <ul>{% for b in item.blockers %}<li>{{ (b.code | explain).sentence }}{% if b.get("message") %} <span class="muted">{{ b.message }}</span>{% endif %}</li>{% endfor %}</ul>
+          {% if inv.dates_ambiguous and inv.invoice_date_suggested %}<p class="hint">A date that reads two ways is settled by accepting the suggested reading below.</p>{% endif %}
+        </div>
+        {% endif %}
+        <label for="account_id">Expense account</label>
+        <select name="{{ decide }}.account_id" id="account_id" data-combobox aria-describedby="account-hint">
+          {% set chosen_account = inv.expense_account_id or (item.supplier_default_account.id if item.supplier_default_account else "") %}
+          {% if not chosen_account %}<option value="" selected>Choose an account</option>{% endif %}
+          {% for label, group in account_groups %}
+          <optgroup label="{{ label }}">
+            {% for a in group %}<option value="{{ a.id }}" {% if a.id == chosen_account %}selected{% endif %}>{{ a.name }}</option>{% endfor %}
+          </optgroup>
+          {% endfor %}
+        </select>
+        <p class="hint" id="account-hint">Grouped by type, with the supplier's default first.</p>
+        <fieldset class="sub">
+          <legend>Supplier's default account</legend>
+          {% if item.supplier_default_account %}
+          <label class="opt"><input type="radio" name="{{ decide }}.default" value="keep" checked> Keep {{ item.supplier_default_account.name or item.supplier_default_account.id }} as the default</label>
+          <label class="opt"><input type="radio" name="{{ decide }}.default" value="update"> Make the chosen account the new default</label>
+          {% else %}
+          <label class="opt"><input type="radio" name="{{ decide }}.default" value="keep" checked> Save the chosen account as this supplier's default</label>
+          <label class="opt"><input type="radio" name="{{ decide }}.default" value="dont"> Use it for this invoice only</label>
+          {% endif %}
+        </fieldset>
+        {% if inv.dates_ambiguous and inv.invoice_date_suggested %}
+        <label class="opt"><input type="checkbox" name="{{ decide }}.accept_suggested_dates" value="1"> Accept the suggested reading of the dates ({{ inv.invoice_date_suggested }})</label>
+        {% endif %}
+        <label for="{{ decide }}-note">{{ "How was it confirmed? Required" if decide == "verify" else "Note, optional" }}</label>
+        <textarea name="{{ decide }}.note" id="{{ decide }}-note" maxlength="1000" rows="2"></textarea>
+      </div>
+      {% endif %}
+
+      {% if "correct" in item.actions %}
+      <div class="fields fields-correct">
+        <p class="hint">Change only what was printed or read wrongly. The item stays open, so you can approve it afterwards.</p>
+        <div class="grid">
+        {% for f in correctable %}
+          <label>{{ labels.get(f, f) }}
+          {% if f == "document_type" %}
+            <select name="correct.{{ f }}">{% for v in ("invoice", "credit_note") %}<option value="{{ v }}" {% if inv[f] == v %}selected{% endif %}>{{ v | replace("_", " ") }}</option>{% endfor %}</select>
+          {% elif f in dates %}
+            <input type="date" name="correct.{{ f }}" value="{{ inv[f] or '' }}">
+          {% elif f in amounts %}
+            <input type="text" inputmode="decimal" name="correct.{{ f }}" value="{{ inv[f] if inv[f] is not none else '' }}" maxlength="30">
+          {% else %}
+            <input type="text" name="correct.{{ f }}" value="{{ inv[f] or '' }}" maxlength="{{ 3 if f == 'currency' else 200 }}">
+          {% endif %}
+          </label>
+        {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      {% if "reject" in item.actions %}
+      <div class="fields fields-reject">
+        <label for="reject-note">Reason for rejecting, required</label>
+        <textarea name="reject.note" id="reject-note" maxlength="1000" rows="2"></textarea>
+        <p class="hint">It won't be posted, and its stored file is deleted.</p>
+      </div>
+      {% endif %}
+
+      <div class="confirm">
+        <button class="go">
+          <span class="go-approve">Approve and post</span><span class="go-verify">Post as verified</span><span class="go-correct">Save corrections</span><span class="go-reject">Reject the invoice</span>
+        </button>
+      </div>
+    </fieldset>
+  </form>
+</section>
+{% elif is_open %}
+<p class="note">This {{ item.stage }} review is settled with QuickBooks actions, which aren't on this page yet.</p>
+{% endif %}
+</div>
 </div>
 {% endblock %}

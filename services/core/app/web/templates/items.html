@@ -1,30 +1,35 @@
 {% extends "base.html" %}
 {% block title %}Review items{% endblock %}
 {% block main %}
-<h1>Review items</h1>
-<nav class="tabs" aria-label="Filter by status">
-  {% for s in statuses %}<a href="/items?status={{ s }}" {% if s == current %}aria-current="page"{% endif %}>{{ s | replace("_", " ") }}</a>{% endfor %}
-</nav>
+<div class="list-head">
+  <h1>Review items</h1>
+  <nav class="tabs" aria-label="Filter by status">
+    {% for s in statuses %}<a href="/items?status={{ s }}" {% if s == current %}aria-current="page"{% endif %}>{{ s | replace("_", " ") | capitalize }}</a>{% endfor %}
+  </nav>
+</div>
 {% if items %}
-<table class="list">
-  <thead><tr><th>#</th><th>Opened</th><th>Supplier</th><th>Number</th><th>Invoice date</th><th class="num">Total</th><th>Why</th><th>Stage</th><th>Status</th></tr></thead>
-  <tbody>
+<div class="rows-head" aria-hidden="true"><span>Supplier</span><span>Why</span><span class="num">Amount</span><span class="num">Waiting</span></div>
+<ol class="rows">
   {% for i in items %}
-  <tr>
-    <td><a href="/items/{{ i.id }}">{{ i.id }}</a></td>
-    <td>{{ i.created_at[:10] }}</td>
-    <td><a href="/items/{{ i.id }}">{{ i.supplier_name or "(no supplier name)" }}</a></td>
-    <td>{{ i.invoice_number or "–" }}{% if i.document_type == "credit_note" %} <span class="tag">credit note</span>{% endif %}</td>
-    <td>{{ i.invoice_date or "–" }}</td>
-    <td class="num">{{ i.total | money(i.currency) }}</td>
-    <td>{% for r in i.reasons %}<span class="tag reason">{{ r.code | replace("_", " ") }}</span> {% endfor %}</td>
-    <td>{{ i.stage }}</td>
-    <td>{{ i.status | replace("_", " ") }}</td>
-  </tr>
+  {% set first = i.reasons[0].code | explain if i.reasons else none %}
+  <li>
+    <a class="row tone-{{ i | tone }}" href="/items/{{ i.id }}">
+      <span class="row-who">
+        <span class="row-supplier">{{ i.supplier_name or "Supplier name missing" }}</span>
+        <span class="row-number">{{ "Credit note" if i.document_type == "credit_note" else "Invoice" }} {{ i.invoice_number or "without a number" }}</span>
+      </span>
+      <span class="row-why">
+        {% if first %}<span class="badge tone-{{ i | tone }}">{{ first.label }}</span>{% endif %}
+        {% if i.reasons | length > 1 %}<span class="more">and {{ i.reasons | length - 1 }} more</span>{% endif %}
+        {% if i.status != "open" %}<span class="row-state">{{ i | status_label }}</span>{% endif %}
+      </span>
+      <span class="row-amount num">{{ i.total | money(i.currency) }}</span>
+      <span class="row-age num"><span class="sr">Opened </span>{{ i.created_at | age }}{% if i.created_at | age != "today" %}<span class="sr"> ago</span>{% endif %}</span>
+    </a>
+  </li>
   {% endfor %}
-  </tbody>
-</table>
+</ol>
 {% else %}
-<p class="muted">Nothing here.</p>
+<p class="empty">{% if current == "open" %}Nothing to review. New items appear here when an invoice needs a person.{% else %}No items with this status.{% endif %}</p>
 {% endif %}
 {% endblock %}

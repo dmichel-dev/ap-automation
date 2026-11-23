@@ -2,7 +2,7 @@
 reviewer comes from the session, never from the form, and review.py checks everything else."""
 
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, get_args
 
 from pydantic import BaseModel, ValidationError
 from starlette.datastructures import FormData
@@ -18,6 +18,25 @@ DEFAULT_CHOICES: dict[str, bool | None] = {"keep": None, "update": True, "dont":
 
 class FormError(ValueError):
     """The form can't become a decision; the message is shown on the page."""
+
+
+ACTIONS: tuple[review.Action, ...] = get_args(review.Action)
+
+
+def chosen_action(form: FormData) -> review.Action:
+    """The action picked in the decision panel; whether it's allowed on the item is the core's call."""
+    for action in ACTIONS:
+        if form.get("action") == action:
+            return action
+    raise FormError("choose what to do with this invoice")
+
+
+def fields_for(form: FormData, action: str) -> FormData:
+    """The decision panel posts every action's fields, each named "<action>.<field>" (approve.note,
+    reject.note…). Keeps the chosen action's fields, without the prefix: the same form the action's
+    own route takes, so the decision is built exactly as there."""
+    prefix = f"{action}."
+    return FormData([(k.removeprefix(prefix), v) for k, v in form.multi_items() if k.startswith(prefix)])
 
 
 def text(form: FormData, name: str) -> str:

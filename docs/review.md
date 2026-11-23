@@ -52,17 +52,16 @@ The reviewer is whoever acted: on the review page, the signed-in account ("Name 
 
 A separate web process (`review-web` container) with only the browser routes. How it is secured: [security](security.md).
 
-- **List:** open items (or decided ones, by status) with supplier, number, invoice date, total, reasons, stage.
-- **Detail:** the document on the left, rendered on the server as page images (the original is a download only). On the right:
-  - the reasons;
-  - what approving would still refuse;
-  - the invoice as stored, with the printed dates next to the read ones, and amounts with their currency;
-  - lines and taxes;
-  - every correction (who, when, before → after);
-  - the decision, once made.
-- **Approve** (or **Verified with supplier** for fraud items): an account picker over the QuickBooks chart of accounts, with a filter. The supplier's default account comes first, pre-selected. The other accounts are grouped by type: expenses, other expenses, cost of goods sold, fixed assets, other current assets. Choose whether the account becomes the supplier's default ("save as default" on a first invoice, "make it the new default" later). Tick **accept the suggested dates** when the dates were ambiguous. A note is optional, and required for verification.
-- **Correct:** the header fields, pre-filled; only the fields actually changed are sent and recorded.
-- **Reject:** a reason is required, and the page asks for confirmation.
+- **List:** one row per item: supplier and invoice number, one plain-language reason badge ("and 2 more" when there are several), the amount, and how long it has waited. A coloured edge gives the status, and the words say it too: amber needs review, red possible fraud, green approved or verified, grey otherwise.
+- **Detail:** two panels.
+  - **Original invoice (as received):** the document rendered on the server as page images; the original file is a download only.
+  - **Extracted data (OCR):** the **OCR confidence** badge next to the title, then **why it needs review** in plain sentences, then the key fields. Line items, tax lines, raw values (printed dates, the parts of the confidence score) and the history (every correction, the decision) are behind **Show details** toggles, closed by default.
+- **Plain-language reasons:** [`app/web/reasons.py`](../services/core/app/web/reasons.py) is the only place that turns a reason code into words: a short label for the list badge, a sentence for the item page. The core's specific detail (e.g. which line costs too much) is shown under the sentence. A test scans the core's source and fails if a code has no sentence.
+- **Confidence badge** (display only, nothing stored changes): the item's confidence score (OCR page average × required fields found, the score the core routes on) as a percentage with two decimals. **Red** below the review threshold (`CONFIDENCE_THRESHOLD`, the same setting the core uses, so red always means "below the threshold"), **orange** from the threshold up to `REVIEW_CONFIDENCE_HIGH`, **green** from there. The badge also says it in words (high, close to the threshold, below the threshold), and the threshold is printed under it. Both values are provisional until the threshold is calibrated on the test set.
+- **One decision panel:** a single form offering only the actions the core allows on the item, **Approve** first and pre-selected (**Verified with the supplier** for fraud items). Choosing an action shows only its fields, then one confirm button. This works without JavaScript: CSS shows the chosen action's fields. The form posts every action's fields, named `<action>.<field>`. The server keeps only the chosen action's fields and decides exactly as on that action's own route (`POST /items/{id}/{action}`, kept as is). After a refused decision, the panel stays on the action tried.
+  - **Approve / Verified:** the expense account search box. Typing suggests matching accounts, grouped by type with the supplier's default first. It is keyboard-accessible: arrows to move, Enter to choose, Escape to cancel. Without JavaScript it is a plain grouped list. Then choose whether the account becomes the supplier's default ("save as default" on a first invoice, "make it the new default" later). Tick **accept the suggested dates** when the dates were ambiguous. A note is optional, and required for verification.
+  - **Correct the data:** the header fields, pre-filled; only the fields actually changed are sent and recorded.
+  - **Reject:** a reason is required, and the page asks for confirmation.
 - A refused decision (e.g. a non-expense account, totals still wrong) shows the core's reason, and nothing is changed.
 - **Dates are shown as YYYY-MM-DD**, so they can't be misread.
 

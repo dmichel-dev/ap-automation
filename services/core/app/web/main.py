@@ -28,7 +28,7 @@ from starlette.datastructures import FormData
 
 from .. import accounting, db, qbo_reference, review
 from ..accounting import Conflict, NotFound
-from . import accounts, forms, render
+from . import accounts, display, forms, reasons, render
 from .accounts import Viewer
 from .security import email_digest, new_token, same_token
 from .settings import WebSettings
@@ -100,6 +100,10 @@ def _number(value: Any) -> str:
 TEMPLATES = Environment(loader=FileSystemLoader(HERE / "templates"), autoescape=True, undefined=StrictUndefined)
 TEMPLATES.filters["money"] = _money
 TEMPLATES.filters["number"] = _number
+TEMPLATES.filters["explain"] = reasons.explain
+TEMPLATES.filters["age"] = display.age
+TEMPLATES.filters["tone"] = display.tone
+TEMPLATES.filters["status_label"] = display.status_label
 
 
 def _page(name: str, status: int = 200, **context: Any) -> HTMLResponse:
@@ -346,8 +350,15 @@ def account_groups(accounts: list[db.Row], default_id: str | None) -> list[tuple
 
 
 def _item_page(
-    s: WebSettings, conn: db.Conn, viewer: Viewer, review_id: int, status: int = 200, **message: str | None
+    s: WebSettings,
+    conn: db.Conn,
+    viewer: Viewer,
+    review_id: int,
+    status: int = 200,
+    chosen: str | None = None,
+    **message: str | None,
 ) -> HTMLResponse:
+    """The item page; `chosen` keeps the decision panel on the action just tried (after an error)."""
     data = review.detail(conn, review_id, viewer.scope)
     deciding = bool({"approve", "verify"} & set(data["actions"]))
     default = data["supplier_default_account"]
@@ -361,6 +372,10 @@ def _item_page(
         if deciding
         else [],
         pages=_page_count(s, conn, data),
+        confidence=display.confidence_badge(
+            data["invoice"]["confidence"], s.confidence_threshold, s.review_confidence_high
+        ),
+        chosen=chosen,
         correctable=forms.CORRECTABLE,
         error=message.get("error"),
         done=message.get("done"),
@@ -433,7 +448,7 @@ def _decide(s: WebSettings, viewer: Viewer, review_id: int, action: review.Actio
         except (Conflict, forms.FormError) as e:
             conn.rollback()
             status = 422 if isinstance(e, forms.FormError) else 409
-            return _item_page(s, conn, viewer, review_id, status, error=str(e))
+            return _item_page(s, conn, viewer, review_id, status, action, error=str(e))
         conn.commit()
     accounting.delete_stored_file(Path(s.file_storage_dir), file_path)
     log.info("review item %s: %s by review user %s", review_id, action, viewer.user_id)
@@ -444,6 +459,22 @@ def _decide(s: WebSettings, viewer: Viewer, review_id: int, action: review.Actio
 async def decide(request: Request, review_id: int, action: review.Action) -> Response:
     viewer, form = await _posted(request)
     return await run_in_threadpool(_decide, settings(request), viewer, review_id, action, form)
+
+
+def _decide_in_panel(s: WebSettings, viewer: Viewer, review_id: int, form: FormData) -> Response:
+    try:
+        action = forms.chosen_action(form)
+    except forms.FormError as e:
+        with _connect(s) as conn:
+            return _item_page(s, conn, viewer, review_id, 422, error=str(e))
+    return _decide(s, viewer, review_id, action, forms.fields_for(form, action))
+
+
+@router.post("/items/{review_id}")
+async def decide_in_panel(request: Request, review_id: int) -> Response:
+    """The item page's decision panel: one form, one chosen action, decided as on that action's route."""
+    viewer, form = await _posted(request)
+    return await run_in_threadpool(_decide_in_panel, settings(request), viewer, review_id, form)
 
 
 # =====================================================================================

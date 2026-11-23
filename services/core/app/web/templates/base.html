@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}Review{% endblock %} · AP review</title>
+<title>{% block title %}Review{% endblock %} | AP review</title>
 <link rel="icon" href="/static/favicon.svg">
 <link rel="stylesheet" href="/static/app.css">
 <script src="/static/app.js" defer></script>
@@ -12,10 +12,13 @@
 <header class="top">
   <a class="brand" href="/items">AP review</a>
   {% if viewer %}
-  <span class="who">{{ viewer.display_name }} · {{ viewer.role }} · <span class="tag scope-{{ viewer.scope }}">{{ viewer.scope }} data</span></span>
-  <form method="post" action="/logout" class="inline">
+  <div class="who">
+    <span class="who-name">{{ viewer.display_name }}</span>
+    <span class="who-role">{{ viewer.role | capitalize }}, <span class="scope scope-{{ viewer.scope }}">{{ viewer.scope }} data</span></span>
+  </div>
+  <form method="post" action="/logout" class="signout">
     <input type="hidden" name="csrf" value="{{ viewer.csrf }}">
-    <button class="link">Sign out</button>
+    <button class="quiet">Sign out</button>
   </form>
   {% endif %}
 </header>

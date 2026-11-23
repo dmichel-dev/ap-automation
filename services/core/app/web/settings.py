@@ -40,6 +40,10 @@ class WebSettings(BaseSettings):
     review_listener: Listener = "public"
     review_origins: str  # comma-separated origins the page is served from, e.g. https://review.example.com
     review_trusted_proxies: str = ""  # public only: proxy addresses whose X-Forwarded-For is used
+    # Confidence badge (display only). CONFIDENCE_THRESHOLD is the core's review threshold, so red always
+    # means "below the threshold the core routes on"; green starts at REVIEW_CONFIDENCE_HIGH.
+    confidence_threshold: float = 0.85
+    review_confidence_high: float = 0.95
 
     @cached_property
     def origins(self) -> tuple[str, ...]:
@@ -70,4 +74,6 @@ class WebSettings(BaseSettings):
             raise ValueError("the public listener serves HTTPS origins only")
         for p in self.trusted_proxies:
             ip_address(p)  # ValueError if not an IP address
+        if not 0 < self.confidence_threshold <= self.review_confidence_high <= 1:
+            raise ValueError("confidence bands: 0 < CONFIDENCE_THRESHOLD <= REVIEW_CONFIDENCE_HIGH <= 1")
         return self
