@@ -7,7 +7,8 @@ set -eu
 cd "$(dirname "$0")/.."
 
 # workflow ID → committed file
-WORKFLOWS="apEmailIntake001:ap-email-intake.json apPostQbo0000001:ap-post-to-quickbooks.json"
+WORKFLOWS="apEmailIntake001:ap-email-intake.json apPostQbo0000001:ap-post-to-quickbooks.json
+  apBankSync000001:ap-bank-sync-and-match.json"
 RAW="$(mktemp)"; trap 'rm -f "$RAW"' EXIT
 
 for entry in $WORKFLOWS; do

@@ -1,0 +1,1320 @@
+{
+  "active": false,
+  "connections": {
+    "Create payment (QBO)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Payment created?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Describe failure": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Report failure (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Every hour": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Sync state (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Find existing payment (QBO)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Payment decision (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Manual run": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Sync state (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Matching OK?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Matching summary",
+            "type": "main"
+          },
+          {
+            "index": 0,
+            "node": "Split payments",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Bank sync failed",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "More pages?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Next cursor",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Run matching (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Next cursor": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Sync page (Plaid)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "One payment at a time": {
+      "main": [
+        [],
+        [
+          {
+            "index": 0,
+            "node": "Find existing payment (QBO)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Page OK?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Store page (core)",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Bank sync failed",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Payment created?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Payment ready",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Describe failure",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Payment decision (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Route payment",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Payment ready": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Record payment (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Record payment (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Recorded?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Recorded?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "One payment at a time",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Describe failure",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Report failure (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "One payment at a time",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Route payment": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Create payment (QBO)",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Payment ready",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Describe failure",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Describe failure",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Describe failure",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Run matching (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Matching OK?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Split payments": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "One payment at a time",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Start cursor": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Sync page (Plaid)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "State OK?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Start cursor",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Bank sync failed",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Store page (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Stored?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Stored?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "More pages?",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Bank sync failed",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Sync page (Plaid)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Page OK?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Sync state (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "State OK?",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "AP – Bank sync & match",
+  "nodes": [
+    {
+      "id": "every-hour",
+      "name": "Every hour",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "position": [
+        0,
+        200
+      ],
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2
+    },
+    {
+      "id": "manual-run",
+      "name": "Manual run",
+      "parameters": {},
+      "position": [
+        0,
+        400
+      ],
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "sync-state-core",
+      "maxTries": 3,
+      "name": "Sync state (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "method": "GET",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "url": "http://core:8000/bank/sync-state/plaid-sandbox"
+      },
+      "position": [
+        240,
+        300
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "state-ok",
+      "name": "State OK?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        460,
+        300
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "start-cursor",
+      "name": "Start cursor",
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cursor",
+              "name": "cursor",
+              "type": "string",
+              "value": "={{ $json.body.cursor ?? '' }}"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "mode": "manual",
+        "options": {}
+      },
+      "position": [
+        680,
+        220
+      ],
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4
+    },
+    {
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "Plaid – Sandbox"
+        }
+      },
+      "id": "sync-page-plaid",
+      "maxTries": 3,
+      "name": "Sync page (Plaid)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "jsonBody": "={{ JSON.stringify(Object.assign({ count: 500 }, $json.cursor ? { cursor: $json.cursor } : {})) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "https://sandbox.plaid.com/transactions/sync"
+      },
+      "position": [
+        900,
+        300
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "page-ok",
+      "name": "Page OK?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1120,
+        300
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "store-page-core",
+      "maxTries": 3,
+      "name": "Store page (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ added: $json.body.added, modified: $json.body.modified, removed: $json.body.removed, next_cursor: $json.body.next_cursor, has_more: $json.body.has_more }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "http://core:8000/bank/sync-page/plaid-sandbox"
+      },
+      "position": [
+        1340,
+        220
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "stored",
+      "name": "Stored?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1560,
+        220
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "more-pages",
+      "name": "More pages?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ !$json.body.cursor_saved }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1780,
+        140
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "next-cursor",
+      "name": "Next cursor",
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cursor",
+              "name": "cursor",
+              "type": "string",
+              "value": "={{ $('Sync page (Plaid)').first().json.body.next_cursor }}"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "mode": "manual",
+        "options": {}
+      },
+      "position": [
+        2000,
+        40
+      ],
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4
+    },
+    {
+      "id": "bank-sync-failed",
+      "name": "Bank sync failed",
+      "parameters": {
+        "errorMessage": "={{ 'bank run stopped (HTTP ' + ($json.statusCode ?? 'no response') + '): ' + ($json.body?.error_code ?? $json.body?.detail ?? $json.error?.message ?? '') + ' (Plaid error codes are upper case; the next run restarts from the saved cursor)' }}"
+      },
+      "position": [
+        1340,
+        480
+      ],
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "run-matching-core",
+      "maxTries": 3,
+      "name": "Run matching (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "url": "http://core:8000/matching/run/plaid-sandbox"
+      },
+      "position": [
+        2000,
+        260
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "matching-ok",
+      "name": "Matching OK?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        2220,
+        260
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "matching-summary",
+      "name": "Matching summary",
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "open_bills",
+              "name": "open_bills",
+              "type": "string",
+              "value": "={{ String($json.body.open_bills) }}"
+            },
+            {
+              "id": "accepted",
+              "name": "accepted",
+              "type": "string",
+              "value": "={{ String($json.body.accepted) }}"
+            },
+            {
+              "id": "ambiguous",
+              "name": "ambiguous",
+              "type": "string",
+              "value": "={{ String($json.body.ambiguous) }}"
+            },
+            {
+              "id": "unmatched",
+              "name": "unmatched",
+              "type": "string",
+              "value": "={{ String($json.body.unmatched) }}"
+            },
+            {
+              "id": "fx_match_pending",
+              "name": "fx_match_pending",
+              "type": "string",
+              "value": "={{ String($json.body.fx_match_pending) }}"
+            },
+            {
+              "id": "payments_due",
+              "name": "payments_due",
+              "type": "string",
+              "value": "={{ String($json.body.payments_due.length) }}"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "mode": "manual",
+        "options": {}
+      },
+      "position": [
+        2440,
+        120
+      ],
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4
+    },
+    {
+      "id": "split-payments",
+      "name": "Split payments",
+      "parameters": {
+        "fieldToSplitOut": "body.payments_due",
+        "options": {}
+      },
+      "position": [
+        2440,
+        300
+      ],
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1
+    },
+    {
+      "id": "one-payment-at-a-time",
+      "name": "One payment at a time",
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "position": [
+        2660,
+        300
+      ],
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3
+    },
+    {
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "name": "QuickBooks – Sandbox US"
+        }
+      },
+      "id": "find-existing-payment-qbo",
+      "maxTries": 3,
+      "name": "Find existing payment (QBO)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "method": "GET",
+        "nodeCredentialType": "quickBooksOAuth2Api",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchInterval": 300,
+              "batchSize": 1
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "minorversion",
+              "value": "={{ $('Run matching (core)').first().json.body.minorversion }}"
+            },
+            {
+              "name": "query",
+              "value": "={{ \"select Id, VendorRef, TotalAmt from BillPayment where DocNumber = '\" + $('One payment at a time').first().json.doc_number_q + \"'\" }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "sendQuery": true,
+        "url": "={{ $('Run matching (core)').first().json.body.qbo_base }}/query"
+      },
+      "position": [
+        2880,
+        320
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "payment-decision-core",
+      "maxTries": 3,
+      "name": "Payment decision (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ status_code: $json.statusCode ?? 0, body: $json.body ?? null }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "=http://core:8000/matches/{{ $('One payment at a time').first().json.match_id }}/lookup"
+      },
+      "position": [
+        3100,
+        320
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "route-payment",
+      "name": "Route payment",
+      "parameters": {
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "core error"
+        },
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.body?.decision === 'create' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "create",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.body?.decision === 'exists' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "exists",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.body?.decision === 'review' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "review",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.body?.decision === 'error' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "error",
+              "renameOutput": true
+            }
+          ]
+        }
+      },
+      "position": [
+        3320,
+        320
+      ],
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2
+    },
+    {
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "name": "QuickBooks – Sandbox US"
+        }
+      },
+      "id": "create-payment-qbo",
+      "maxTries": 3,
+      "name": "Create payment (QBO)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "jsonBody": "={{ JSON.stringify($('One payment at a time').first().json.document) }}",
+        "method": "POST",
+        "nodeCredentialType": "quickBooksOAuth2Api",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchInterval": 300,
+              "batchSize": 1
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "minorversion",
+              "value": "={{ $('Run matching (core)').first().json.body.minorversion }}"
+            },
+            {
+              "name": "requestid",
+              "value": "={{ $('One payment at a time').first().json.request_id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "sendHeaders": true,
+        "sendQuery": true,
+        "specifyBody": "json",
+        "url": "={{ $('Run matching (core)').first().json.body.qbo_base }}/billpayment"
+      },
+      "position": [
+        3540,
+        200
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "payment-created",
+      "name": "Payment created?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 && !!$json.body?.BillPayment?.Id }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        3760,
+        200
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "payment-ready",
+      "name": "Payment ready",
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "external_id",
+              "name": "external_id",
+              "type": "string",
+              "value": "={{ String($json.body.external_id ?? $json.body.BillPayment.Id) }}"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "mode": "manual",
+        "options": {}
+      },
+      "position": [
+        3980,
+        300
+      ],
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "record-payment-core",
+      "maxTries": 3,
+      "name": "Record payment (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ external_payment_id: $json.external_id, execution_id: $execution.id }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "=http://core:8000/matches/{{ $('One payment at a time').first().json.match_id }}/payment"
+      },
+      "position": [
+        4200,
+        300
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "recorded",
+      "name": "Recorded?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        4420,
+        300
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "describe-failure",
+      "name": "Describe failure",
+      "parameters": {
+        "jsCode": "// Facts about the step that failed. The core decides what they mean (retry later, stop, review).\nconst NAMED = {};   // steps that answered 200 without the expected data\nconst step = $prevNode.name;\nconst r = $json;\nconst b = r.body ?? {};\nlet facts;\nif (b.decision) {          // the core's answer to a lookup: review, or QuickBooks query error\n  facts = { error_code: b.error_code, error_message: b.error_message, http_status: b.http_status,\n            fault_code: b.fault_code };\n} else {                   // a QuickBooks or core call that failed\n  const fault = b.Fault?.Error?.[0];\n  facts = { http_status: r.statusCode ?? 0, fault_code: fault?.code ?? null,\n            error_message: fault ? `${fault.Message ?? ''} ${fault.Detail ?? ''}`.trim()\n                                 : String(b.message ?? b.detail ?? r.error?.message ?? '') };\n  if (NAMED[step] && r.statusCode === 200) facts.error_code = NAMED[step];\n}\nreturn [{ json: { match_id: $('One payment at a time').first().json.match_id, body: {\n  ...{}, ...facts, error_message: `${step}: ${facts.error_message ?? ''}`.slice(0, 1000),\n  execution_id: $execution.id } } }];",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        4200,
+        560
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "report-failure-core",
+      "maxTries": 3,
+      "name": "Report failure (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "=http://core:8000/matches/{{ $json.match_id }}/payment-failed"
+      },
+      "position": [
+        4420,
+        560
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    }
+  ],
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "timezone": "Europe/Paris"
+  }
+}

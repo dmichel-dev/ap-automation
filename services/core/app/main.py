@@ -19,6 +19,8 @@ Day 2 (n8n does the QuickBooks/Plaid calls; the core keeps state and rules):
   POST /bank/sync-page/{item_key}        one page of /transactions/sync
   POST /matching/run/{item_key}          deterministic matching → payments to record (leased)
   POST /matches/{id}/payment             payment recorded in the accounting system
+  POST /matches/{id}/lookup              QuickBooks BillPayment search → reuse / create
+  POST /matches/{id}/payment-failed      failure facts → retried or stopped (core decides)
 """
 
 import hmac
@@ -208,26 +210,38 @@ def exclude_from_posting(invoice_id: str, body: Exclusion, cfg: AcctCfg) -> Json
         return _json(accounting.exclude_from_posting(conn, invoice_id, body.reason, body.note))
 
 
+QBO_MINOR_VERSION = "75"
+
+
+def _qbo_target(cfg: accounting.AccountingConfig) -> JsonDict:
+    """Where the workflow sends QuickBooks calls (company URL and API minor version)."""
+    return {"qbo_base": cfg.qbo_base, "minorversion": QBO_MINOR_VERSION}
+
+
 @app.post("/postings/claim", dependencies=Auth)
 def claim_postings(cfg: AcctCfg, limit: int = 10) -> JsonDict:
     with db.connect(cfg.database_url) as conn:
         items = accounting.claim_postings(conn, cfg, max(1, min(limit, 50)))
-    return {"count": len(items), "qbo_base": cfg.qbo_base, "minorversion": "75", "items": items}
+    return {"count": len(items), **_qbo_target(cfg), "items": items}
 
 
-class PostingResult(BaseModel):
+class FailureFacts(BaseModel):
+    """What the workflow saw when a step failed; the core decides what it means (retry, stop, review)."""
+
+    error_code: str | None = Field(default=None, max_length=100)  # a failure named by the workflow
+    error_message: str | None = Field(default=None, max_length=2000)
+    http_status: int | None = Field(default=None, ge=0, le=599)  # 0 = no response (network error)
+    fault_code: str | None = Field(default=None, max_length=20)  # QuickBooks Fault.Error[0].code
+    execution_id: str | None = Field(default=None, max_length=100)
+
+
+class PostingResult(FailureFacts):
     outcome: Literal["posted", "attached", "failed"]
     external_id: str | None = Field(default=None, max_length=50)
     vendor_external_id: str | None = Field(default=None, max_length=50)
     exchange_rate: Decimal | None = Field(default=None, gt=0)
     exchange_rate_date: date | None = None
     attachment_external_id: str | None = Field(default=None, max_length=50)
-    # Failure facts; the core decides what they mean (retry, stop, review)
-    error_code: str | None = Field(default=None, max_length=100)  # a failure named by the workflow
-    error_message: str | None = Field(default=None, max_length=2000)
-    http_status: int | None = Field(default=None, ge=0, le=599)  # 0 = no response (network error)
-    fault_code: str | None = Field(default=None, max_length=20)  # QuickBooks Fault.Error[0].code
-    execution_id: str | None = Field(default=None, max_length=100)
 
 
 @app.post("/postings/{invoice_id}/result", dependencies=Auth)
@@ -343,12 +357,24 @@ def bank_sync_page(item_key: str, body: SyncPage, cfg: AcctCfg) -> JsonDict:
 @app.post("/matching/run/{item_key}", dependencies=Auth)
 def matching_run(item_key: str, cfg: AcctCfg, rules: Annotated[matching.Rules, Depends(get_rules)]) -> JsonDict:
     with db.connect(cfg.database_url) as conn:
-        return accounting.run_matching(conn, cfg, item_key, rules)
+        return {**accounting.run_matching(conn, cfg, item_key, rules), **_qbo_target(cfg)}
 
 
 class PaymentRecorded(BaseModel):
     external_payment_id: str = Field(min_length=1, max_length=50)
     execution_id: str | None = Field(default=None, max_length=100)
+
+
+@app.post("/matches/{match_id}/lookup", dependencies=Auth)
+def match_payment_lookup(match_id: int, body: Lookup, cfg: AcctCfg) -> JsonDict:
+    with db.connect(cfg.database_url) as conn:
+        return asdict(accounting.payment_lookup_decision(conn, match_id, body.status_code, body.body))
+
+
+@app.post("/matches/{match_id}/payment-failed", dependencies=Auth)
+def match_payment_failed(match_id: int, body: FailureFacts, cfg: AcctCfg) -> JsonDict:
+    with db.connect(cfg.database_url) as conn:
+        return _json(accounting.record_payment_failure(conn, cfg, match_id, body.model_dump()))
 
 
 @app.post("/matches/{match_id}/payment", dependencies=Auth)

@@ -263,8 +263,10 @@ def _record_posted(conn: Conn, cfg: AccountingConfig, p: Row, inv: Row, r: Row, 
     rate, rate_date, source = _exchange_rate(cfg, p, inv, r)
     reason = None
     if p["object_type"] == "bill":
-        account_ccy = _account_currency(conn)
-        reason = "fx_match_pending" if account_ccy and account_ccy != p["currency"] else "no_match_yet"
+        # Until FX matching (Day 4), only bills in the bank account's currency can be matched. Before any
+        # bank account is registered, the payments account is assumed to be in the home currency.
+        account_ccy = _account_currency(conn) or cfg.home_currency
+        reason = "fx_match_pending" if p["currency"] != account_ccy else "no_match_yet"
     conn.execute(
         """UPDATE accounting_postings SET status = 'posted', posted_at = now(), claimed_until = NULL,
                   last_error = NULL, external_id = %s, vendor_external_id = %s, exchange_rate = %s,
@@ -762,11 +764,15 @@ def payments_due(conn: Conn, cfg: AccountingConfig) -> list[Row]:
                 "match_id": m["id"],
                 "invoice_id": str(m["invoice_id"]),
                 "request_id": f"ap-billpay-{m['id']}",
+                "doc_number": payment_doc_number(m["id"]),
+                "doc_number_q": postings.qbo_quote(payment_doc_number(m["id"])),
+                "vendor_external_id": m["vendor_external_id"],
                 "bank_amount": str(m["bank_amount"]),
                 "bill_amount": str(m["bill_amount"]),
                 "difference": str(m["difference"]),
                 "document": {
                     "VendorRef": {"value": m["vendor_external_id"]},
+                    "DocNumber": payment_doc_number(m["id"]),  # found again after a crash (see lookup)
                     "PayType": "Check",
                     "CheckPayment": {"BankAccountRef": {"value": cfg.bank_account_id}, "PrintStatus": "NotSet"},
                     "CurrencyRef": {"value": m["currency"]},
@@ -781,19 +787,62 @@ def payments_due(conn: Conn, cfg: AccountingConfig) -> list[Row]:
     return out
 
 
-def record_payment(conn: Conn, match_id: int, external_payment_id: str, execution_id: str | None = None) -> Row:
+def payment_doc_number(match_id: int) -> str:
+    return f"AP-PAY-{match_id}"
+
+
+def _accepted_match(conn: Conn, match_id: int) -> Row:
     m = conn.execute("SELECT * FROM matches WHERE id = %s FOR UPDATE", (match_id,)).fetchone()
     if m is None:
         raise NotFound("unknown match")
     if m["status"] != "accepted":
         raise Conflict("only an accepted match can be paid")
+    return m
+
+
+def payment_lookup_decision(conn: Conn, match_id: int, status: int, body: Any) -> postings.Decision:
+    """A bill payment with this match's number may exist already (a run that stopped after creating it)."""
+    m = _accepted_match(conn, match_id)
+    vendor = _posting_of(conn, m["invoice_id"])["vendor_external_id"]
+    return postings.existing_document_decision(status, body, "BillPayment", str(vendor))
+
+
+def record_payment_failure(conn: Conn, cfg: AccountingConfig, match_id: int, r: Row) -> Row:
+    """The payment couldn't be recorded: retried while attempts remain, unless the failure says otherwise."""
+    m = _accepted_match(conn, match_id)
+    code, retryable = postings.classify_failure(
+        r.get("error_code"), r.get("http_status"), r.get("fault_code"), REVIEW_ERRORS
+    )
+    if code in REVIEW_ERRORS:
+        _open_posting_review(conn, str(m["invoice_id"]), code, r.get("error_message"))
+    conn.execute(
+        """UPDATE matches SET payment_claimed_until = NULL, payment_last_error = %s,
+                  payment_attempts = CASE WHEN %s THEN payment_attempts ELSE %s END
+            WHERE id = %s""",
+        (f"{code}: {(r.get('error_message') or '')[:500]}", retryable, cfg.max_attempts, match_id),
+    )
+    db.log(
+        conn,
+        step="match",
+        level="warning" if retryable else "error",
+        message="payment not recorded",
+        invoice_id=str(m["invoice_id"]),
+        channel="system",
+        execution_id=r.get("execution_id"),
+        details={"code": code, "retryable": retryable, "match_id": match_id},
+    )
+    return db.one(conn, "SELECT * FROM matches WHERE id = %s", (match_id,))
+
+
+def record_payment(conn: Conn, match_id: int, external_payment_id: str, execution_id: str | None = None) -> Row:
+    m = _accepted_match(conn, match_id)
     if m["external_payment_id"]:
         if m["external_payment_id"] != external_payment_id:
             raise Conflict(f"payment already recorded as {m['external_payment_id']}")
         return _posting_of(conn, m["invoice_id"])
     conn.execute(
         "UPDATE matches SET external_payment_id = %s, payment_recorded_at = now(), "
-        "payment_claimed_until = NULL WHERE id = %s",
+        "payment_claimed_until = NULL, payment_last_error = NULL WHERE id = %s",
         (external_payment_id, match_id),
     )
     applied = min(m["bank_amount"], m["invoice_amount"])

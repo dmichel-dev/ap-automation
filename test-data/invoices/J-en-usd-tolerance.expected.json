@@ -1,0 +1,21 @@
+{
+  "id": "J-en-usd-tolerance",
+  "file": "J-en-usd-tolerance.pdf",
+  "email": {
+    "subject": "Invoice FJ-2207 – Fenwhistle Janitorial Supply Co.",
+    "body": "Hello,\n\nplease find attached invoice FJ-2207 for USD 1,212.50, due 12/16/2026.\n\nBest regards,\nFenwhistle Janitorial Supply Co. (fictional test supplier)"
+  },
+  "expect": {
+    "status": "ready",
+    "reasons": [],
+    "document_type": "invoice",
+    "invoice_number": "FJ-2207",
+    "currency": "USD",
+    "total": "1212.50",
+    "invoice_date": "2026-11-16",
+    "due_date": "2026-12-16",
+    "supplier_country": "US",
+    "min_lines": 2
+  },
+  "note": "Bank: $1,212.00 paid for $1,212.50 → within the $1.00 tolerance, accepted; difference stored."
+}

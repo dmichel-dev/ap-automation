@@ -44,7 +44,7 @@ Three levels, from fastest to most realistic:
 
 | Level | What it covers | Command |
 |---|---|---|
-| Unit + integration (291) | Normalization, validation, totals, dates, duplicates, email screening, posting content and decisions, matching, the full pipeline on a test database | `docker compose run --rm core-test` |
+| Unit + integration (296) | Normalization, validation, totals, dates, duplicates, email screening, posting content and decisions, matching, the full pipeline on a test database | `docker compose run --rm core-test` |
 | Live provider (3) | Real Mistral OCR calls on a fictional invoice | `docker compose run --rm core-test pytest -m live` |
 | End to end (8 emails) | Gmail → n8n → core → database → Gmail labels | send the test set, then `scripts/run_e2e.sh --since <start time>` |
 
@@ -69,7 +69,7 @@ Every commit runs [pre-commit](https://pre-commit.com) (`.pre-commit-config.yaml
 
 ## Updating the n8n workflow
 
-The workflows are generated from code (`n8n/build_email_intake.py`, `n8n/build_post_qbo.py`) and committed without credentials. After a change made in the n8n editor, `scripts/export_workflow.sh` exports the live workflows, strips credential IDs and instance data, refuses to write a file if a secret scan matches, and shows the diff.
+The workflows are generated from code (`n8n/build_email_intake.py`, `n8n/build_post_qbo.py`, `n8n/build_bank_sync.py`) and committed without credentials. After a change made in the n8n editor, `scripts/export_workflow.sh` exports the live workflows, strips credential IDs and instance data, refuses to write a file if a secret scan matches, and shows the diff.
 
 ## Repository layout
 

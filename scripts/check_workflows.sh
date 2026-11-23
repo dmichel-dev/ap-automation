@@ -5,7 +5,8 @@
 set -eu
 cd "$(dirname "$0")/.."
 status=0
-for pair in build_email_intake.py:ap-email-intake.json build_post_qbo.py:ap-post-to-quickbooks.json; do
+for pair in build_email_intake.py:ap-email-intake.json build_post_qbo.py:ap-post-to-quickbooks.json \
+    build_bank_sync.py:ap-bank-sync-and-match.json; do
   if ! python3 "n8n/${pair%%:*}" | cmp -s - "n8n/workflows/${pair#*:}"; then
     echo "n8n/workflows/${pair#*:} differs from the output of n8n/${pair%%:*}"; status=1
   fi

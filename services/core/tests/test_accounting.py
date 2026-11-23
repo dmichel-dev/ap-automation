@@ -552,3 +552,64 @@ def test_duplicate_in_accounting_opens_a_review_on_the_invoice_number(cfg):
     result(cfg, inv, outcome="failed", error_code="duplicate_in_accounting", error_message="2 Bill records")
     review = sql(cfg, "SELECT stage, reasons FROM ap.review_queue WHERE invoice_id = %s", inv)[0]
     assert review["stage"] == "posting" and review["reasons"][0]["field"] == "invoice_number"
+
+
+def test_foreign_bill_posted_before_any_bank_account_waits_for_fx(cfg):
+    """KS-2026-088 (JPY) was posted before a bank account was registered and got no_match_yet."""
+    inv = make_invoice(
+        cfg,
+        number="KS-1",
+        currency="JPY",
+        supplier="架空商事",
+        key_name="架空商事",
+        lines=("16500",),
+        taxes=("1635",),
+        total="18135",
+    )
+    claim(cfg)
+    p = post_ok(cfg, inv, exchange_rate="0.006306", exchange_rate_date="2026-11-20")
+    assert p["payment_reason"] == "fx_match_pending"  # home currency USD assumed for payments
+
+
+def test_home_currency_bill_posted_before_any_bank_account_waits_for_a_match(cfg):
+    inv = make_invoice(cfg)
+    claim(cfg)
+    assert post_ok(cfg, inv)["payment_reason"] == "no_match_yet"
+
+
+# =====================================================================================
+# Bill payments: found again after a crash, failures classified by the core
+# =====================================================================================
+def due_payment(cfg):
+    register_bank(cfg)
+    inv = posted_bill(cfg)
+    bank_page(cfg, plaid_tx("t1", 641.24))
+    return inv, run(cfg)["payments_due"][0]
+
+
+def test_payment_carries_a_number_to_find_it_again(cfg):
+    _, pay = due_payment(cfg)
+    assert pay["doc_number"] == f"AP-PAY-{pay['match_id']}" == pay["document"]["DocNumber"]
+    assert pay["vendor_external_id"] == pay["document"]["VendorRef"]["value"] == "55"
+
+
+def test_payment_lookup_reuses_an_existing_payment(cfg):
+    _, pay = due_payment(cfg)
+    c, url = TestClient(app), f"/matches/{pay['match_id']}/lookup"
+    none: dict[str, dict[str, object]] = {"QueryResponse": {}}
+    assert c.post(url, headers=AUTH, json={"status_code": 200, "body": none}).json()["decision"] == "create"
+    found = {"QueryResponse": {"BillPayment": [{"Id": "88", "VendorRef": {"value": "55"}}]}}
+    r = c.post(url, headers=AUTH, json={"status_code": 200, "body": found}).json()
+    assert (r["decision"], r["external_id"]) == ("exists", "88")
+
+
+def test_payment_failure_retryable_or_not(cfg):
+    inv, pay = due_payment(cfg)
+    c, url = TestClient(app), f"/matches/{pay['match_id']}/payment-failed"
+    r = c.post(url, headers=AUTH, json={"http_status": 503, "error_message": "unavailable"})
+    assert r.status_code == 200 and r.json()["payment_attempts"] == 1 and r.json()["payment_claimed_until"] is None
+    assert [p["match_id"] for p in run(cfg)["payments_due"]] == [pay["match_id"]]  # retried at once (lease cleared)
+    r = c.post(url, headers=AUTH, json={"http_status": 400, "fault_code": "6000", "error_message": "bad"})
+    assert r.json()["payment_attempts"] == cfg.max_attempts and r.json()["payment_last_error"].startswith("qbo_6000")
+    assert run(cfg)["payments_due"] == []  # stopped: a person looks at it
+    assert posting(cfg, inv)["payment_status"] == "unpaid"

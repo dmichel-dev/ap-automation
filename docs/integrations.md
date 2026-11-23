@@ -54,6 +54,8 @@ Accounts used by default (sandbox IDs, configurable): expense **Supplies** (20),
 | `requestid` is limited to **50 characters** (error 6000) | Request IDs are `ap-bill-<uuid>`, `ap-vc-<uuid>`, `ap-vendor-<n>`, `ap-billpay-<n>` (tested ≤ 50) |
 | "Never error" covers HTTP error responses, **not network errors** (a DNS failure stopped the whole run on 2026-11-23) | QuickBooks and core calls use *continue on error* + 3 tries for network errors; an item without status code is treated as retryable |
 | `query` can't select `HomeBalance` on Bill (error 4001) | Not queried; `Balance` and `ExchangeRate` are |
+| A *Custom Auth* credential's `body` is merged into the JSON body of each request (checked live with `/accounts/get` and `/transactions/sync`) | The Plaid access token and keys live only in the encrypted n8n credential "Plaid – Sandbox"; workflow JSON never contains them |
+| `$('Node').first()` inside a loop returns the node's latest run | The sync loop reads the next cursor this way; tested with 4 pages of 100 (cursor saved only after the last page, no duplicate rows) |
 
 ## Probe cleanup
 

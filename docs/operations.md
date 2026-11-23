@@ -54,6 +54,17 @@ docker compose up -d --build core
 
 Migration 004 (Day 2) was applied this way on 2026-11-22, after backup `pg_dumpall_20261122-172709.sql`.
 
+## Bank connection (Plaid sandbox)
+
+```bash
+python3 scripts/plaid_sandbox.py setup [--replace]        # test bank login, checking account registered in the core,
+                                                         # token in .env + n8n credential "Plaid – Sandbox" (never printed)
+python3 scripts/plaid_sandbox.py transactions test-data/bank/day2-transactions.json   # custom test transactions
+python3 scripts/plaid_sandbox.py remove
+```
+
+The workflow **AP – Bank sync & match** runs every hour (or by hand). A failed sync page stops the run; the next run restarts from the saved cursor. A bill payment that fails is retried on later runs while attempts remain; a permanent failure stops it (`matches.payment_last_error`), and a review item is opened when the failure needs a person.
+
 ## Keeping an invoice out of accounting
 
 `POST /invoices/{id}/exclude-from-posting` with `{"reason": "superseded_test_data" | "manual", "note": "…"}`. It is logged and refused once the invoice is posted (reverse it in QuickBooks instead).

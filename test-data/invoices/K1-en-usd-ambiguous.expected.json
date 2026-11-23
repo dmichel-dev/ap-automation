@@ -1,0 +1,21 @@
+{
+  "id": "K1-en-usd-ambiguous",
+  "file": "K1-en-usd-ambiguous.pdf",
+  "email": {
+    "subject": "Invoice TB-5531 – Tarnbrook Courier Services LLC",
+    "body": "Hello,\n\nplease find attached invoice TB-5531 for USD 86.80, due 12/13/2026.\n\nBest regards,\nTarnbrook Courier Services LLC (fictional test supplier)"
+  },
+  "expect": {
+    "status": "ready",
+    "reasons": [],
+    "document_type": "invoice",
+    "invoice_number": "TB-5531",
+    "currency": "USD",
+    "total": "86.80",
+    "invoice_date": "2026-11-13",
+    "due_date": "2026-12-13",
+    "supplier_country": "US",
+    "min_lines": 1
+  },
+  "note": "Two bills of $86.80 from the same supplier, one bank payment of $86.80 without an invoice number → ambiguous: no payment recorded, left for a person."
+}

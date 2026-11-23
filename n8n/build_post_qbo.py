@@ -23,14 +23,15 @@ from typing import Any
 from nodes import (
     CORE,
     FULL_RESPONSE,
-    NETWORK_RETRY,
     Connections,
     Node,
     code_node,
     core_call,
+    describe_failure_js,
     if_node,
-    json_body,
     main,
+    qbo_call,
+    qbo_send,
     set_node,
     switch_node,
     workflow,
@@ -46,34 +47,7 @@ PASS_THROUGH = "status_code: $json.statusCode ?? 0, body: $json.body ?? null"
 
 
 def qbo(name: str, pos: list[int], method: str, url: str, query: dict[str, str] | None = None) -> Node:
-    """QuickBooks call: one item at a time, full response, never throws (the next node checks it).
-    Network errors are retried in place, then become an item without status code."""
-    q = {"minorversion": "={{ " + MINOR + " }}", **(query or {})}
-    return {
-        "name": name,
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.2,
-        "position": pos,
-        "onError": "continueRegularOutput",
-        **NETWORK_RETRY,
-        "parameters": {
-            "method": method,
-            "url": url,
-            "authentication": "predefinedCredentialType",
-            "nodeCredentialType": "quickBooksOAuth2Api",
-            "sendQuery": True,
-            "queryParameters": {"parameters": [{"name": k, "value": v} for k, v in q.items()]},
-            "sendHeaders": True,
-            "headerParameters": {"parameters": [{"name": "Accept", "value": "application/json"}]},
-            "options": {"batching": {"batch": {"batchSize": 1, "batchInterval": 300}}, **FULL_RESPONSE},
-        },
-        "credentials": {"quickBooksOAuth2Api": "QBO"},
-    }
-
-
-def qbo_send(node: Node, body: str) -> Node:
-    node["parameters"].update(json_body(body))
-    return node
+    return qbo_call(name, pos, method, url, MINOR, query)
 
 
 def qbo_url(path: str) -> str:
@@ -127,27 +101,9 @@ if (item.action === 'create') {
 return [{ json: { invoice_id: item.invoice_id, body: { ...body, execution_id: $execution.id } } }];
 """
 
-DESCRIBE_FAILURE_JS = r"""
-// Facts about the step that failed. The core decides what they mean (retry later, stop, review).
-const item = $('One at a time').first().json;
-const step = $prevNode.name;
-const r = $json;
-const b = r.body ?? {};
-let facts;
-if (b.decision) {                     // the core's answer to a lookup: review, or QuickBooks query error
-  facts = { error_code: b.error_code, error_message: b.error_message, http_status: b.http_status,
-            fault_code: b.fault_code };
-} else {                              // a QuickBooks or core call that failed
-  const fault = b.Fault?.Error?.[0];
-  facts = { http_status: r.statusCode ?? 0, fault_code: fault?.code ?? null,
-            error_message: fault ? `${fault.Message ?? ''} ${fault.Detail ?? ''}`.trim()
-                                 : String(b.message ?? b.detail ?? r.error?.message ?? '') };
-  if (step === 'Rate OK?' && r.statusCode === 200) facts.error_code = 'exchange_rate_unavailable';
-}
-return [{ json: { invoice_id: item.invoice_id, body: {
-  outcome: 'failed', ...facts, error_message: `${step}: ${facts.error_message ?? ''}`.slice(0, 1000),
-  execution_id: $execution.id } } }];
-"""
+DESCRIBE_FAILURE_JS = describe_failure_js(
+    "invoice_id", LOOP + ".invoice_id", {"Rate OK?": "exchange_rate_unavailable"}, {"outcome": "failed"}
+)
 
 
 def _trigger_nodes() -> list[Node]:

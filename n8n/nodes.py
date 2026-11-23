@@ -20,6 +20,7 @@ CREDENTIAL_NAMES = {
     "CORE": "AP core token",
     "POSTGRES": "AP database (ap_app)",
     "QBO": "QuickBooks – Sandbox US",
+    "PLAID": "Plaid – Sandbox",
 }
 # Full response, never throw on an HTTP error status: the next node checks the status itself
 FULL_RESPONSE = {"response": {"response": {"fullResponse": True, "neverError": True}}}
@@ -125,6 +126,74 @@ def core_call(
         "parameters": params,
         "credentials": {"httpHeaderAuth": "CORE"},
     }
+
+
+def describe_failure_js(
+    id_field: str, id_expr: str, named: dict[str, str] | None = None, extra: dict[str, str] | None = None
+) -> str:
+    """Code node: facts about the step that failed (HTTP status, QuickBooks Fault code, message), for
+    the core to classify (retry later, stop, review). `named`: steps that answer 200 without the
+    expected data, and the failure name to report for them. `extra`: constant fields added to the body."""
+    js = r"""
+// Facts about the step that failed. The core decides what they mean (retry later, stop, review).
+const NAMED = __NAMED__;   // steps that answered 200 without the expected data
+const step = $prevNode.name;
+const r = $json;
+const b = r.body ?? {};
+let facts;
+if (b.decision) {          // the core's answer to a lookup: review, or QuickBooks query error
+  facts = { error_code: b.error_code, error_message: b.error_message, http_status: b.http_status,
+            fault_code: b.fault_code };
+} else {                   // a QuickBooks or core call that failed
+  const fault = b.Fault?.Error?.[0];
+  facts = { http_status: r.statusCode ?? 0, fault_code: fault?.code ?? null,
+            error_message: fault ? `${fault.Message ?? ''} ${fault.Detail ?? ''}`.trim()
+                                 : String(b.message ?? b.detail ?? r.error?.message ?? '') };
+  if (NAMED[step] && r.statusCode === 200) facts.error_code = NAMED[step];
+}
+return [{ json: { __ID_FIELD__: __ID_EXPR__, body: {
+  ...__EXTRA__, ...facts, error_message: `${step}: ${facts.error_message ?? ''}`.slice(0, 1000),
+  execution_id: $execution.id } } }];
+"""
+    return (
+        js.replace("__NAMED__", json.dumps(named or {}))
+        .replace("__EXTRA__", json.dumps(extra or {}))
+        .replace("__ID_FIELD__", id_field)
+        .replace("__ID_EXPR__", id_expr)
+    )
+
+
+def qbo_call(
+    name: str, pos: list[int], method: str, url: str, minor_expr: str, query: dict[str, str] | None = None
+) -> Node:
+    """QuickBooks call: one item at a time, full response, never throws (the next node checks it).
+    Network errors are retried in place, then become an item without status code."""
+    q = {"minorversion": "={{ " + minor_expr + " }}", **(query or {})}
+    return {
+        "name": name,
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": pos,
+        "onError": "continueRegularOutput",
+        **NETWORK_RETRY,
+        "parameters": {
+            "method": method,
+            "url": url,
+            "authentication": "predefinedCredentialType",
+            "nodeCredentialType": "quickBooksOAuth2Api",
+            "sendQuery": True,
+            "queryParameters": {"parameters": [{"name": k, "value": v} for k, v in q.items()]},
+            "sendHeaders": True,
+            "headerParameters": {"parameters": [{"name": "Accept", "value": "application/json"}]},
+            "options": {"batching": {"batch": {"batchSize": 1, "batchInterval": 300}}, **FULL_RESPONSE},
+        },
+        "credentials": {"quickBooksOAuth2Api": "QBO"},
+    }
+
+
+def qbo_send(node: Node, body: str) -> Node:
+    node["parameters"].update(json_body(body))
+    return node
 
 
 def node_id(name: str) -> str:

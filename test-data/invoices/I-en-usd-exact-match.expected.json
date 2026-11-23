@@ -1,0 +1,21 @@
+{
+  "id": "I-en-usd-exact-match",
+  "file": "I-en-usd-exact-match.pdf",
+  "email": {
+    "subject": "Invoice QM-1042 – Quillmoor Paper Supply LLC",
+    "body": "Hello,\n\nplease find attached invoice QM-1042 for USD 641.24, due 12/18/2026.\n\nBest regards,\nQuillmoor Paper Supply LLC (fictional test supplier)"
+  },
+  "expect": {
+    "status": "ready",
+    "reasons": [],
+    "document_type": "invoice",
+    "invoice_number": "QM-1042",
+    "currency": "USD",
+    "total": "641.24",
+    "invoice_date": "2026-11-18",
+    "due_date": "2026-12-18",
+    "supplier_country": "US",
+    "min_lines": 2
+  },
+  "note": "Bank: one payment of exactly $641.24 → accepted match, bill payment in QuickBooks."
+}

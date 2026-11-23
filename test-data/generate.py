@@ -1,7 +1,8 @@
 """Generates the fictional test documents and their expected results.
 
 Run in the test container (fonts + fpdf2 are installed there):
-  docker compose run --rm --no-deps -v ./test-data:/test-data core-test python /test-data/generate.py
+  docker compose --profile test run --rm --no-deps --user "$(id -u):$(id -g)" -v ./test-data:/gen \
+    core-test python /gen/generate.py
 
 All companies, people, addresses and numbers are fictional: names were checked with a web
 search, phone numbers use 555-01xx, emails use example.com, tax IDs and IBANs are invalid.
@@ -99,21 +100,23 @@ def save_expected(doc_id: str, file: str, email: dict, expect: dict, note: str =
 
 
 # =====================================================================================
-# US: Quillmoor Paper Supply (also the core service's test fixture)
+# US invoices (USD, 8.5 % sales tax, month-first dates): bank matching test cases
 # =====================================================================================
-def us_quillmoor() -> bytes:
-    lines = [("Copy paper A4 (box)", 10, D("42.00")), ("Toner cartridge", 2, D("85.50"))]
+US_TAX = D("0.085")
+
+
+def us_invoice(supplier: tuple[str, str, str], number: str, dates: tuple[str, str], lines: list) -> tuple[bytes, D]:
+    """supplier = (name, address, tax ID and contact line); dates = (invoice, due) as MM/DD/YYYY."""
     subtotal = sum((qty * price for _, qty, price in lines), D(0))
-    tax = q(subtotal * D("0.085"))
+    tax = q(subtotal * US_TAX)
     total = subtotal + tax
-    assert (subtotal, tax, total) == (D("591.00"), D("50.24"), D("641.24"))
     pdf = Doc()
-    pdf.text_line("Quillmoor Paper Supply LLC", 16, bold=True, h=8)
-    pdf.text_line("412 Fictional Ave, Springfield, OR 97477, USA")
-    pdf.text_line("EIN 00-0000000 · (541) 555-0142 · billing@example.com")
+    pdf.text_line(supplier[0], 16, bold=True, h=8)
+    pdf.text_line(supplier[1])
+    pdf.text_line(supplier[2])
     pdf.ln(6)
-    pdf.text_line("INVOICE  No. QM-1042", 14, bold=True, h=8)
-    pdf.text_line("Invoice date: 11/18/2026        Due date: 12/18/2026")
+    pdf.text_line(f"INVOICE  No. {number}", 14, bold=True, h=8)
+    pdf.text_line(f"Invoice date: {dates[0]}        Due date: {dates[1]}")
     pdf.text_line(f"Bill to: {BUYER[0]}, {BUYER[1]}")
     pdf.ln(5)
     pdf.table(
@@ -129,7 +132,95 @@ def us_quillmoor() -> bytes:
             ("Total due", f"USD {fmt_en(total)}", True),
         ]
     )
-    return bytes(pdf.output())
+    return bytes(pdf.output()), total
+
+
+QUILLMOOR = (
+    "Quillmoor Paper Supply LLC",
+    "412 Fictional Ave, Springfield, OR 97477, USA",
+    "EIN 00-0000000 · (541) 555-0142 · billing@example.com",
+)
+FENWHISTLE = (
+    "Fenwhistle Janitorial Supply Co.",
+    "88 Imaginary Road, Eugene, OR 97401, USA",
+    "EIN 00-0000001 · (541) 555-0177 · accounts@example.com",
+)
+TARNBROOK = (
+    "Tarnbrook Courier Services LLC",
+    "5 Placeholder Lane, Salem, OR 97301, USA",
+    "EIN 00-0000002 · (503) 555-0118 · invoices@example.com",
+)
+
+
+def us_quillmoor() -> bytes:
+    """Also the core service's test fixture (its stored Mistral response is in tests/fixtures)."""
+    lines = [("Copy paper A4 (box)", 10, D("42.00")), ("Toner cartridge", 2, D("85.50"))]
+    pdf, total = us_invoice(QUILLMOOR, "QM-1042", ("11/18/2026", "12/18/2026"), lines)
+    assert total == D("641.24")
+    return pdf
+
+
+def us_expected(number: str, total: D, invoice_date: str, due_date: str, min_lines: int) -> dict:
+    return {
+        "status": "ready",
+        "reasons": [],
+        "document_type": "invoice",
+        "invoice_number": number,
+        "currency": "USD",
+        "total": str(total),
+        "invoice_date": invoice_date,
+        "due_date": due_date,
+        "supplier_country": "US",
+        "min_lines": min_lines,
+    }
+
+
+def us_email(number: str, supplier: str, total: D, due: str) -> dict:
+    return {
+        "subject": f"Invoice {number} – {supplier}",
+        "body": f"Hello,\n\nplease find attached invoice {number} for USD {fmt_en(total)}, due {due}.\n\n"
+        f"Best regards,\n{supplier} (fictional test supplier)",
+    }
+
+
+def doc_i_k(quillmoor: bytes) -> None:
+    """US bills for bank matching (Day 2): exact match, amount within tolerance, ambiguous pair.
+    The bank side is in test-data/bank/day2-transactions.json."""
+    (OUT / "I-en-usd-exact-match.pdf").write_bytes(quillmoor)
+    save_expected(
+        "I-en-usd-exact-match",
+        "I-en-usd-exact-match.pdf",
+        us_email("QM-1042", QUILLMOOR[0], D("641.24"), "12/18/2026"),
+        us_expected("QM-1042", D("641.24"), "2026-11-18", "2026-12-18", 2),
+        "Bank: one payment of exactly $641.24 → accepted match, bill payment in QuickBooks.",
+    )
+    lines = [("Floor cleaner concentrate (5 gal)", 6, D("74.50")), ("Paper towels (case)", 19, D("35.29"))]
+    pdf, total = us_invoice(FENWHISTLE, "FJ-2207", ("11/16/2026", "12/16/2026"), lines)
+    assert total == D("1212.50")
+    (OUT / "J-en-usd-tolerance.pdf").write_bytes(pdf)
+    save_expected(
+        "J-en-usd-tolerance",
+        "J-en-usd-tolerance.pdf",
+        us_email("FJ-2207", FENWHISTLE[0], total, "12/16/2026"),
+        us_expected("FJ-2207", total, "2026-11-16", "2026-12-16", 2),
+        "Bank: $1,212.00 paid for $1,212.50 → within the $1.00 tolerance, accepted; difference stored.",
+    )
+    for doc_id, number, dates in [
+        ("K1-en-usd-ambiguous", "TB-5531", ("11/13/2026", "12/13/2026")),
+        ("K2-en-usd-ambiguous", "TB-5532", ("11/20/2026", "12/20/2026")),
+    ]:
+        pdf, total = us_invoice(TARNBROOK, number, dates, [("Same-day courier, flat monthly route", 1, D("80.00"))])
+        assert total == D("86.80")
+        (OUT / f"{doc_id}.pdf").write_bytes(pdf)
+        iso = [f"{d[6:]}-{d[:2]}-{d[3:5]}" for d in dates]
+        save_expected(
+            doc_id,
+            f"{doc_id}.pdf",
+            us_email(number, TARNBROOK[0], total, dates[1]),
+            us_expected(number, total, iso[0], iso[1], 1),
+            "Two bills of $86.80 from the same supplier, one bank payment of $86.80 without an invoice "
+            "number → ambiguous: no payment recorded, left for a person.",
+        )
 
 
 # =====================================================================================
@@ -625,5 +716,6 @@ if __name__ == "__main__":
     doc_e()
     doc_f()
     doc_g_h()
+    doc_i_k(us)
     for p in sorted(OUT.iterdir()):
         print(f"{p.stat().st_size:>8}  {p.name}")
