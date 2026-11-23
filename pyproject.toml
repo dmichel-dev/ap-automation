@@ -58,5 +58,5 @@ strict_equality = true
 extra_checks = true
 
 [[tool.mypy.overrides]]
-module = ["respx", "fpdf", "fpdf.*"]
+module = ["respx", "fpdf", "fpdf.*", "pypdfium2"]
 ignore_missing_imports = true

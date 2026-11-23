@@ -18,7 +18,8 @@ Intake channels ──► common invoice format ──► core checks ──► 
 - **The LLM only extracts data.** Every approval decision is deterministic, unit-tested code, which protects against prompt injection hidden in uploaded documents.
 - **n8n orchestrates, the Python core decides.** n8n runs the triggers and the calls (Gmail, QuickBooks, Plaid) and routes on the core's answers. Every rule lives in the core, typed and tested: which email attachments to process, validation and routing, the content of each bill, what QuickBooks' answers mean (reuse a vendor or create it, a duplicate bill), and whether a failure is retried or sent to review.
 - Anything uncertain (failed check, ambiguous date, low confidence, possible duplicate, a supplier's first invoice, a bank payment that fits several bills) goes to **human review**. Nothing is guessed, including the expense account: each supplier's account is chosen once by a person, then reused.
-- Details: [invoice format](docs/common-invoice-format.md), [checks and routing](docs/validation.md), [human review](docs/review.md), [data model](docs/data-model.md), [bank matching](docs/matching.md), [Plaid and QuickBooks facts verified live](docs/integrations.md), [operations](docs/operations.md).
+- **A review page for people** shows each document (rendered on the server as images) next to what was read, and records who approved, corrected or rejected it. It is built with security defaults: Argon2id passwords, lockout and rate limits, server-side sessions, CSRF protection, a strict CSP, access scoped per user. Reviewer accounts can't sign in from the internet at all.
+- Details: [invoice format](docs/common-invoice-format.md), [checks and routing](docs/validation.md), [human review](docs/review.md), [review page security](docs/security.md), [data model](docs/data-model.md), [bank matching](docs/matching.md), [Plaid and QuickBooks facts verified live](docs/integrations.md), [operations](docs/operations.md).
 - **Safe to re-run.** Every write to QuickBooks is reserved in the database first, searched before it is created and sent with a fixed request ID, so a crash or a retry never creates a second bill or payment.
 
 ## Stack
@@ -27,6 +28,7 @@ Intake channels ──► common invoice format ──► core checks ──► 
 |---|---|
 | n8n Community Edition | Orchestration: intake triggers, routing, integrations |
 | Python core (FastAPI) | Extraction, normalization, validation, persistence, posting content, bank matching, every decision |
+| Review page (FastAPI + Jinja2, own container) | Sign-in, review list, document pages, approve / correct / reject; loopback only for reviewer accounts |
 | Mistral OCR (`mistral-ocr-latest`) | PDF/scan text and structured-data extraction |
 | PostgreSQL 17 | n8n database + `ap` schema (invoices, lines, taxes, review queue, log, postings, bank transactions, matches) |
 | QuickBooks Online (sandbox, US, multi-currency) | Vendors, bills and vendor credits with the original file, bill payments |
@@ -40,6 +42,8 @@ cp .env.example .env        # then fill in the values (openssl rand -hex 32 for 
 docker volume create ap-automation_pg17_data   # once: the database volume is external (protected from `down -v`)
 docker compose up -d --build
 open http://localhost:5678  # n8n
+docker compose exec review-web python -m app.web.users add --email you@example.com --name "Your Name" --role admin --scope live
+open http://localhost:8081  # review page
 ```
 
 ## Tests and verification
@@ -48,7 +52,7 @@ Three levels, from fastest to most realistic:
 
 | Level | What it covers | Command |
 |---|---|---|
-| Unit + integration (379) | Normalization, validation, totals, dates, duplicates, email screening, posting content and decisions, matching, the full pipeline on a test database | `docker compose run --rm core-test` |
+| Unit + integration (444) | Normalization, validation, totals, dates, duplicates, email screening, posting content and decisions, matching, review decisions, the review page's security (sign-in, lockout, sessions, CSRF, listeners, scope, document rendering, headers), the full pipeline on a test database | `docker compose run --rm core-test` |
 | Live provider (3) | Real Mistral OCR calls on a fictional invoice | `docker compose run --rm core-test pytest -m live` |
 | End to end (12 emails) | Gmail → n8n → core → database → Gmail labels → QuickBooks → bank matching | send the test set, then `scripts/run_e2e.sh --since <start time>` |
 
@@ -88,7 +92,7 @@ The workflows are generated from code (`n8n/build_email_intake.py`, `n8n/build_p
 docker-compose.yml   .env.example
 db/init/             Postgres roles + migration runner (first start)
 db/migrations/       ap schema migrations
-services/core/       FastAPI core service
+services/core/       FastAPI core service; app/web/ is the review page (its own container)
 n8n/                 Workflow builders (shared nodes.py) + exported workflows (no credentials)
 test-data/invoices/  Fictional test invoices + expected results
 test-data/bank/      Bank transactions for the matching tests
@@ -111,6 +115,7 @@ docs/                Architecture and data-format documentation
 - **Coding rules and AI-suggested accounts:** a rules table (supplier, keywords, amount → account), then account suggestions from past decisions. A suggestion is only shown pre-selected; a person still confirms it, and approval stays deterministic.
 - **Per-line account coding** (today: one account per invoice).
 - **Line-item editing in the review:** add, change or remove lines, with the totals check re-run. Today a reviewer corrects header fields only, and an invoice with wrong lines is rejected.
+- **Two-factor sign-in (TOTP)** for reviewer and admin accounts, with recovery codes. Until then these accounts can only sign in through the internal listener (SSH tunnel), never from the internet.
 - **Approval thresholds and an approver role:** above an amount, a second person approves after the reviewer.
 - **Segregation of duties:** whoever sets up a supplier or its bank details can't approve its invoices or payments; enforced by the roles in the database.
 - **AP ageing report:** open bills by due-date bucket (current, 1–30, 31–60, 61–90, 90+ days), per supplier and currency.

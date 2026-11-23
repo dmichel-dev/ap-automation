@@ -16,6 +16,9 @@ Defined in [`db/migrations/`](../db/migrations). Migrations run as the `ap_app` 
 | `matches` | Invoice ↔ bank transaction: `accepted` (used for a payment), `candidate` (ambiguous, for review), `dismissed` |
 | `qbo_accounts`, `qbo_vendors` | Copy of the QuickBooks chart of accounts and vendor list, refreshed hourly by the sync workflow; a row missing from the latest sync is kept as inactive |
 | `supplier_defaults` | Supplier → default account, set by a reviewer on the supplier's first confirmed invoice (`source` = `reviewer`, or `test_setup` for the e2e test suppliers) |
+| `review_users` | Review-page accounts: email, display name, Argon2id password hash, `role` (`reviewer`, `admin`, `demo`), `scope` (a `demo` account always has the `demo` scope), lockout state. Created with the CLI only (see [security](security.md)) |
+| `review_sessions` | Server-side sessions: SHA-256 of the cookie token (never the token), the listener it belongs to (`internal` or `public`), its CSRF token, idle and absolute expiry, the per-minute decision count |
+| `login_attempts` | Sign-in attempts for the per-address limit and the audit: address, listener, outcome and a hash of the typed email (never the email or a password); kept 30 days |
 
 ## Conventions
 

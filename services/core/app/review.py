@@ -8,7 +8,10 @@ The core decides which actions an item allows; the review page only offers those
 
 Approving re-runs the deterministic checks a bill needs (posting_blockers). The judgement reasons
 (possible duplicate, new supplier, capex, cut-off, low confidence) are settled by the decision.
-Posting and matching reviews are decided in Step 4 (they need QuickBooks actions).
+Posting and matching reviews are decided separately (they need QuickBooks actions).
+
+Every read and decision takes an optional scope: the review page passes the signed-in user's scope,
+so an item of another scope is "unknown" (404) to it; the machine API (bearer token) passes None.
 """
 
 from __future__ import annotations
@@ -105,13 +108,20 @@ def actions(item: db.Row) -> list[Action]:
     return ["approve", "correct", "reject"]
 
 
-def _item(conn: db.Conn, review_id: int, lock: bool = False) -> db.Row:
+def _item(conn: db.Conn, review_id: int, lock: bool = False, scope: Scope | None = None) -> db.Row:
     row = conn.execute(
-        "SELECT * FROM review_queue WHERE id = %s" + (" FOR UPDATE" if lock else ""), (review_id,)
+        "SELECT * FROM review_queue WHERE id = %s AND (%s::text IS NULL OR scope = %s)"
+        + (" FOR UPDATE" if lock else ""),
+        (review_id, scope, scope),
     ).fetchone()
     if row is None:
         raise NotFound("unknown review item")
     return row
+
+
+def item_invoice_id(conn: db.Conn, review_id: int, scope: Scope | None = None) -> Any:
+    """The invoice behind a review item (NotFound if unknown or outside the scope)."""
+    return _item(conn, review_id, scope=scope)["invoice_id"]
 
 
 def _invoice(conn: db.Conn, invoice_id: Any, lock: bool = False) -> db.Row:
@@ -184,9 +194,9 @@ INVOICE_FIELDS = (
 )  # fmt: skip
 
 
-def detail(conn: db.Conn, review_id: int) -> dict[str, Any]:
+def detail(conn: db.Conn, review_id: int, scope: Scope | None = None) -> dict[str, Any]:
     """Everything the review page shows for one item. Values are JSON-safe."""
-    item = _item(conn, review_id)
+    item = _item(conn, review_id, scope=scope)
     inv = _invoice(conn, item["invoice_id"])
     lines, taxes = _lines(conn, inv["id"])
     blockers, _ = posting_blockers(stored_invoice(conn, inv))
@@ -223,8 +233,8 @@ def list_items(conn: db.Conn, scope: Scope, status: str = "open", limit: int = 1
 # =====================================================================================
 # Decisions
 # =====================================================================================
-def _open_item(conn: db.Conn, review_id: int, action: Action) -> db.Row:
-    item = _item(conn, review_id, lock=True)
+def _open_item(conn: db.Conn, review_id: int, action: Action, scope: Scope | None) -> db.Row:
+    item = _item(conn, review_id, lock=True, scope=scope)
     if action not in actions(item):
         state = item["status"] if item["status"] != "open" else f"{item['stage']} review"
         raise Conflict(f"'{action}' is not possible on this item ({state}); allowed: {actions(item) or 'none'}")
@@ -284,8 +294,8 @@ def _add_duplicate_reasons(conn: db.Conn, item: db.Row, inv: db.Row) -> list[str
     return [n.code for n in new]
 
 
-def correct(conn: db.Conn, review_id: int, c: Correction) -> dict[str, Any]:
-    item = _open_item(conn, review_id, "correct")
+def correct(conn: db.Conn, review_id: int, c: Correction, scope: Scope | None = None) -> dict[str, Any]:
+    item = _open_item(conn, review_id, "correct", scope)
     values = c.changes.model_dump(exclude_unset=True)
     if not values:
         raise Conflict("nothing to correct")
@@ -296,7 +306,7 @@ def correct(conn: db.Conn, review_id: int, c: Correction) -> dict[str, Any]:
     _apply_changes(conn, item, inv, values, c.reviewer)
     added = _add_duplicate_reasons(conn, item, _invoice(conn, inv["id"]))
     _log(conn, item, "review corrected", {"fields": sorted(values), "new_reasons": added})
-    return detail(conn, review_id)
+    return detail(conn, review_id, scope)
 
 
 def _accept_suggested_dates(conn: db.Conn, item: db.Row, inv: db.Row, reviewer: str) -> db.Row:
@@ -347,9 +357,15 @@ def _save_default(conn: db.Conn, inv: db.Row, account_id: str, d: Decision) -> s
     return None
 
 
-def approve(conn: db.Conn, review_id: int, d: Decision, action: Literal["approve", "verify"] = "approve") -> db.Row:
+def approve(
+    conn: db.Conn,
+    review_id: int,
+    d: Decision,
+    action: Literal["approve", "verify"] = "approve",
+    scope: Scope | None = None,
+) -> db.Row:
     """The invoice becomes ready (the posting workflow then posts it to the chosen account)."""
-    item = _open_item(conn, review_id, action)
+    item = _open_item(conn, review_id, action, scope)
     note = (d.note or "").strip()
     if action == "verify" and len(note) < MIN_VERIFY_NOTE:
         raise Conflict("say how the change was verified with the supplier (e.g. phone call to a known number)")
@@ -385,9 +401,9 @@ def approve(conn: db.Conn, review_id: int, d: Decision, action: Literal["approve
     return _item(conn, review_id)
 
 
-def reject(conn: db.Conn, review_id: int, r: Rejection) -> tuple[db.Row, str | None]:
+def reject(conn: db.Conn, review_id: int, r: Rejection, scope: Scope | None = None) -> tuple[db.Row, str | None]:
     """The invoice is rejected and won't be posted. Returns the stored file to delete after COMMIT."""
-    item = _open_item(conn, review_id, "reject")
+    item = _open_item(conn, review_id, "reject", scope)
     inv = _invoice(conn, item["invoice_id"], lock=True)
     conn.execute("UPDATE invoices SET status = 'rejected' WHERE id = %s", (inv["id"],))
     if inv["file_path"]:

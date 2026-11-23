@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Review items{% endblock %}
+{% block main %}
+<h1>Review items</h1>
+<nav class="tabs" aria-label="Filter by status">
+  {% for s in statuses %}<a href="/items?status={{ s }}" {% if s == current %}aria-current="page"{% endif %}>{{ s | replace("_", " ") }}</a>{% endfor %}
+</nav>
+{% if items %}
+<table class="list">
+  <thead><tr><th>#</th><th>Opened</th><th>Supplier</th><th>Number</th><th>Invoice date</th><th class="num">Total</th><th>Why</th><th>Stage</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for i in items %}
+  <tr>
+    <td><a href="/items/{{ i.id }}">{{ i.id }}</a></td>
+    <td>{{ i.created_at[:10] }}</td>
+    <td><a href="/items/{{ i.id }}">{{ i.supplier_name or "(no supplier name)" }}</a></td>
+    <td>{{ i.invoice_number or "–" }}{% if i.document_type == "credit_note" %} <span class="tag">credit note</span>{% endif %}</td>
+    <td>{{ i.invoice_date or "–" }}</td>
+    <td class="num">{{ i.total | money(i.currency) }}</td>
+    <td>{% for r in i.reasons %}<span class="tag reason">{{ r.code | replace("_", " ") }}</span> {% endfor %}</td>
+    <td>{{ i.stage }}</td>
+    <td>{{ i.status | replace("_", " ") }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">Nothing here.</p>
+{% endif %}
+{% endblock %}

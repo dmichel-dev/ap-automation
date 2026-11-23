@@ -1,6 +1,6 @@
 # Human review
 
-Invoices that validation can't pass alone go to a person. The core decides which actions each review item allows; the review page (Day 3, step 3) only offers those. Code: [`review.py`](../services/core/app/review.py).
+Invoices that validation can't pass alone go to a person. The core decides which actions each review item allows; the [review page](#the-review-page) only offers those. Code: [`review.py`](../services/core/app/review.py).
 
 ## Actions
 
@@ -10,7 +10,7 @@ Invoices that validation can't pass alone go to a person. The core decides which
 | **Verified with supplier** | fraud items only (`possible_bank_detail_change`) | Same as approve. A note saying how it was verified is required (e.g. "called the number on file, not the one in the letter"). Fraud items have **no plain Approve**. |
 | **Correct** | validation review, no fraud flag | Fix a header field that was printed or read wrongly (supplier, number, dates, currency, subtotal, tax total, total, document type). The item stays open; the reviewer then approves or rejects. Line items can't be edited yet (roadmap): an invoice with wrong lines is rejected. |
 | **Reject** | any validation review | A reason is required. The invoice is not posted and its stored file is deleted. |
-| Write off, choose the bank match, retry/exclude a posting | posting and matching reviews | Day 3, step 4 (they need QuickBooks actions). |
+| Write off, choose the bank match, retry/exclude a posting | posting and matching reviews | Planned: they need QuickBooks actions. The page shows these items without actions for now. |
 
 A decided item can't be decided again (409).
 
@@ -44,13 +44,33 @@ Each review item keeps:
 - each correction, with the reviewer, the time, and the values before and after;
 - the decision: action, account and its source, whether the supplier default was created or updated, whether the suggested dates were accepted, the reviewer, the note, and the time.
 
+The reviewer is whoever acted: on the review page, the signed-in account ("Name (review user N)", from the session, never from the form); through the machine API, the name the automated run gives itself.
+
 `processing_log` records each correction and decision (step `review`), with field names and codes but no document content.
+
+## The review page
+
+A separate web process (`review-web` container) with only the browser routes. How it is secured: [security](security.md).
+
+- **List:** open items (or decided ones, by status) with supplier, number, invoice date, total, reasons, stage.
+- **Detail:** the document on the left, rendered on the server as page images (the original is a download only). On the right:
+  - the reasons;
+  - what approving would still refuse;
+  - the invoice as stored, with the printed dates next to the read ones, and amounts with their currency;
+  - lines and taxes;
+  - every correction (who, when, before → after);
+  - the decision, once made.
+- **Approve** (or **Verified with supplier** for fraud items): an account picker over the QuickBooks chart of accounts, with a filter. Choose whether the account becomes the supplier's default ("save as default" on a first invoice, "make it the new default" later). Tick **accept the suggested dates** when the dates were ambiguous. A note is optional, and required for verification.
+- **Correct:** the header fields, pre-filled; only the fields actually changed are sent and recorded.
+- **Reject:** a reason is required, and the page asks for confirmation.
+- A refused decision (e.g. a non-expense account, totals still wrong) shows the core's reason, and nothing is changed.
+- **Dates are shown as YYYY-MM-DD**, so they can't be misread.
 
 ## Scope
 
-Invoices, review items and log entries have a `scope`: `live`, `e2e` (the daily end-to-end test, Day 3 step 8) or `demo` (the public demo, Day 6). The review list, the daily summary and the alerts filter on it, so test and demo data never mix with live data.
+Invoices, review items and log entries have a `scope`: `live`, `e2e` (the daily end-to-end test) or `demo` (the public demo). The review list, the daily summary and the alerts filter on it, so test and demo data never mix with live data. Each review-page account works on one scope; items of another scope answer 404, like unknown ones.
 
-## Touchless rate (daily summary, step 7)
+## Touchless rate (daily summary)
 
 ```
 touchless rate = invoices posted with no human touch / invoices received
