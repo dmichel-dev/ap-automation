@@ -1,7 +1,7 @@
 {
   "active": false,
   "connections": {
-    "Describe email": {
+    "Email facts": {
       "main": [
         [
           {
@@ -17,18 +17,7 @@
         [
           {
             "index": 0,
-            "node": "Describe email",
-            "type": "main"
-          }
-        ]
-      ]
-    },
-    "Gmail Trigger": {
-      "main": [
-        [
-          {
-            "index": 0,
-            "node": "Get AP labels",
+            "node": "Email facts",
             "type": "main"
           }
         ]
@@ -62,6 +51,17 @@
           {
             "index": 0,
             "node": "Post to QuickBooks",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "New email (Gmail)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Get AP labels",
             "type": "main"
           }
         ]
@@ -168,13 +168,125 @@
   "name": "AP – Email intake",
   "nodes": [
     {
+      "id": "note-email-intake",
+      "name": "Note: Email intake",
+      "parameters": {
+        "color": 5,
+        "content": "## Email intake\nTurns emails sent to **invoices@** into processed invoices.\n\nn8n receives the email and applies the Gmail labels. The **core service decides** everything else: which emails and attachments to process, the extracted data, the checks and the status. The AI only extracts data; every decision is deterministic code.",
+        "height": 350,
+        "width": 1380
+      },
+      "position": [
+        -40,
+        -150
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-receive",
+      "name": "Note: Receive",
+      "parameters": {
+        "color": 7,
+        "content": "## Receive\nChecks Gmail every minute for emails delivered to the alias and not yet processed.",
+        "height": 350,
+        "width": 660
+      },
+      "position": [
+        -40,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-screen-core",
+      "name": "Note: Screen (core)",
+      "parameters": {
+        "color": 7,
+        "content": "## Screen (core)\nThe core checks the recipients and keeps only PDF and image attachments. One item per attachment.",
+        "height": 350,
+        "width": 660
+      },
+      "position": [
+        680,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-process-core",
+      "name": "Note: Process (core)",
+      "parameters": {
+        "color": 7,
+        "content": "## Process (core)\nExtract, normalize, check, store. The answer is **ready**, **needs review** or **rejected**.",
+        "height": 350,
+        "width": 420
+      },
+      "position": [
+        1400,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-label,-then-post",
+      "name": "Note: Label, then post",
+      "parameters": {
+        "color": 7,
+        "content": "## Label, then post\nGmail labels show the outcome. Ready invoices start the posting workflow.",
+        "height": 750,
+        "width": 420
+      },
+      "position": [
+        1880,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-not-processed",
+      "name": "Note: Not processed",
+      "parameters": {
+        "color": 3,
+        "content": "## Not processed\nNo PDF or image attached, or not addressed to the alias: labelled and logged, never ignored silently.",
+        "height": 550,
+        "width": 420
+      },
+      "position": [
+        680,
+        650
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-technical-error",
+      "name": "Note: Technical error",
+      "parameters": {
+        "color": 3,
+        "content": "## Technical error\nThe core could not process the file (e.g. OCR service down): labelled AP/Error and logged.",
+        "height": 350,
+        "width": 420
+      },
+      "position": [
+        1400,
+        650
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
       "credentials": {
         "gmailOAuth2": {
           "name": "Gmail – david@davidmichel.dev"
         }
       },
-      "id": "gmail-trigger",
-      "name": "Gmail Trigger",
+      "id": "new-email-gmail",
+      "name": "New email (Gmail)",
       "parameters": {
         "filters": {
           "q": "deliveredto:invoices@davidmichel.dev -label:ap-processed",
@@ -196,7 +308,7 @@
       },
       "position": [
         0,
-        300
+        400
       ],
       "type": "n8n-nodes-base.gmailTrigger",
       "typeVersion": 1.4
@@ -216,23 +328,23 @@
         "returnAll": true
       },
       "position": [
-        220,
-        300
+        240,
+        400
       ],
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1
     },
     {
-      "id": "describe-email",
-      "name": "Describe email",
+      "id": "email-facts",
+      "name": "Email facts",
       "parameters": {
-        "jsCode": "// Metadata only (recipients, attachment types, names, sizes) for the core's screening.\nreturn $('Gmail Trigger').all().map((email, i) => {\n  const mail = email.json;\n  const files = Object.entries(email.binary ?? {}).filter(([key]) => /^attachment_\\d+$/.test(key));\n  return { json: {\n    message_id: mail.id,\n    thread_id: mail.threadId,\n    recipients: [...(mail.to?.value ?? []), ...(mail.cc?.value ?? [])].map(a => String(a.address ?? '')),\n    delivered_to: String(mail.headers?.['delivered-to'] ?? ''),\n    attachments: files.map(([key, b]) => ({ key, mime_type: b.mimeType ?? null, file_name: b.fileName ?? null,\n                                           size: b.fileSize ?? null })),\n  }, pairedItem: { item: i } };\n});",
+        "jsCode": "// Metadata only (recipients, attachment types, names, sizes) for the core's screening.\nreturn $('New email (Gmail)').all().map((email, i) => {\n  const mail = email.json;\n  const files = Object.entries(email.binary ?? {}).filter(([key]) => /^attachment_\\d+$/.test(key));\n  return { json: {\n    message_id: mail.id,\n    thread_id: mail.threadId,\n    recipients: [...(mail.to?.value ?? []), ...(mail.cc?.value ?? [])].map(a => String(a.address ?? '')),\n    delivered_to: String(mail.headers?.['delivered-to'] ?? ''),\n    attachments: files.map(([key, b]) => ({ key, mime_type: b.mimeType ?? null, file_name: b.fileName ?? null,\n                                           size: b.fileSize ?? null })),\n  }, pairedItem: { item: i } };\n});",
         "language": "javaScript",
         "mode": "runOnceForAllItems"
       },
       "position": [
-        440,
-        300
+        480,
+        400
       ],
       "type": "n8n-nodes-base.code",
       "typeVersion": 2
@@ -265,8 +377,8 @@
         "url": "=http://core:8000/intake/email/screen"
       },
       "position": [
-        660,
-        300
+        720,
+        400
       ],
       "retryOnFail": true,
       "type": "n8n-nodes-base.httpRequest",
@@ -277,13 +389,13 @@
       "id": "split-by-attachment",
       "name": "Split by attachment",
       "parameters": {
-        "jsCode": "// One item per attachment the core accepted (with its file), or one item saying why there is none.\n// File names are not passed on to the logs: they may be personal data.\nconst LABELS = { processed: 'AP/Processed', ready: 'AP/Ready', review: 'AP/Review',\n                 rejected: 'AP/Rejected', error: 'AP/Error' };\n\n// Label IDs, looked up by name so nothing is hard-coded\nconst byName = Object.fromEntries($('Get AP labels').all().map(i => [i.json.name, i.json.id]));\nconst labels = {};\nfor (const [key, name] of Object.entries(LABELS)) {\n  if (!byName[name]) throw new Error(`Gmail label \"${name}\" not found: create it in Gmail first`);\n  labels[key] = byName[name];\n}\n\nconst emails = $('Describe email').all();\nconst files = $('Gmail Trigger').all();\nconst out = [];\n$input.all().forEach((screen, i) => {\n  if (screen.json.statusCode !== 200) {\n    throw new Error(`email screening failed (core HTTP ${screen.json.statusCode ?? 'no response'})`);\n  }\n  const mail = emails[i].json, s = screen.json.body;\n  const base = { message_id: mail.message_id, thread_id: mail.thread_id, labels };\n  if (s.route !== 'process') {\n    out.push({ json: { ...base, route: s.route, reason: s.reason,\n                       details: { attachments: s.attachments, skipped: s.skipped } }, pairedItem: { item: i } });\n    return;\n  }\n  for (const a of s.accepted) {\n    out.push({\n      json: { ...base, route: 'process', source_ref: `gmail:${mail.message_id}:${a.index}`, mime: a.mime,\n              size: a.size, attachments_in_email: s.accepted.length },\n      binary: { file: files[i].binary[a.key] },\n      pairedItem: { item: i },\n    });\n  }\n});\nreturn out;",
+        "jsCode": "// One item per attachment the core accepted (with its file), or one item saying why there is none.\n// File names are not passed on to the logs: they may be personal data.\nconst LABELS = { processed: 'AP/Processed', ready: 'AP/Ready', review: 'AP/Review',\n                 rejected: 'AP/Rejected', error: 'AP/Error' };\n\n// Label IDs, looked up by name so nothing is hard-coded\nconst byName = Object.fromEntries($('Get AP labels').all().map(i => [i.json.name, i.json.id]));\nconst labels = {};\nfor (const [key, name] of Object.entries(LABELS)) {\n  if (!byName[name]) throw new Error(`Gmail label \"${name}\" not found: create it in Gmail first`);\n  labels[key] = byName[name];\n}\n\nconst emails = $('Email facts').all();\nconst files = $('New email (Gmail)').all();\nconst out = [];\n$input.all().forEach((screen, i) => {\n  if (screen.json.statusCode !== 200) {\n    throw new Error(`email screening failed (core HTTP ${screen.json.statusCode ?? 'no response'})`);\n  }\n  const mail = emails[i].json, s = screen.json.body;\n  const base = { message_id: mail.message_id, thread_id: mail.thread_id, labels };\n  if (s.route !== 'process') {\n    out.push({ json: { ...base, route: s.route, reason: s.reason,\n                       details: { attachments: s.attachments, skipped: s.skipped } }, pairedItem: { item: i } });\n    return;\n  }\n  for (const a of s.accepted) {\n    out.push({\n      json: { ...base, route: 'process', source_ref: `gmail:${mail.message_id}:${a.index}`, mime: a.mime,\n              size: a.size, attachments_in_email: s.accepted.length },\n      binary: { file: files[i].binary[a.key] },\n      pairedItem: { item: i },\n    });\n  }\n});\nreturn out;",
         "language": "javaScript",
         "mode": "runOnceForAllItems"
       },
       "position": [
-        880,
-        300
+        960,
+        400
       ],
       "type": "n8n-nodes-base.code",
       "typeVersion": 2
@@ -374,8 +486,8 @@
         }
       },
       "position": [
-        1100,
-        300
+        1200,
+        400
       ],
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2
@@ -429,8 +541,8 @@
         "url": "http://core:8000/invoices/process"
       },
       "position": [
-        1340,
-        120
+        1440,
+        400
       ],
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2
@@ -524,8 +636,8 @@
         }
       },
       "position": [
-        1580,
-        100
+        1680,
+        400
       ],
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2
@@ -545,8 +657,8 @@
         "resource": "message"
       },
       "position": [
-        1840,
-        -100
+        1920,
+        400
       ],
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1
@@ -567,8 +679,8 @@
         }
       },
       "position": [
-        2060,
-        -100
+        2160,
+        400
       ],
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2
@@ -588,8 +700,8 @@
         "resource": "message"
       },
       "position": [
-        1840,
-        40
+        1920,
+        600
       ],
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1
@@ -609,8 +721,8 @@
         "resource": "message"
       },
       "position": [
-        1840,
-        180
+        1920,
+        800
       ],
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1
@@ -630,8 +742,8 @@
         "resource": "message"
       },
       "position": [
-        1840,
-        340
+        1440,
+        800
       ],
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1
@@ -652,8 +764,8 @@
         "query": "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details)\nVALUES ('email', $1, $2, $3, $4, $5, $6::jsonb)"
       },
       "position": [
-        2060,
-        340
+        1680,
+        800
       ],
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6
@@ -673,8 +785,8 @@
         "resource": "message"
       },
       "position": [
-        1340,
-        360
+        720,
+        800
       ],
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1
@@ -695,8 +807,8 @@
         "query": "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details)\nVALUES ('email', $1, $2, $3, $4, $5, $6::jsonb)"
       },
       "position": [
-        1560,
-        360
+        960,
+        800
       ],
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6
@@ -717,8 +829,8 @@
         "query": "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details)\nVALUES ('email', $1, $2, $3, $4, $5, $6::jsonb)"
       },
       "position": [
-        1340,
-        540
+        720,
+        1000
       ],
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6

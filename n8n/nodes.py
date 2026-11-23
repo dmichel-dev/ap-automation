@@ -8,6 +8,7 @@ local IDs are added at import time with --credentials (never committed).
 import json
 import sys
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 Node = dict[str, Any]
@@ -205,6 +206,73 @@ def stop(name: str, pos: list[int], message: str) -> Node:
         "position": pos,
         "parameters": {"errorMessage": "={{ " + message + " }}"},
     }
+
+
+# =====================================================================================
+# Canvas layout: nodes on a grid, one sticky note per section, sized around its nodes
+# =====================================================================================
+AUTO = [0, 0]  # placeholder position in the builders: lay_out() sets every node's position
+COL, ROW = 240, 200  # grid step (px)
+NODE, LABEL = 100, 60  # node box, and room for its name under it
+PAD, HEADER = 40, 150  # sticky padding, and room for the note's title and text above the nodes
+COLORS = {"overview": 5, "section": 7, "failure": 3}  # n8n sticky colours: blue, grey, red
+
+
+@dataclass(frozen=True)
+class Section:
+    """A part of the workflow: its nodes on a grid (rows of names, None = empty cell), placed with
+    its top-left node at grid cell (col, row), and a note explaining it."""
+
+    title: str
+    text: str
+    col: int
+    row: int
+    grid: tuple[tuple[str | None, ...], ...] = ()
+    kind: str = "section"  # section | failure | overview
+    min_cols: int = 2  # notes narrower than this can't hold their text
+    rows: int = 1  # height of a note without nodes (overview)
+
+    def size(self) -> tuple[int, int]:
+        cols = max(self.min_cols, *(len(r) for r in self.grid)) if self.grid else self.min_cols
+        return cols, len(self.grid) or self.rows
+
+
+def sticky(name: str, content: str, box: tuple[int, int, int, int], color: int) -> Node:
+    x, y, width, height = box
+    return {
+        "name": name,
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [x, y],
+        "parameters": {"content": content, "width": width, "height": height, "color": color},
+    }
+
+
+def section_box(s: Section) -> tuple[int, int, int, int]:
+    cols, rows = s.size()
+    x, y = s.col * COL - PAD, s.row * ROW - HEADER
+    return x, y, (cols - 1) * COL + NODE + 2 * PAD, HEADER + (rows - 1) * ROW + NODE + LABEL + PAD
+
+
+def lay_out(nodes: list[Node], sections: list[Section]) -> list[Node]:
+    """Positions every node from its section's grid and adds the sections' notes.
+    Each node must be in exactly one section (a node left out would sit at a stale position)."""
+    by_name = {n["name"]: n for n in nodes}
+    placed = [name for s in sections for row in s.grid for name in row if name]
+    if sorted(placed) != sorted(by_name):
+        missing, twice = set(by_name) - set(placed), {n for n in placed if placed.count(n) > 1}
+        raise ValueError(
+            f"layout: not placed {sorted(missing)}, placed twice {sorted(twice)}, unknown "
+            f"{sorted(set(placed) - set(by_name))}"
+        )
+    notes = []
+    for s in sections:
+        for r, row in enumerate(s.grid):
+            for c, name in enumerate(row):
+                if name:
+                    by_name[name]["position"] = [(s.col + c) * COL, (s.row + r) * ROW]
+        notes.append(sticky(f"Note: {s.title}", f"## {s.title}\n{s.text}", section_box(s), COLORS[s.kind]))
+    return notes + nodes
 
 
 def node_id(name: str) -> str:

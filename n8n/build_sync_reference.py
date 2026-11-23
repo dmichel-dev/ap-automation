@@ -16,7 +16,7 @@ QuickBooks tokens stay in n8n: this is how the core gets the data without them.
 
 from typing import Any
 
-from nodes import CORE, Connections, Node, core_call, if_node, main, qbo_call, stop, workflow
+from nodes import AUTO, CORE, Connections, Node, Section, core_call, if_node, lay_out, main, qbo_call, stop, workflow
 
 TARGET = "$('QuickBooks target (core)').first().json.body"
 PASS_THROUGH = "JSON.stringify({ status_code: $json.statusCode ?? 0, body: $json.body ?? null })"
@@ -32,37 +32,37 @@ def _trigger_nodes() -> list[Node]:
             "name": "Every hour",
             "type": "n8n-nodes-base.scheduleTrigger",
             "typeVersion": 1.2,
-            "position": [0, 200],
+            "position": AUTO,
             "parameters": {"rule": {"interval": [{"field": "hours", "hoursInterval": 1}]}},
         },
         {
             "name": "Manual run",
             "type": "n8n-nodes-base.manualTrigger",
             "typeVersion": 1,
-            "position": [0, 400],
+            "position": AUTO,
             "parameters": {},
         },
-        {**core_call("QuickBooks target (core)", [240, 300], "GET", f"{CORE}/accounting/target"), "executeOnce": True},
+        {**core_call("QuickBooks target (core)", AUTO, "GET", f"{CORE}/accounting/target"), "executeOnce": True},
     ]
 
 
-def _sync_nodes(entity: str, x: int) -> list[Node]:
+def _sync_nodes(entity: str) -> list[Node]:
     """Read from QuickBooks → store in the core → stop the run if the core refused it."""
     label = entity.capitalize()
     return [
         qbo_call(
             f"{label} (QBO)",
-            [x, 300],
+            AUTO,
             "GET",
             "={{ " + TARGET + ".qbo_base }}/query",
             TARGET + ".minorversion",
             {"query": QUERIES[entity]},
         ),
-        core_call(f"Store {entity} (core)", [x + 220, 300], "POST", f"{CORE}/reference/{entity}", PASS_THROUGH),
-        if_node(f"{label} stored?", [x + 440, 300], "$json.statusCode === 200"),
+        core_call(f"Store {entity} (core)", AUTO, "POST", f"{CORE}/reference/{entity}", PASS_THROUGH),
+        if_node(f"{label} stored?", AUTO, "$json.statusCode === 200"),
         stop(
             f"Stop: {entity} not synced",
-            [x + 660, 460],
+            AUTO,
             f"'{entity} not synced: HTTP ' + ($json.statusCode ?? 0) + ' ' + ($json.body?.message ?? '')",
         ),
     ]
@@ -81,8 +81,48 @@ CONNECTIONS: Connections = {
 }
 
 
+SECTIONS = [
+    Section(
+        "Sync QuickBooks reference data",
+        "Keeps a copy of the QuickBooks **chart of accounts** and **vendor list** in the AP database.\n\n"
+        "- The review page's account picker reads the accounts.\n"
+        "- The vendors tell the core which suppliers are already known.\n\n"
+        "QuickBooks tokens stay in n8n. The core checks every answer and keeps its previous copy "
+        "if an answer is unusable.",
+        col=0,
+        row=0,
+        kind="overview",
+        min_cols=6,
+    ),
+    Section(
+        "Start",
+        "Every hour, or by hand after changing accounts in QuickBooks. The core says which company to call.",
+        col=0,
+        row=2,
+        grid=(("Every hour", "QuickBooks target (core)"), ("Manual run", None)),
+    ),
+    Section(
+        "Chart of accounts",
+        "Read all accounts, then store them in the core. A refused answer stops the run.",
+        col=2,
+        row=2,
+        grid=(
+            ("Accounts (QBO)", "Store accounts (core)", "Accounts stored?"),
+            (None, None, "Stop: accounts not synced"),
+        ),
+    ),
+    Section(
+        "Vendor list",
+        "Read all vendors, then store them in the core. A refused answer stops the run.",
+        col=5,
+        row=2,
+        grid=(("Vendors (QBO)", "Store vendors (core)", "Vendors stored?"), (None, None, "Stop: vendors not synced")),
+    ),
+]
+
+
 def build(cred_ids: dict[str, str] | None) -> dict[str, Any]:
-    nodes = _trigger_nodes() + _sync_nodes("accounts", 460) + _sync_nodes("vendors", 1340)
+    nodes = lay_out(_trigger_nodes() + _sync_nodes("accounts") + _sync_nodes("vendors"), SECTIONS)
     return workflow("AP – Sync QuickBooks reference data", nodes, CONNECTIONS, cred_ids)
 
 

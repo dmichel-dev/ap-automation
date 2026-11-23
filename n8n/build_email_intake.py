@@ -11,7 +11,7 @@ ready invoices. Emails without a valid attachment, or not for the alias, are lab
 
 from typing import Any
 
-from nodes import CORE, Connections, Node, code_node, condition, core_call, main, workflow
+from nodes import AUTO, CORE, Connections, Node, Section, code_node, condition, core_call, lay_out, main, workflow
 
 ALIAS = "invoices@davidmichel.dev"  # Gmail search filter; the core checks the recipients again
 SPLIT = "Split by attachment"
@@ -19,7 +19,7 @@ ITEM = f"$('{SPLIT}').item.json"
 
 DESCRIBE_EMAIL_JS = r"""
 // Metadata only (recipients, attachment types, names, sizes) for the core's screening.
-return $('Gmail Trigger').all().map((email, i) => {
+return $('New email (Gmail)').all().map((email, i) => {
   const mail = email.json;
   const files = Object.entries(email.binary ?? {}).filter(([key]) => /^attachment_\d+$/.test(key));
   return { json: {
@@ -47,8 +47,8 @@ for (const [key, name] of Object.entries(LABELS)) {
   labels[key] = byName[name];
 }
 
-const emails = $('Describe email').all();
-const files = $('Gmail Trigger').all();
+const emails = $('Email facts').all();
+const files = $('New email (Gmail)').all();
 const out = [];
 $input.all().forEach((screen, i) => {
   if (screen.json.statusCode !== 200) {
@@ -136,10 +136,10 @@ def log_node(
 def _intake_nodes() -> list[Node]:
     return [
         {
-            "name": "Gmail Trigger",
+            "name": "New email (Gmail)",
             "type": "n8n-nodes-base.gmailTrigger",
             "typeVersion": 1.4,
-            "position": [0, 300],
+            "position": AUTO,
             "parameters": {
                 "pollTimes": {"item": [{"mode": "everyMinute"}]},
                 "simple": False,
@@ -153,24 +153,24 @@ def _intake_nodes() -> list[Node]:
             "name": "Get AP labels",
             "type": "n8n-nodes-base.gmail",
             "typeVersion": 2.1,
-            "position": [220, 300],
+            "position": AUTO,
             "executeOnce": True,
             "parameters": {"resource": "label", "operation": "getAll", "returnAll": True},
             "credentials": {"gmailOAuth2": "GMAIL"},
         },
-        code_node("Describe email", [440, 300], DESCRIBE_EMAIL_JS),
+        code_node("Email facts", AUTO, DESCRIBE_EMAIL_JS),
         core_call(
             "Screen email (core)",
-            [660, 300],
+            AUTO,
             "POST",
             f"={CORE}/intake/email/screen",
             body="JSON.stringify({ recipients: $json.recipients, delivered_to: $json.delivered_to, "
             "attachments: $json.attachments })",
         ),
-        code_node(SPLIT, [880, 300], SPLIT_JS),
+        code_node(SPLIT, AUTO, SPLIT_JS),
         switch(
             "Route intake",
-            [1100, 300],
+            AUTO,
             [
                 switch_rule("invoice attachment", "$json.route === 'process'"),
                 switch_rule("no valid attachment", "$json.route === 'no_valid_attachment'"),
@@ -187,7 +187,7 @@ def _processing_nodes() -> list[Node]:
             "name": "Process invoice (core)",
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.2,
-            "position": [1340, 120],
+            "position": AUTO,
             "onError": "continueErrorOutput",
             "parameters": {
                 "method": "POST",
@@ -214,7 +214,7 @@ def _processing_nodes() -> list[Node]:
         # Routing on the core's answer; 413/415 (too large / not a supported file): nothing a human can do
         switch(
             "Route by status",
-            [1580, 100],
+            AUTO,
             [
                 switch_rule("ready", "$json.statusCode === 200 && $json.body.status === 'ready'"),
                 switch_rule("needs_review", "$json.statusCode === 200 && $json.body.status === 'needs_review'"),
@@ -226,14 +226,14 @@ def _processing_nodes() -> list[Node]:
             ],
             {"fallbackOutput": "extra", "renameFallbackOutput": "error"},
         ),
-        label_node("Label: ready", ["ready", "processed"], [1840, -100]),
+        label_node("Label: ready", ["ready", "processed"], AUTO),
         # Post ready invoices right away (the 15-minute schedule is the safety net).
         # Fire and forget: the intake doesn't wait for QuickBooks.
         {
             "name": "Post to QuickBooks",
             "type": "n8n-nodes-base.executeWorkflow",
             "typeVersion": 1.2,
-            "position": [2060, -100],
+            "position": AUTO,
             "executeOnce": True,
             "parameters": {
                 "source": "database",
@@ -241,13 +241,13 @@ def _processing_nodes() -> list[Node]:
                 "options": {"waitForSubWorkflow": False},
             },
         },
-        label_node("Label: review", ["review", "processed"], [1840, 40]),
-        label_node("Label: rejected", ["rejected", "processed"], [1840, 180]),
+        label_node("Label: review", ["review", "processed"], AUTO),
+        label_node("Label: rejected", ["rejected", "processed"], AUTO),
         # Technical error: AP/Error only, NOT AP/Processed (re-checked later)
-        label_node("Label: error", ["error"], [1840, 340]),
+        label_node("Label: error", ["error"], AUTO),
         log_node(
             "Log core error",
-            [2060, 340],
+            AUTO,
             "core_call",
             "error",
             "'core service call failed'",
@@ -261,10 +261,10 @@ def _processing_nodes() -> list[Node]:
 
 def _not_processed_nodes() -> list[Node]:
     return [
-        label_node("Label: no valid attachment", ["rejected", "processed"], [1340, 360]),
+        label_node("Label: no valid attachment", ["rejected", "processed"], AUTO),
         log_node(
             "Log no valid attachment",
-            [1560, 360],
+            AUTO,
             "intake",
             "warning",
             "'email without a valid invoice attachment'",
@@ -273,7 +273,7 @@ def _not_processed_nodes() -> list[Node]:
         ),
         log_node(
             "Log not for alias",
-            [1340, 540],
+            AUTO,
             "intake",
             "warning",
             "'email not addressed to the invoices alias'",
@@ -284,9 +284,9 @@ def _not_processed_nodes() -> list[Node]:
 
 
 CONNECTIONS: Connections = {
-    "Gmail Trigger": [[("Get AP labels", 0)]],
-    "Get AP labels": [[("Describe email", 0)]],
-    "Describe email": [[("Screen email (core)", 0)]],
+    "New email (Gmail)": [[("Get AP labels", 0)]],
+    "Get AP labels": [[("Email facts", 0)]],
+    "Email facts": [[("Screen email (core)", 0)]],
     "Screen email (core)": [[(SPLIT, 0)]],
     SPLIT: [[("Route intake", 0)]],
     "Route intake": [
@@ -307,8 +307,67 @@ CONNECTIONS: Connections = {
 }
 
 
+SECTIONS = [
+    Section(
+        "Email intake",
+        "Turns emails sent to **invoices@** into processed invoices.\n\n"
+        "n8n receives the email and applies the Gmail labels. The **core service decides** everything else: "
+        "which emails and attachments to process, the extracted data, the checks and the status. "
+        "The AI only extracts data; every decision is deterministic code.",
+        col=0,
+        row=0,
+        kind="overview",
+        min_cols=6,
+    ),
+    Section(
+        "Receive",
+        "Checks Gmail every minute for emails delivered to the alias and not yet processed.",
+        col=0,
+        row=2,
+        grid=(("New email (Gmail)", "Get AP labels", "Email facts"),),
+    ),
+    Section(
+        "Screen (core)",
+        "The core checks the recipients and keeps only PDF and image attachments. One item per attachment.",
+        col=3,
+        row=2,
+        grid=(("Screen email (core)", SPLIT, "Route intake"),),
+    ),
+    Section(
+        "Process (core)",
+        "Extract, normalize, check, store. The answer is **ready**, **needs review** or **rejected**.",
+        col=6,
+        row=2,
+        grid=(("Process invoice (core)", "Route by status"),),
+    ),
+    Section(
+        "Label, then post",
+        "Gmail labels show the outcome. Ready invoices start the posting workflow.",
+        col=8,
+        row=2,
+        grid=(("Label: ready", "Post to QuickBooks"), ("Label: review", None), ("Label: rejected", None)),
+    ),
+    Section(
+        "Not processed",
+        "No PDF or image attached, or not addressed to the alias: labelled and logged, never ignored silently.",
+        col=3,
+        row=4,
+        grid=(("Label: no valid attachment", "Log no valid attachment"), ("Log not for alias", None)),
+        kind="failure",
+    ),
+    Section(
+        "Technical error",
+        "The core could not process the file (e.g. OCR service down): labelled AP/Error and logged.",
+        col=6,
+        row=4,
+        grid=(("Label: error", "Log core error"),),
+        kind="failure",
+    ),
+]
+
+
 def build(cred_ids: dict[str, str] | None) -> dict[str, Any]:
-    nodes = _intake_nodes() + _processing_nodes() + _not_processed_nodes()
+    nodes = lay_out(_intake_nodes() + _processing_nodes() + _not_processed_nodes(), SECTIONS)
     return workflow("AP – Email intake", nodes, CONNECTIONS, cred_ids)
 
 

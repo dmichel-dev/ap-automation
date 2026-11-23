@@ -112,6 +112,70 @@
   "name": "AP – Sync QuickBooks reference data",
   "nodes": [
     {
+      "id": "note-sync-quickbooks-reference-data",
+      "name": "Note: Sync QuickBooks reference data",
+      "parameters": {
+        "color": 5,
+        "content": "## Sync QuickBooks reference data\nKeeps a copy of the QuickBooks **chart of accounts** and **vendor list** in the AP database.\n\n- The review page's account picker reads the accounts.\n- The vendors tell the core which suppliers are already known.\n\nQuickBooks tokens stay in n8n. The core checks every answer and keeps its previous copy if an answer is unusable.",
+        "height": 350,
+        "width": 1380
+      },
+      "position": [
+        -40,
+        -150
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-start",
+      "name": "Note: Start",
+      "parameters": {
+        "color": 7,
+        "content": "## Start\nEvery hour, or by hand after changing accounts in QuickBooks. The core says which company to call.",
+        "height": 550,
+        "width": 420
+      },
+      "position": [
+        -40,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-chart-of-accounts",
+      "name": "Note: Chart of accounts",
+      "parameters": {
+        "color": 7,
+        "content": "## Chart of accounts\nRead all accounts, then store them in the core. A refused answer stops the run.",
+        "height": 550,
+        "width": 660
+      },
+      "position": [
+        440,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-vendor-list",
+      "name": "Note: Vendor list",
+      "parameters": {
+        "color": 7,
+        "content": "## Vendor list\nRead all vendors, then store them in the core. A refused answer stops the run.",
+        "height": 550,
+        "width": 660
+      },
+      "position": [
+        1160,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
       "id": "every-hour",
       "name": "Every hour",
       "parameters": {
@@ -126,7 +190,7 @@
       },
       "position": [
         0,
-        200
+        400
       ],
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2
@@ -137,7 +201,7 @@
       "parameters": {},
       "position": [
         0,
-        400
+        600
       ],
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1
@@ -169,7 +233,7 @@
       },
       "position": [
         240,
-        300
+        400
       ],
       "retryOnFail": true,
       "type": "n8n-nodes-base.httpRequest",
@@ -229,8 +293,8 @@
         "url": "={{ $('QuickBooks target (core)').first().json.body.qbo_base }}/query"
       },
       "position": [
-        460,
-        300
+        480,
+        400
       ],
       "retryOnFail": true,
       "type": "n8n-nodes-base.httpRequest",
@@ -265,8 +329,8 @@
         "url": "http://core:8000/reference/accounts"
       },
       "position": [
-        680,
-        300
+        720,
+        400
       ],
       "retryOnFail": true,
       "type": "n8n-nodes-base.httpRequest",
@@ -301,8 +365,8 @@
         "options": {}
       },
       "position": [
-        900,
-        300
+        960,
+        400
       ],
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2
@@ -314,8 +378,8 @@
         "errorMessage": "={{ 'accounts not synced: HTTP ' + ($json.statusCode ?? 0) + ' ' + ($json.body?.message ?? '') }}"
       },
       "position": [
-        1120,
-        460
+        960,
+        600
       ],
       "type": "n8n-nodes-base.stopAndError",
       "typeVersion": 1
@@ -373,8 +437,8 @@
         "url": "={{ $('QuickBooks target (core)').first().json.body.qbo_base }}/query"
       },
       "position": [
-        1340,
-        300
+        1200,
+        400
       ],
       "retryOnFail": true,
       "type": "n8n-nodes-base.httpRequest",
@@ -409,8 +473,8 @@
         "url": "http://core:8000/reference/vendors"
       },
       "position": [
-        1560,
-        300
+        1440,
+        400
       ],
       "retryOnFail": true,
       "type": "n8n-nodes-base.httpRequest",
@@ -445,8 +509,8 @@
         "options": {}
       },
       "position": [
-        1780,
-        300
+        1680,
+        400
       ],
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2
@@ -458,8 +522,8 @@
         "errorMessage": "={{ 'vendors not synced: HTTP ' + ($json.statusCode ?? 0) + ' ' + ($json.body?.message ?? '') }}"
       },
       "position": [
-        2000,
-        460
+        1680,
+        600
       ],
       "type": "n8n-nodes-base.stopAndError",
       "typeVersion": 1

@@ -11,4 +11,6 @@ for pair in build_email_intake.py:ap-email-intake.json build_post_qbo.py:ap-post
     echo "n8n/workflows/${pair#*:} differs from the output of n8n/${pair%%:*}"; status=1
   fi
 done
+# Readable canvases: every node in one section note, nothing overlapping
+python3 n8n/check_layout.py || status=1
 exit $status

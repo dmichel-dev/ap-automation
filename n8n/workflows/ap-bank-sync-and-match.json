@@ -1,23 +1,23 @@
 {
   "active": false,
   "connections": {
+    "Collect failure facts": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Report failure (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
     "Create payment (QBO)": {
       "main": [
         [
           {
             "index": 0,
             "node": "Payment created?",
-            "type": "main"
-          }
-        ]
-      ]
-    },
-    "Describe failure": {
-      "main": [
-        [
-          {
-            "index": 0,
-            "node": "Report failure (core)",
             "type": "main"
           }
         ]
@@ -150,7 +150,7 @@
         [
           {
             "index": 0,
-            "node": "Describe failure",
+            "node": "Collect failure facts",
             "type": "main"
           }
         ]
@@ -201,7 +201,7 @@
         [
           {
             "index": 0,
-            "node": "Describe failure",
+            "node": "Collect failure facts",
             "type": "main"
           }
         ]
@@ -237,21 +237,21 @@
         [
           {
             "index": 0,
-            "node": "Describe failure",
+            "node": "Collect failure facts",
             "type": "main"
           }
         ],
         [
           {
             "index": 0,
-            "node": "Describe failure",
+            "node": "Collect failure facts",
             "type": "main"
           }
         ],
         [
           {
             "index": 0,
-            "node": "Describe failure",
+            "node": "Collect failure facts",
             "type": "main"
           }
         ]
@@ -363,6 +363,118 @@
   "name": "AP – Bank sync & match",
   "nodes": [
     {
+      "id": "note-bank-sync-and-payment-matching",
+      "name": "Note: Bank sync and payment matching",
+      "parameters": {
+        "color": 5,
+        "content": "## Bank sync and payment matching\nReads outgoing bank payments (Plaid), matches them with open bills, and records each matched payment in QuickBooks.\n\nThe **core service decides**: which transactions are new, which payment pays which bill (amount tolerance, date window, supplier name or invoice number; accepted only when unique on both sides), and what each QuickBooks answer or failure means. A payment that fits several bills is never applied: it goes to review.",
+        "height": 350,
+        "width": 1620
+      },
+      "position": [
+        -40,
+        -150
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-start",
+      "name": "Note: Start",
+      "parameters": {
+        "color": 7,
+        "content": "## Start\nEvery hour, or by hand. The core returns the saved sync cursor.",
+        "height": 550,
+        "width": 900
+      },
+      "position": [
+        -40,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-bank-transactions,-page-by-page",
+      "name": "Note: Bank transactions, page by page",
+      "parameters": {
+        "color": 7,
+        "content": "## Bank transactions, page by page\nPlaid's transaction sync from the saved cursor. The core stores each page; the cursor is saved only after the last page, so a failed run restarts cleanly.",
+        "height": 550,
+        "width": 1140
+      },
+      "position": [
+        920,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-sync-stopped",
+      "name": "Note: Sync stopped",
+      "parameters": {
+        "color": 3,
+        "content": "## Sync stopped\nA failed step ends the run as failed; nothing is half-saved.",
+        "height": 350,
+        "width": 420
+      },
+      "position": [
+        920,
+        850
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-matching-core",
+      "name": "Note: Matching (core)",
+      "parameters": {
+        "color": 7,
+        "content": "## Matching (core)\nThe core matches bank payments with open bills and returns the payments to record.",
+        "height": 550,
+        "width": 660
+      },
+      "position": [
+        2120,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-bill-payments-in-quickbooks",
+      "name": "Note: Bill payments in QuickBooks",
+      "parameters": {
+        "color": 7,
+        "content": "## Bill payments in QuickBooks\nOne at a time: searched by number first (the core decides: reuse, create or review), created with a fixed request ID, then recorded in the core.",
+        "height": 350,
+        "width": 2100
+      },
+      "position": [
+        2840,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-payment-failures",
+      "name": "Note: Payment failures",
+      "parameters": {
+        "color": 3,
+        "content": "## Payment failures\nFacts about the failed step go to the core, which decides: retry on a later run, stop, or review.",
+        "height": 350,
+        "width": 420
+      },
+      "position": [
+        4040,
+        650
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
       "id": "every-hour",
       "name": "Every hour",
       "parameters": {
@@ -377,7 +489,7 @@
       },
       "position": [
         0,
-        200
+        400
       ],
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2
@@ -388,7 +500,7 @@
       "parameters": {},
       "position": [
         0,
-        400
+        600
       ],
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1
@@ -419,7 +531,7 @@
       },
       "position": [
         240,
-        300
+        400
       ],
       "retryOnFail": true,
       "type": "n8n-nodes-base.httpRequest",
@@ -454,8 +566,8 @@
         "options": {}
       },
       "position": [
-        460,
-        300
+        480,
+        400
       ],
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2
@@ -479,8 +591,8 @@
         "options": {}
       },
       "position": [
-        680,
-        220
+        720,
+        400
       ],
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4
@@ -513,8 +625,8 @@
         "url": "https://sandbox.plaid.com/transactions/sync"
       },
       "position": [
-        900,
-        300
+        960,
+        400
       ],
       "retryOnFail": true,
       "type": "n8n-nodes-base.httpRequest",
@@ -549,8 +661,8 @@
         "options": {}
       },
       "position": [
-        1120,
-        300
+        1200,
+        400
       ],
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2
@@ -583,8 +695,8 @@
         "url": "http://core:8000/bank/sync-page/plaid-sandbox"
       },
       "position": [
-        1340,
-        220
+        1440,
+        400
       ],
       "retryOnFail": true,
       "type": "n8n-nodes-base.httpRequest",
@@ -619,8 +731,8 @@
         "options": {}
       },
       "position": [
-        1560,
-        220
+        1680,
+        400
       ],
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2
@@ -653,8 +765,8 @@
         "options": {}
       },
       "position": [
-        1780,
-        140
+        1920,
+        400
       ],
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2
@@ -678,8 +790,8 @@
         "options": {}
       },
       "position": [
-        2000,
-        40
+        1920,
+        600
       ],
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4
@@ -691,8 +803,8 @@
         "errorMessage": "={{ 'bank run stopped (HTTP ' + ($json.statusCode ?? 'no response') + '): ' + ($json.body?.error_code ?? $json.body?.detail ?? $json.error?.message ?? '') + ' (Plaid error codes are upper case; the next run restarts from the saved cursor)' }}"
       },
       "position": [
-        1340,
-        480
+        960,
+        1000
       ],
       "type": "n8n-nodes-base.stopAndError",
       "typeVersion": 1
@@ -722,8 +834,8 @@
         "url": "http://core:8000/matching/run/plaid-sandbox"
       },
       "position": [
-        2000,
-        260
+        2160,
+        400
       ],
       "retryOnFail": true,
       "type": "n8n-nodes-base.httpRequest",
@@ -758,8 +870,8 @@
         "options": {}
       },
       "position": [
-        2220,
-        260
+        2400,
+        400
       ],
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2
@@ -813,8 +925,8 @@
         "options": {}
       },
       "position": [
-        2440,
-        120
+        2640,
+        600
       ],
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4
@@ -827,8 +939,8 @@
         "options": {}
       },
       "position": [
-        2440,
-        300
+        2640,
+        400
       ],
       "type": "n8n-nodes-base.splitOut",
       "typeVersion": 1
@@ -841,8 +953,8 @@
         "options": {}
       },
       "position": [
-        2660,
-        300
+        2880,
+        400
       ],
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3
@@ -900,8 +1012,8 @@
         "url": "={{ $('Run matching (core)').first().json.body.qbo_base }}/query"
       },
       "position": [
-        2880,
-        320
+        3120,
+        400
       ],
       "retryOnFail": true,
       "type": "n8n-nodes-base.httpRequest",
@@ -936,8 +1048,8 @@
         "url": "=http://core:8000/matches/{{ $('One payment at a time').first().json.match_id }}/lookup"
       },
       "position": [
-        3100,
-        320
+        3360,
+        400
       ],
       "retryOnFail": true,
       "type": "n8n-nodes-base.httpRequest",
@@ -1058,8 +1170,8 @@
         }
       },
       "position": [
-        3320,
-        320
+        3600,
+        400
       ],
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2
@@ -1120,8 +1232,8 @@
         "url": "={{ $('Run matching (core)').first().json.body.qbo_base }}/billpayment"
       },
       "position": [
-        3540,
-        200
+        3840,
+        400
       ],
       "retryOnFail": true,
       "type": "n8n-nodes-base.httpRequest",
@@ -1156,8 +1268,8 @@
         "options": {}
       },
       "position": [
-        3760,
-        200
+        4080,
+        400
       ],
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2
@@ -1181,8 +1293,8 @@
         "options": {}
       },
       "position": [
-        3980,
-        300
+        4320,
+        400
       ],
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4
@@ -1215,8 +1327,8 @@
         "url": "=http://core:8000/matches/{{ $('One payment at a time').first().json.match_id }}/payment"
       },
       "position": [
-        4200,
-        300
+        4560,
+        400
       ],
       "retryOnFail": true,
       "type": "n8n-nodes-base.httpRequest",
@@ -1251,23 +1363,23 @@
         "options": {}
       },
       "position": [
-        4420,
-        300
+        4800,
+        400
       ],
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2
     },
     {
-      "id": "describe-failure",
-      "name": "Describe failure",
+      "id": "collect-failure-facts",
+      "name": "Collect failure facts",
       "parameters": {
         "jsCode": "// Facts about the step that failed. The core decides what they mean (retry later, stop, review).\nconst NAMED = {};   // steps that answered 200 without the expected data\nconst step = $prevNode.name;\nconst r = $json;\nconst b = r.body ?? {};\nlet facts;\nif (b.decision) {          // the core's answer to a lookup: review, or QuickBooks query error\n  facts = { error_code: b.error_code, error_message: b.error_message, http_status: b.http_status,\n            fault_code: b.fault_code };\n} else {                   // a QuickBooks or core call that failed\n  const fault = b.Fault?.Error?.[0];\n  facts = { http_status: r.statusCode ?? 0, fault_code: fault?.code ?? null,\n            error_message: fault ? `${fault.Message ?? ''} ${fault.Detail ?? ''}`.trim()\n                                 : String(b.message ?? b.detail ?? r.error?.message ?? '') };\n  if (NAMED[step] && r.statusCode === 200) facts.error_code = NAMED[step];\n}\nreturn [{ json: { match_id: $('One payment at a time').first().json.match_id, body: {\n  ...{}, ...facts, error_message: `${step}: ${facts.error_message ?? ''}`.slice(0, 1000),\n  execution_id: $execution.id } } }];",
         "language": "javaScript",
         "mode": "runOnceForAllItems"
       },
       "position": [
-        4200,
-        560
+        4080,
+        800
       ],
       "type": "n8n-nodes-base.code",
       "typeVersion": 2
@@ -1300,8 +1412,8 @@
         "url": "=http://core:8000/matches/{{ $json.match_id }}/payment-failed"
       },
       "position": [
-        4420,
-        560
+        4320,
+        800
       ],
       "retryOnFail": true,
       "type": "n8n-nodes-base.httpRequest",
