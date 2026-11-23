@@ -17,5 +17,5 @@
     "related_invoice_number": "INV-8812",
     "min_lines": 2
   },
-  "note": "Scanned image; amounts printed positive, stored negative. May fall below the provisional 0.85 confidence threshold: that would be a calibration finding for Day 3."
+  "note": "Scanned image; amounts printed positive, stored negative. May fall below the provisional 0.85 confidence threshold: that would be a calibration finding."
 }

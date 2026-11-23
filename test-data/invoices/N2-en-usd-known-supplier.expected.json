@@ -1,0 +1,22 @@
+{
+  "id": "N2-en-usd-known-supplier",
+  "file": "N2-en-usd-known-supplier.pdf",
+  "email": {
+    "subject": "Invoice HB-2423 – Halvercombe Bookkeeping LLC",
+    "body": "Hello,\n\nplease find attached invoice HB-2423 for USD 797.48, due 12/23/2026.\n\nBest regards,\nHalvercombe Bookkeeping LLC (fictional test supplier)"
+  },
+  "expect": {
+    "status": "ready",
+    "reasons": [],
+    "document_type": "invoice",
+    "invoice_number": "HB-2423",
+    "currency": "USD",
+    "total": "797.48",
+    "invoice_date": "2026-11-23",
+    "due_date": "2026-12-23",
+    "supplier_country": "US",
+    "min_lines": 2,
+    "precondition": "N1 approved with an account (the supplier then has a default account)"
+  },
+  "note": "Second invoice of the N1 supplier, after N1 was approved: ready, posted to the supplier's default account."
+}

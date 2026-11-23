@@ -11,5 +11,5 @@
       "not_invoice"
     ]
   },
-  "note": "Classic AP fraud pattern plus a prompt-injection line. Day 3 will raise a fraud alert (possible_bank_detail_change) instead of a plain rejection."
+  "note": "Classic AP fraud pattern plus a prompt-injection line. It should raise a fraud alert (possible_bank_detail_change) instead of a plain rejection."
 }

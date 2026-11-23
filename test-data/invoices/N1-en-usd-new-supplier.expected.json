@@ -1,0 +1,24 @@
+{
+  "id": "N1-en-usd-new-supplier",
+  "file": "N1-en-usd-new-supplier.pdf",
+  "email": {
+    "subject": "Invoice HB-2411 – Halvercombe Bookkeeping LLC",
+    "body": "Hello,\n\nplease find attached invoice HB-2411 for USD 1,117.55, due 12/20/2026.\n\nBest regards,\nHalvercombe Bookkeeping LLC (fictional test supplier)"
+  },
+  "expect": {
+    "status": "needs_review",
+    "reasons": [
+      "new_vendor",
+      "expense_account_missing"
+    ],
+    "document_type": "invoice",
+    "invoice_number": "HB-2411",
+    "currency": "USD",
+    "total": "1117.55",
+    "invoice_date": "2026-11-20",
+    "due_date": "2026-12-20",
+    "supplier_country": "US",
+    "min_lines": 2
+  },
+  "note": "A supplier never seen before: onboarding review; the reviewer chooses its account (saved as its default)."
+}

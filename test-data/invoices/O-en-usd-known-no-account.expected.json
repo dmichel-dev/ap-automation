@@ -1,0 +1,25 @@
+{
+  "id": "O-en-usd-known-no-account",
+  "file": "O-en-usd-known-no-account.pdf",
+  "email": {
+    "subject": "Invoice WH-30244 – Wrenfold Hosting LLC",
+    "body": "Hello,\n\nplease find attached invoice WH-30244 for USD 481.74, due 12/21/2026.\n\nBest regards,\nWrenfold Hosting LLC (fictional test supplier)"
+  },
+  "expect": {
+    "status": "needs_review",
+    "reasons": [
+      "expense_account_missing"
+    ],
+    "document_type": "invoice",
+    "invoice_number": "WH-30244",
+    "currency": "USD",
+    "total": "481.74",
+    "invoice_date": "2026-11-21",
+    "due_date": "2026-12-21",
+    "supplier_country": "US",
+    "min_lines": 2,
+    "service_period_start": "2026-11-01",
+    "service_period_end": "2026-11-30"
+  },
+  "note": "A supplier already in QuickBooks (from L) but with no default account yet: review only to choose it."
+}

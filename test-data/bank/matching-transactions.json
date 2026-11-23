@@ -1,5 +1,5 @@
 {
-  "note": "Custom Plaid sandbox transactions for the Day 2 matching tests (scripts/plaid_sandbox.py transactions FILE). Positive amount = money out. Created after the bills I, J, K1, K2 are posted.",
+  "note": "Custom Plaid sandbox transactions for the bank matching tests (scripts/plaid_sandbox.py transactions FILE). Positive amount = money out. Created after the bills I, J, K1, K2 are posted.",
   "transactions": [
     {"amount": 641.24, "date": "2026-11-23", "description": "QUILLMOOR PAPER SUP ACH PPD",
      "expect": "accepted (exact amount) → bill payment for QM-1042"},

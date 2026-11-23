@@ -160,6 +160,11 @@ PELLINGHAM = (
     "1200 Sample Industrial Way, Medford, OR 97501, USA",
     "EIN 00-0000004 · (541) 555-0129 · ar@example.com",
 )
+HALVERCOMBE = (
+    "Halvercombe Bookkeeping LLC",
+    "18 Specimen Row, Eugene, OR 97401, USA",
+    "EIN 00-0000005 · (541) 555-0147 · billing@example.com",
+)
 TARNBROOK = (
     "Tarnbrook Courier Services LLC",
     "5 Placeholder Lane, Salem, OR 97301, USA",
@@ -201,8 +206,8 @@ def us_email(number: str, supplier: str, total: D, due: str) -> dict:
 
 
 def doc_i_k(quillmoor: bytes) -> None:
-    """US bills for bank matching (Day 2): exact match, amount within tolerance, ambiguous pair.
-    The bank side is in test-data/bank/day2-transactions.json."""
+    """US bills for bank matching: exact match, amount within tolerance, ambiguous pair.
+    The bank side is in test-data/bank/matching-transactions.json."""
     (OUT / "I-en-usd-exact-match.pdf").write_bytes(quillmoor)
     save_expected(
         "I-en-usd-exact-match",
@@ -607,7 +612,7 @@ def doc_e() -> None:
             "min_lines": 2,
         },
         "Scanned image; amounts printed positive, stored negative. May fall below the provisional "
-        "0.85 confidence threshold: that would be a calibration finding for Day 3.",
+        "0.85 confidence threshold: that would be a calibration finding.",
     )
 
 
@@ -655,7 +660,7 @@ def doc_f() -> None:
             "Thistlecombe Office Supplies (fictional test supplier)",
         },
         {"status": "rejected", "reasons": ["not_invoice"]},
-        "Classic AP fraud pattern plus a prompt-injection line. Day 3 will raise a fraud alert "
+        "Classic AP fraud pattern plus a prompt-injection line. It should raise a fraud alert "
         "(possible_bank_detail_change) instead of a plain rejection.",
     )
 
@@ -720,7 +725,7 @@ def doc_g_h() -> None:
 
 
 def doc_l_m() -> None:
-    """Accounting policy checks (Day 3): cut-off and capitalisation."""
+    """Accounting policy checks: cut-off and capitalisation."""
     lines = [("Managed hosting plan (October 2026)", 1, D("420.00")), ("Backup storage 500 GB", 1, D("60.00"))]
     period = ("10/01/2026", "10/31/2026")
     pdf, total = us_invoice(
@@ -751,6 +756,50 @@ def doc_l_m() -> None:
     )
 
 
+def doc_n_o() -> None:
+    """Supplier onboarding and expense coding."""
+    lines = [
+        ("Monthly bookkeeping, November 2026", 1, D("850.00")),
+        ("Payroll processing (12 employees)", 1, D("180.00")),
+    ]
+    pdf, total = us_invoice(HALVERCOMBE, "HB-2411", ("11/20/2026", "12/20/2026"), lines)
+    (OUT / "N1-en-usd-new-supplier.pdf").write_bytes(pdf)
+    save_expected(
+        "N1-en-usd-new-supplier",
+        "N1-en-usd-new-supplier.pdf",
+        us_email("HB-2411", HALVERCOMBE[0], total, "12/20/2026"),
+        us_expected(
+            "HB-2411", total, "2026-11-20", "2026-12-20", 2, "needs_review", ["new_vendor", "expense_account_missing"]
+        ),
+        "A supplier never seen before: onboarding review; the reviewer chooses its account (saved as its default).",
+    )
+    lines = [("Year-end close preparation", 1, D("640.00")), ("1099 filing preparation", 1, D("95.00"))]
+    pdf, total = us_invoice(HALVERCOMBE, "HB-2423", ("11/23/2026", "12/23/2026"), lines)
+    (OUT / "N2-en-usd-known-supplier.pdf").write_bytes(pdf)
+    expect = us_expected("HB-2423", total, "2026-11-23", "2026-12-23", 2)
+    expect["precondition"] = "N1 approved with an account (the supplier then has a default account)"
+    save_expected(
+        "N2-en-usd-known-supplier",
+        "N2-en-usd-known-supplier.pdf",
+        us_email("HB-2423", HALVERCOMBE[0], total, "12/23/2026"),
+        expect,
+        "Second invoice of the N1 supplier, after N1 was approved: ready, posted to the supplier's default account.",
+    )
+    lines = [("Managed hosting plan (November 2026)", 1, D("420.00")), ("Extra IPv4 addresses (4)", 1, D("24.00"))]
+    period = "Service period: 11/01/2026 – 11/30/2026"
+    pdf, total = us_invoice(WRENFOLD, "WH-30244", ("11/21/2026", "12/21/2026"), lines, period)
+    (OUT / "O-en-usd-known-no-account.pdf").write_bytes(pdf)
+    expect = us_expected("WH-30244", total, "2026-11-21", "2026-12-21", 2, "needs_review", ["expense_account_missing"])
+    expect.update(service_period_start="2026-11-01", service_period_end="2026-11-30")
+    save_expected(
+        "O-en-usd-known-no-account",
+        "O-en-usd-known-no-account.pdf",
+        us_email("WH-30244", WRENFOLD[0], total, "12/21/2026"),
+        expect,
+        "A supplier already in QuickBooks (from L) but with no default account yet: review only to choose it.",
+    )
+
+
 if __name__ == "__main__":
     OUT.mkdir(exist_ok=True)
     for old in OUT.glob("*"):
@@ -767,5 +816,6 @@ if __name__ == "__main__":
     doc_g_h()
     doc_i_k(us)
     doc_l_m()
+    doc_n_o()
     for p in sorted(OUT.iterdir()):
         print(f"{p.stat().st_size:>8}  {p.name}")
