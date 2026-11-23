@@ -19,23 +19,6 @@ ITEM = "plaid-test"
 ACCOUNT = "acc-checking"
 
 
-@pytest.fixture
-def cfg(clean_db, tmp_path):
-    c = accounting.AccountingConfig(
-        database_url=clean_db,
-        storage_dir=tmp_path,
-        home_currency="USD",
-        expense_account_id="20",
-        tax_account_id="21",
-        bank_account_id="35",
-        max_attempts=3,
-        lease_minutes=10,
-    )
-    app.dependency_overrides[get_accounting_config] = lambda: c
-    yield c
-    app.dependency_overrides.clear()
-
-
 def sql(cfg, statement, *args):
     return query(cfg.database_url, statement, *args)
 
@@ -379,6 +362,24 @@ def test_ambiguous_match_keeps_candidates_and_pays_nothing(cfg):
     out = run(cfg)
     assert out["payments_due"] == [] and posting(cfg, inv)["payment_reason"] == "ambiguous_match"
     assert [r["status"] for r in sql(cfg, "SELECT status FROM ap.matches")] == ["candidate", "candidate"]
+
+
+def test_ambiguous_match_opens_one_matching_review(cfg):
+    register_bank(cfg)
+    first = posted_bill(cfg)
+    second = posted_bill(cfg, number="QM-1043")  # same supplier, same amount
+    bank_page(cfg, plaid_tx("t1", 641.24))
+    run(cfg)
+    run(cfg)  # the hourly run sees the same ambiguity: still one review item per bill
+    reviews = sql(cfg, "SELECT invoice_id, stage, status, reasons FROM ap.review_queue ORDER BY id")
+    assert [(str(r["invoice_id"]), r["stage"], r["status"]) for r in reviews] == [
+        (first, "matching", "open"),
+        (second, "matching", "open"),
+    ]
+    assert {r["reasons"][0]["code"] for r in reviews} == {"ambiguous_match"}
+    assert {r["reasons"][0]["detail"] for r in reviews} == {"candidate bank transactions: t1"}
+    assert len(sql(cfg, "SELECT id FROM ap.processing_log WHERE message = 'matching needs review'")) == 2
+    assert run(cfg)["payments_due"] == []
 
 
 def test_foreign_currency_bill_waits_for_fx(cfg):

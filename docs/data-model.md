@@ -7,7 +7,7 @@ Defined in [`db/migrations/`](../db/migrations). Migrations run as the `ap_app` 
 | `invoices` | One row per received document (invoice or credit note): source, file, parties, amounts, extraction, status |
 | `invoice_lines` | Line items |
 | `invoice_tax_lines` | Generic tax breakdown: `vat`, `gst`, `sales_tax`, `withholding`, `other`, `none` |
-| `review_queue` | Human review items (at most one open item per invoice); `stage` = `validation` (extraction/checks) or `posting` (e.g. `vendor_currency_conflict`, `vendor_inactive`, `duplicate_in_accounting`) |
+| `review_queue` | Human review items (at most one open item per invoice); `stage` = `validation` (extraction/checks) `posting` (e.g. `vendor_currency_conflict`, `vendor_inactive`, `duplicate_in_accounting`) or `matching` (`ambiguous_match`: one bank transaction fits several bills, or one bill several transactions; the candidate transactions are named) |
 | `processing_log` | Append-only audit trail; `invoice_id` is optional so events without an invoice are logged too |
 | `vendor_links` | Supplier + currency → accounting vendor (QuickBooks fixes a vendor's currency, so one supplier can have one vendor per currency) |
 | `accounting_postings` | One per invoice sent to QuickBooks: bill or vendor credit, rate used, attachment, payment status and reason; created **before** any API call |
@@ -18,7 +18,7 @@ Defined in [`db/migrations/`](../db/migrations). Migrations run as the `ap_app` 
 ## Conventions
 
 - **Amounts** are `numeric(18,4)` in the document currency. **Credit notes are signed** (`total <= 0`), even when the PDF prints positive amounts; invoices have `total >= 0`. Individual lines may be negative (discounts).
-- **Duplicate key:** `supplier_key` (normalized tax ID, otherwise normalized name) + `document_type` + `invoice_number_norm`.
+- **Duplicate key:** `supplier_key` (normalized tax ID: printed labels such as `EIN`, `VAT`, `USt-IdNr.` removed, letters and digits only; otherwise the normalized name. The tax ID as printed is kept in `supplier_tax_id`) + `document_type` + `invoice_number_norm`.
   Same `file_sha256` → `rejected`; same key with a different file → `needs_review`.
 - **Idempotency:** `(channel, source_ref)` is unique, so re-running an intake never creates a second row for the same attachment.
 - **Codes:** `currency` is ISO 4217, `supplier_country` is ISO 3166-1 alpha-2, `language` is BCP 47.

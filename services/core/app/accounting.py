@@ -318,7 +318,7 @@ def _record_failed(conn: Conn, cfg: AccountingConfig, p: Row, r: Row, ctx: LogCo
         r.get("error_code"), r.get("http_status"), r.get("fault_code"), REVIEW_ERRORS
     )
     if code in REVIEW_ERRORS:  # a person must decide; no blind retries
-        _open_posting_review(conn, str(p["invoice_id"]), code, r.get("error_message"))
+        _open_review(conn, str(p["invoice_id"]), "posting", code, r.get("error_message"))
     conn.execute(
         """UPDATE accounting_postings
               SET status = CASE WHEN status = 'posted' THEN 'posted' ELSE 'failed' END,
@@ -366,22 +366,36 @@ def lookup_decision(
     return postings.existing_document_decision(status, body, entity, vendor_id or "")
 
 
-def _open_posting_review(conn: Conn, invoice_id: str, code: str, detail: str | None) -> None:
-    field, message = REVIEW_ERRORS[code]
+# Matching outcomes a person must settle (Day 3 review flow)
+MATCHING_REVIEWS = {
+    "ambiguous_match": (
+        "payment",
+        "Several bank transactions or bills fit this payment; choose the right pair.",
+    ),
+}
+_STAGE_STEP = {"posting": "post", "matching": "match"}
+
+
+def _open_review(
+    conn: Conn, invoice_id: str, stage: Literal["posting", "matching"], code: str, detail: str | None
+) -> None:
+    """One open review item per invoice: if one is already open, it stays the only one."""
+    field, message = {**REVIEW_ERRORS, **MATCHING_REVIEWS}[code]
     reason = {"code": code, "field": field, "message": message, "detail": (detail or "")[:300]}
     row = conn.execute(
-        """INSERT INTO review_queue (invoice_id, reasons, stage) VALUES (%s, %s, 'posting')
+        """INSERT INTO review_queue (invoice_id, reasons, stage) VALUES (%s, %s, %s)
            ON CONFLICT (invoice_id) WHERE status = 'open' DO NOTHING RETURNING id""",
-        (invoice_id, Jsonb([reason])),
+        (invoice_id, Jsonb([reason]), stage),
     ).fetchone()
-    db.log(
-        conn,
-        step="post",
-        level="warning",
-        message="posting needs review",
-        invoice_id=invoice_id,
-        details={"code": code, "review_id": row["id"] if row else None},
-    )
+    if row:  # logged once, when opened (matching runs every hour)
+        db.log(
+            conn,
+            step=_STAGE_STEP[stage],
+            level="warning",
+            message=f"{stage} needs review",
+            invoice_id=invoice_id,
+            details={"code": code, "review_id": row["id"]},
+        )
 
 
 def retry_posting(conn: Conn, invoice_id: str, note: str | None = None) -> Row:
@@ -701,6 +715,8 @@ def run_matching(conn: Conn, cfg: AccountingConfig, item_key: str, rules: matchi
             channel="system",
             details={"candidates": len(found)},
         )
+        candidates = ", ".join(tx.transaction_id for tx, _ in found)
+        _open_review(conn, invoice_id, "matching", "ambiguous_match", f"candidate bank transactions: {candidates}")
     set_reason([by_invoice[i]["posting_id"] for i in decision.unmatched], "no_match_yet")
 
     return {
@@ -814,7 +830,7 @@ def record_payment_failure(conn: Conn, cfg: AccountingConfig, match_id: int, r: 
         r.get("error_code"), r.get("http_status"), r.get("fault_code"), REVIEW_ERRORS
     )
     if code in REVIEW_ERRORS:
-        _open_posting_review(conn, str(m["invoice_id"]), code, r.get("error_message"))
+        _open_review(conn, str(m["invoice_id"]), "posting", code, r.get("error_message"))
     conn.execute(
         """UPDATE matches SET payment_claimed_until = NULL, payment_last_error = %s,
                   payment_attempts = CASE WHEN %s THEN payment_attempts ELSE %s END

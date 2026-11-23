@@ -318,8 +318,34 @@ def normalize_invoice_number(raw: str | None) -> str | None:
     return _alnum_key(raw)
 
 
+def _label_pattern() -> re.Pattern[str]:
+    def alt(words: tuple[str, ...]) -> str:
+        # Longest first, so "vat number" wins over "vat"; a Latin ending needs a separator after it
+        return "|".join(
+            re.escape(w) + (r"(?![a-z0-9])" if re.search(r"[a-z0-9.]$", w) else "")
+            for w in sorted(words, key=len, reverse=True)
+        )
+
+    words = rf"(?:(?:{alt(ref.TAX_ID_LABEL_WORDS)})[\s.:#-]*)*"
+    return re.compile(rf"^{words}(?:{alt(ref.TAX_ID_LABELS)})[\s.:#-]*{words}", re.IGNORECASE)
+
+
+_TAX_ID_LABEL = _label_pattern()
+
+
+def strip_tax_id_label(raw: str | None) -> str | None:
+    """'EIN 00-0000001' → '00-0000001'. Unchanged when no known label leads, or when nothing with a
+    digit would remain (then the text is not a labelled ID and is kept as is)."""
+    s = clean_text(raw)
+    if not s:
+        return None
+    rest = _TAX_ID_LABEL.sub("", s, count=1).strip()
+    return rest if rest != s and re.search(r"\d", rest) else s
+
+
 def normalize_tax_id(raw: str | None) -> str | None:
-    return _alnum_key(raw)
+    """Duplicate key and country lookup: label removed, letters and digits only, upper case."""
+    return _alnum_key(strip_tax_id_label(raw))
 
 
 def normalize_supplier_name(raw: str | None) -> str | None:

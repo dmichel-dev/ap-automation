@@ -52,7 +52,18 @@ docker compose exec postgres sh /docker-entrypoint-initdb.d/01_migrate.sh   # ap
 docker compose up -d --build core
 ```
 
-Migration 004 (Day 2) was applied this way on 2026-11-22, after backup `pg_dumpall_20261122-172709.sql`.
+Migration 004 (Day 2) was applied this way on 2026-11-22, after backup `pg_dumpall_20261122-172709.sql`; 006 and 007 on 2026-11-23 (backups `pg_dumpall_20261123-113152.sql`, `pg_dumpall_20261123-114811.sql`).
+
+## Recomputing a normalized value after a rule change
+
+When a normalization rule changes, rows stored before it keep the old normalized copy (the duplicate key `supplier_key` and the vendor links depend on it). Recompute with the pipeline's own function; the value as printed is never changed:
+
+```bash
+docker compose exec core python -m app.maintenance renormalize-tax-ids           # dry run: what would change
+docker compose exec core python -m app.maintenance renormalize-tax-ids --apply   # one transaction, logged
+```
+
+Run on 2026-11-23 after tax ID labels (`EIN`, `VAT`, `USt-IdNr.`, `登録番号`…) were removed from the normalized copy: 3 invoices (`EIN000000001` → `000000001`, `EIN000000002` → `000000002`) and their 2 vendor links moved; a second dry run found nothing.
 
 ## Bank connection (Plaid sandbox)
 

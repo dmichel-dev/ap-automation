@@ -4,6 +4,8 @@ from typing import Any
 
 import psycopg
 import pytest
+from app import accounting
+from app.main import app, get_accounting_config
 from psycopg.rows import dict_row
 
 MIGRATIONS = Path("/migrations")
@@ -100,3 +102,21 @@ def clean_db(test_db_url):
         conn.execute(f"TRUNCATE {', '.join('ap.' + t.strip() for t in TABLES.split(','))} RESTART IDENTITY")
         conn.execute("ALTER TABLE ap.processing_log ENABLE TRIGGER USER")
     return test_db_url
+
+
+@pytest.fixture
+def cfg(clean_db, tmp_path):
+    """Accounting settings on the test database (sandbox account IDs), also used by the API."""
+    c = accounting.AccountingConfig(
+        database_url=clean_db,
+        storage_dir=tmp_path,
+        home_currency="USD",
+        expense_account_id="20",
+        tax_account_id="21",
+        bank_account_id="35",
+        max_attempts=3,
+        lease_minutes=10,
+    )
+    app.dependency_overrides[get_accounting_config] = lambda: c
+    yield c
+    app.dependency_overrides.clear()

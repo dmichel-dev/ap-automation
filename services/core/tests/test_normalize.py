@@ -185,6 +185,8 @@ def test_currency_evidence(code, text, expected):
         (None, "FR 12 345678901", "FR"),
         (None, "EL123456789", "GR"),
         (None, "12-3456789", None),
+        (None, "VAT FR12345678901", "FR"),  # label before an EU VAT number
+        (None, "USt-IdNr.: DE123456789", "DE"),
     ],
 )
 def test_resolve_country(code, tax_id, expected):
@@ -216,6 +218,47 @@ def test_normalize_invoice_number(raw, expected):
 
 def test_normalize_tax_id():
     assert n.normalize_tax_id("FR 12 345.678.901") == "FR12345678901"
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("EIN 00-0000001", "00-0000001"),
+        ("Tax ID: 12-3456789", "12-3456789"),
+        ("USt-IdNr.: DE123456789", "DE123456789"),
+        ("N° TVA intracommunautaire : FR12345678901", "FR12345678901"),
+        ("VAT Reg No. GB000 0000 00", "GB000 0000 00"),
+        ("P.IVA 01234567890", "01234567890"),
+        ("CIF B12345678", "B12345678"),
+        ("GSTIN: 27AAAAA0000A1Z5", "27AAAAA0000A1Z5"),
+        ("BN 123456789RT0001", "123456789RT0001"),
+        ("登録番号 T1234567890123", "T1234567890123"),
+        ("登録番号：T1234567890123", "T1234567890123"),  # fullwidth colon
+        ("ИНН 7700000000", "7700000000"),
+        ("الرقم الضريبي: 300000000000003", "300000000000003"),
+    ],
+)
+def test_tax_id_label_is_stripped(raw, expected):
+    assert n.strip_tax_id_label(raw) == expected
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "DE000000000",  # a country prefix, not a label
+        "B00000000",  # Spanish CIF starting with a letter
+        "T0000000000000",  # Japanese registration number
+        "00-0000000",
+        "EINSTEIN 12",  # starts like a label but is a word
+        "VAT",  # nothing with a digit would remain
+    ],
+)
+def test_tax_id_without_label_is_unchanged(raw):
+    assert n.strip_tax_id_label(raw) == raw
+
+
+def test_labelled_and_bare_tax_ids_give_the_same_key():
+    assert n.normalize_tax_id("EIN 00-0000001") == n.normalize_tax_id("00-0000001") == "000000001"
 
 
 @pytest.mark.parametrize("raw, expected", [("en", "en"), ("FR", "fr"), ("de-ch", "de-CH"), ("français", None)])

@@ -44,7 +44,7 @@ Three levels, from fastest to most realistic:
 
 | Level | What it covers | Command |
 |---|---|---|
-| Unit + integration (296) | Normalization, validation, totals, dates, duplicates, email screening, posting content and decisions, matching, the full pipeline on a test database | `docker compose run --rm core-test` |
+| Unit + integration (322) | Normalization, validation, totals, dates, duplicates, email screening, posting content and decisions, matching, the full pipeline on a test database | `docker compose run --rm core-test` |
 | Live provider (3) | Real Mistral OCR calls on a fictional invoice | `docker compose run --rm core-test pytest -m live` |
 | End to end (8 emails) | Gmail → n8n → core → database → Gmail labels | send the test set, then `scripts/run_e2e.sh --since <start time>` |
 

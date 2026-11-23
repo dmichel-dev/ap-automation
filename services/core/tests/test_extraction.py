@@ -190,3 +190,10 @@ def test_withholding_tax_is_negative():
 def test_percentage_given_as_amount_is_flagged():
     inv = build(adjustments=[{"kind": "discount", "label": "Remise", "amount": "5 %", "position": "before_tax"}])
     assert inv.lines[2].amount is None and "unparseable_amount" in codes(inv)
+
+
+def test_tax_id_label_removed_from_the_normalized_copy_only():
+    """The printed value stays for the audit trail; the key and country use it without the label."""
+    inv = build(supplier_tax_id="EIN 00-0000000")
+    assert inv.supplier.tax_id == "EIN 00-0000000"
+    assert inv.normalized.supplier_tax_id == "000000000"

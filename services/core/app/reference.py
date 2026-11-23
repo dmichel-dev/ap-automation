@@ -169,3 +169,26 @@ LEGAL_FORM_SUBSTRINGS = (
     "주식회사",
     "(주)",
 )
+
+# --- Tax IDs ---------------------------------------------------------------------
+# Labels printed before a tax ID ("EIN 12-3456789", "USt-IdNr.: DE…", "登録番号 T…"). They are removed
+# from the normalized copy only (duplicate key, country); the value as printed is kept for audit.
+# Compared case-insensitively after NFKC; a label ending in a Latin letter must be followed by a
+# separator, so a real prefix such as "DE123456789" or "B12345678" is never cut.
+TAX_ID_LABELS = (
+    # English-speaking countries
+    "tax identification number", "federal tax id", "tax id", "tax number", "tax no", "tin", "fein", "ein",
+    "vat registration number", "vat reg no", "vat reg", "vat number", "vat id", "vat no", "vat",
+    "gstin", "gst reg no", "gst number", "gst no", "gst", "hst", "abn", "acn", "bn", "uen", "trn", "nzbn", "pan",
+    # French, German, Dutch
+    "n° tva intracommunautaire", "tva intracommunautaire", "n° tva", "tva", "siret", "siren",
+    "ust-idnr", "ust-id-nr", "ust-id", "ustidnr", "steuernummer", "steuer-nr", "st.-nr",
+    "btw-nummer", "btw-nr", "btw",
+    # Spanish, Portuguese, Italian, Latin America
+    "nif", "cif", "nie", "rfc", "rut", "cuit", "cnpj", "cpf", "partita iva", "p.iva", "iva",
+    # Japanese, Chinese, Korean, Russian, Arabic, Hindi
+    "適格請求書発行事業者登録番号", "登録番号", "法人番号", "统一社会信用代码", "纳税人识别号", "税号",
+    "사업자등록번호", "инн", "رقم التسجيل الضريبي", "الرقم الضريبي", "जीएसटीआईएन", "जीएसटी",
+)  # fmt: skip
+# Words around a label: "No.", "n°", "nr", "number", "#", "id", "reg", "registration"
+TAX_ID_LABEL_WORDS = ("registration", "number", "reg", "no", "nr", "n°", "id", "#")
