@@ -52,7 +52,7 @@ Three levels, from fastest to most realistic:
 
 | Level | What it covers | Command |
 |---|---|---|
-| Unit + integration (444) | Normalization, validation, totals, dates, duplicates, email screening, posting content and decisions, matching, review decisions, the review page's security (sign-in, lockout, sessions, CSRF, listeners, scope, document rendering, headers), the full pipeline on a test database | `docker compose run --rm core-test` |
+| Unit + integration (445) | Normalization, validation, totals, dates, duplicates, email screening, posting content and decisions, matching, review decisions, the review page's security (sign-in, lockout, sessions, CSRF, listeners, scope, document rendering, headers), the full pipeline on a test database | `docker compose run --rm core-test` |
 | Live provider (3) | Real Mistral OCR calls on a fictional invoice | `docker compose run --rm core-test pytest -m live` |
 | End to end (12 emails) | Gmail → n8n → core → database → Gmail labels → QuickBooks → bank matching | send the test set, then `scripts/run_e2e.sh --since <start time>` |
 
@@ -121,3 +121,7 @@ docs/                Architecture and data-format documentation
 - **AP ageing report:** open bills by due-date bucket (current, 1–30, 31–60, 61–90, 90+ days), per supplier and currency.
 - **Purchase orders and 3-way matching:** invoice ↔ PO ↔ goods receipt, with quantity and price tolerances.
 - **Early-payment discounts:** read terms such as "2/10 net 30" and flag bills worth paying early.
+
+## Copyright
+
+Copyright (c) 2026 David Michel. All rights reserved.
