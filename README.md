@@ -110,6 +110,7 @@ docs/                Architecture and data-format documentation
 
 - **Coding rules and AI-suggested accounts:** a rules table (supplier, keywords, amount → account), then account suggestions from past decisions. A suggestion is only shown pre-selected; a person still confirms it, and approval stays deterministic.
 - **Per-line account coding** (today: one account per invoice).
+- **Line-item editing in the review:** add, change or remove lines, with the totals check re-run. Today a reviewer corrects header fields only, and an invoice with wrong lines is rejected.
 - **Approval thresholds and an approver role:** above an amount, a second person approves after the reviewer.
 - **Segregation of duties:** whoever sets up a supplier or its bank details can't approve its invoices or payments; enforced by the roles in the database.
 - **AP ageing report:** open bills by due-date bucket (current, 1–30, 31–60, 61–90, 90+ days), per supplier and currency.

@@ -8,7 +8,7 @@ Invoices that validation can't pass alone go to a person. The core decides which
 |---|---|---|
 | **Approve** | validation review, no fraud flag | The invoice becomes `ready` and is posted to the chosen account. |
 | **Verified with supplier** | fraud items only (`possible_bank_detail_change`) | Same as approve. A note saying how it was verified is required (e.g. "called the number on file, not the one in the letter"). Fraud items have **no plain Approve**. |
-| **Correct** | validation review, no fraud flag | Fix a field that was printed or read wrongly. The item stays open; the reviewer then approves or rejects. |
+| **Correct** | validation review, no fraud flag | Fix a header field that was printed or read wrongly (supplier, number, dates, currency, subtotal, tax total, total, document type). The item stays open; the reviewer then approves or rejects. Line items can't be edited yet (roadmap): an invoice with wrong lines is rejected. |
 | **Reject** | any validation review | A reason is required. The invoice is not posted and its stored file is deleted. |
 | Write off, choose the bank match, retry/exclude a posting | posting and matching reviews | Day 3, step 4 (they need QuickBooks actions). |
 
