@@ -1,22 +1,16 @@
 """Integration tests: the full /invoices/process pipeline against a real Postgres (ap_test)."""
 
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
-import psycopg
 import pytest
-from fastapi.testclient import TestClient
-from psycopg.rows import dict_row
-
 from app.main import app, get_processing_config, get_provider
 from app.processing import Config
 from app.providers.base import ProviderError, ProviderResult
+from fastapi.testclient import TestClient
 
-from .conftest import base_annotation
-
-AUTH = {"Authorization": "Bearer test-token"}
-OCR_TEXT = "Quillmoor Paper Supply LLC ... Total due: USD 641.24 (all amounts in $)"
+from .conftest import AUTH, OCR_TEXT, base_annotation, query
 
 
 class FakeProvider:
@@ -64,13 +58,11 @@ def post(content=b"%PDF-1.4 invoice A", source_ref="gmail:m1:a1", name="invoice.
     )
 
 
-def q(url, sql, *args):
-    with psycopg.connect(url, row_factory=dict_row) as conn:
-        return conn.execute(sql, args).fetchall()
+q = query
 
 
 def test_ready_invoice_is_stored(env):
-    state, cfg = env
+    _state, cfg = env
     r = post()
     assert r.status_code == 200, r.text
     body = r.json()
@@ -81,7 +73,7 @@ def test_ready_invoice_is_stored(env):
     inv = q(cfg.database_url, "SELECT * FROM ap.invoices")[0]
     assert inv["status"] == "ready" and inv["supplier_key"] == "000000000" and inv["n8n_execution_id"] == "42"
     assert inv["confidence_completeness"] == 1 and float(inv["confidence_threshold"]) == 0.85
-    assert inv["file_delete_after"] == datetime(2026, 12, 22, 10, tzinfo=timezone.utc)
+    assert inv["file_delete_after"] == datetime(2026, 12, 22, 10, tzinfo=UTC)
     assert (cfg.storage_dir / inv["file_path"]).read_bytes() == b"%PDF-1.4 invoice A"
     assert inv["file_path"].startswith("2026/11/")
     assert len(q(cfg.database_url, "SELECT * FROM ap.invoice_lines")) == 2
@@ -91,7 +83,7 @@ def test_ready_invoice_is_stored(env):
 
 
 def test_log_contains_no_document_content(env):
-    state, cfg = env
+    _state, cfg = env
     post()
     text = str(q(cfg.database_url, "SELECT message, details FROM ap.processing_log"))
     assert "Quillmoor" not in text and "641.24" not in text
@@ -117,7 +109,7 @@ def test_exact_duplicate_file_is_rejected_without_extraction(env):
 
 
 def test_same_number_different_file_goes_to_review(env):
-    state, cfg = env
+    _state, cfg = env
     first = post(content=b"%PDF-1.4 original", source_ref="gmail:m1:a1").json()
     second = post(content=b"%PDF-1.4 resent, slightly different", source_ref="gmail:m2:a1").json()
     assert second["status"] == "needs_review"
@@ -147,14 +139,14 @@ def test_ambiguous_date_stores_suggestion(env):
 
 def test_wrong_sign_is_stored_for_review(env):
     """Migration 003 lets a negative invoice total be stored, as long as it isn't 'ready'."""
-    state, cfg = env
+    state, _cfg = env
     state["provider"] = FakeProvider(total="-641.24")
     body = post().json()
     assert body["status"] == "needs_review" and "wrong_sign" in [r["code"] for r in body["reasons"]]
 
 
 def test_due_before_invoice_date_is_stored_for_review(env):
-    state, cfg = env
+    state, _cfg = env
     state["provider"] = FakeProvider(invoice_date="2026-11-18", due_date="2026-10-01")
     body = post().json()
     assert body["status"] == "needs_review"
@@ -196,7 +188,7 @@ def test_provider_error_is_logged_and_returns_503(env):
 
 
 def test_unsupported_file_is_logged(env):
-    state, cfg = env
+    _state, cfg = env
     r = post(content=b"MZ\x90\x00 executable", name="invoice.pdf")
     assert r.status_code == 415
     log = q(cfg.database_url, "SELECT step, details FROM ap.processing_log")[0]
@@ -205,13 +197,15 @@ def test_unsupported_file_is_logged(env):
 
 def test_concurrent_duplicates_only_one_passes(env):
     """Two copies of the same invoice (different files) arriving at once: one must be flagged."""
-    state, cfg = env
+    _state, _cfg = env
     results = []
 
     def send(i):
         results.append(post(content=f"%PDF-1.4 copy {i}".encode(), source_ref=f"gmail:c{i}").json()["status"])
 
     threads = [threading.Thread(target=send, args=(i,)) for i in range(2)]
-    [t.start() for t in threads]
-    [t.join() for t in threads]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
     assert sorted(results) == ["needs_review", "ready"]

@@ -87,6 +87,7 @@ services:
       MISTRAL_OCR_MODEL: ${MISTRAL_OCR_MODEL}
       CONFIDENCE_THRESHOLD: ${CONFIDENCE_THRESHOLD}
       HOME_CURRENCY: ${HOME_CURRENCY}
+      INTAKE_EMAIL_ALIAS: ${INTAKE_EMAIL_ALIAS:-invoices@davidmichel.dev}
       FILE_STORAGE_DIR: /data/files
       FILE_RETENTION_DAYS: ${FILE_RETENTION_DAYS}
       # Day 2: accounting accounts (QuickBooks IDs) and matching rules, see docs/matching.md
@@ -110,6 +111,20 @@ services:
 
   # Unit tests: docker compose run --rm --build core-test
   # Live Mistral smoke test (costs a few cents): docker compose run --rm core-test pytest -m live
+  # Type check (mypy) of the whole repo with the core's exact Python and libraries.
+  # Run by the pre-commit hook; by hand: docker compose run --rm lint
+  lint:
+    profiles: [test]
+    image: ap-automation/core:test
+    build:
+      context: ./services/core
+      target: test
+    working_dir: /repo
+    network_mode: none
+    entrypoint: ["mypy"]
+    volumes:
+      - .:/repo:ro
+
   core-test:
     profiles: [test]
     build:

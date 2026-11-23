@@ -3,7 +3,6 @@ import json
 import httpx
 import pytest
 import respx
-
 from app.models import ExtractionResult, strict_json_schema
 from app.providers.base import ProviderError
 from app.providers.mistral import API_URL, MistralOcrProvider

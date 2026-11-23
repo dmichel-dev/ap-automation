@@ -10,6 +10,7 @@ import base64
 import json
 import logging
 import time
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -34,8 +35,8 @@ class MistralOcrProvider:
         timeout_s: float = 120.0,
         max_attempts: int = 3,
         client: httpx.Client | None = None,
-        sleep=time.sleep,
-    ):
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
         if not api_key:
             raise ProviderError("auth", "MISTRAL_API_KEY is not set", retryable=False)
         self._api_key = api_key
@@ -83,7 +84,8 @@ class MistralOcrProvider:
             else:
                 if r.status_code == 200:
                     try:
-                        return r.json()
+                        payload: dict[str, Any] = r.json()
+                        return payload
                     except ValueError as exc:
                         raise ProviderError("invalid_response", "Mistral OCR returned non-JSON", False) from exc
                 error = self._http_error(r)

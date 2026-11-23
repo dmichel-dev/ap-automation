@@ -1,0 +1,25 @@
+# Install once: pre-commit install   (then the checks run on every commit)
+# Run on everything: pre-commit run --all-files
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.22
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      # mypy runs in the core's test image: same Python (3.13) and libraries as production
+      - id: mypy
+        name: mypy (core strict, rest checked)
+        entry: docker compose --profile test run --rm --no-deps lint
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: workflows-match-builders
+        name: n8n workflow JSON matches its builder
+        entry: scripts/check_workflows.sh
+        language: system
+        files: ^n8n/
+        pass_filenames: false

@@ -4,7 +4,6 @@ from datetime import date
 from decimal import Decimal as D
 
 import pytest
-
 from app.matching import BankTx, OpenBill, Rules, decide, evaluate, invoice_number_in, name_similarity
 
 RULES = Rules()

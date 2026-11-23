@@ -12,7 +12,7 @@ import hashlib
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -95,7 +95,7 @@ def process(req: ProcessRequest, provider: ExtractionProvider, cfg: Config) -> P
             )
         raise
     sha256 = hashlib.sha256(req.content).hexdigest()
-    received_at = req.received_at or datetime.now(timezone.utc)
+    received_at = req.received_at or datetime.now(UTC)
     source_lock, file_lock = f"src:{req.channel}:{req.source_ref}", f"sha:{sha256}"
 
     # --- 1 + 2: idempotency and exact duplicate file (short transaction)
@@ -194,7 +194,15 @@ def process(req: ProcessRequest, provider: ExtractionProvider, cfg: Config) -> P
     return _outcome(invoice_id, inv, v, review_id)
 
 
-def _reject_duplicate_file(conn, req, prepared, sha256, received_at, same, cfg) -> ProcessOutcome:
+def _reject_duplicate_file(
+    conn: db.Conn,
+    req: ProcessRequest,
+    prepared: files.PreparedFile,
+    sha256: str,
+    received_at: datetime,
+    same: db.Row,
+    cfg: Config,
+) -> ProcessOutcome:
     reason = Issue(
         code="duplicate_file", field=None, message=f"exact same file as invoice {same['id']} ({same['status']})"
     )

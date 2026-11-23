@@ -42,7 +42,8 @@ class ExtractedLine(_Strict):
 
 class ExtractedTax(_Strict):
     tax_type: TaxType = Field(
-        description="vat (also TVA, MwSt, IVA, BTW, 消費税...), gst, sales_tax, withholding (tax withheld at source), other, or none"
+        description="vat (also TVA, MwSt, IVA, BTW, 消費税...), gst, sales_tax, "
+        "withholding (tax withheld at source), other, or none"
     )
     label: str | None = Field(description="Tax label exactly as printed, e.g. 'TVA 20 %'")
     rate: str | None = Field(description="Tax rate exactly as printed")
@@ -126,7 +127,8 @@ def strict_json_schema(model: type[BaseModel]) -> dict[str, Any]:
             return [resolve(v) for v in node]
         return node
 
-    return resolve(schema)
+    resolved: dict[str, Any] = resolve(schema)
+    return resolved
 
 
 # ---------------------------------------------------------------------------

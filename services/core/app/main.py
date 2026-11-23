@@ -2,6 +2,7 @@
 
 Endpoints:
   GET  /health            liveness + database check (no auth)
+  POST /intake/email/screen  email metadata → which attachments to process (the alias guard)
   POST /invoices/process  file + source → extract, check, store; returns the status for n8n routing
   POST /extract           file → common invoice format (no persistence; tests and debugging)
 
@@ -9,7 +10,8 @@ Day 2 (n8n does the QuickBooks/Plaid calls; the core keeps state and rules):
   GET  /invoices/{id}/file               original file, for the accounting attachment
   POST /invoices/{id}/exclude-from-posting
   POST /postings/claim                   invoices to post now, with the document to send (leased)
-  POST /postings/{invoice_id}/result     outcome of a posting / attachment
+  POST /postings/{invoice_id}/lookup/{kind}  QuickBooks search result → next step (vendor / document)
+  POST /postings/{invoice_id}/result     outcome of a posting / attachment (failures classified here)
   POST /postings/{invoice_id}/retry      operator: fresh attempts for a failed posting (logged)
   PUT  /vendor-links                     supplier + currency → accounting vendor
   PUT  /bank/accounts/{item_key}         the bank account used for matching
@@ -21,21 +23,21 @@ Day 2 (n8n does the QuickBooks/Plaid calls; the core keeps state and rules):
 
 import hmac
 import logging
+from dataclasses import asdict
 from datetime import date, datetime
 from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 import psycopg
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-
 from pydantic import BaseModel, Field
 
-from . import accounting, db, files, matching, processing
+from . import accounting, db, files, intake, matching, processing
 from .config import get_settings
 from .extraction import build_common_invoice
 from .models import CommonInvoice
@@ -162,6 +164,7 @@ def get_rules() -> matching.Rules:
     )
 
 
+JsonDict = dict[str, Any]
 AcctCfg = Annotated[accounting.AccountingConfig, Depends(get_accounting_config)]
 Auth = [Depends(require_token)]
 
@@ -176,17 +179,15 @@ def _conflict(_: Request, exc: accounting.Conflict) -> JSONResponse:
     return JSONResponse({"error": "conflict", "message": str(exc)}, status_code=409)
 
 
-def _json(row: dict | None) -> dict | None:
+def _json_value(v: Any) -> Any:
+    if isinstance(v, (Decimal, UUID)):
+        return str(v)
+    return v.isoformat() if isinstance(v, (date, datetime)) else v
+
+
+def _json(row: db.Row) -> JsonDict:
     """DB row → JSON-safe dict (Decimal as exact string, dates as ISO)."""
-    if row is None:
-        return None
-
-    def conv(v):
-        if isinstance(v, (Decimal, UUID)):
-            return str(v)
-        return v.isoformat() if isinstance(v, (date, datetime)) else v
-
-    return {k: conv(v) for k, v in row.items()}
+    return {k: _json_value(v) for k, v in row.items()}
 
 
 @app.get("/invoices/{invoice_id}/file", dependencies=Auth)
@@ -202,13 +203,13 @@ class Exclusion(BaseModel):
 
 
 @app.post("/invoices/{invoice_id}/exclude-from-posting", dependencies=Auth)
-def exclude_from_posting(invoice_id: str, body: Exclusion, cfg: AcctCfg) -> dict:
+def exclude_from_posting(invoice_id: str, body: Exclusion, cfg: AcctCfg) -> JsonDict:
     with db.connect(cfg.database_url) as conn:
         return _json(accounting.exclude_from_posting(conn, invoice_id, body.reason, body.note))
 
 
 @app.post("/postings/claim", dependencies=Auth)
-def claim_postings(cfg: AcctCfg, limit: int = 10) -> dict:
+def claim_postings(cfg: AcctCfg, limit: int = 10) -> JsonDict:
     with db.connect(cfg.database_url) as conn:
         items = accounting.claim_postings(conn, cfg, max(1, min(limit, 50)))
     return {"count": len(items), "qbo_base": cfg.qbo_base, "minorversion": "75", "items": items}
@@ -221,14 +222,16 @@ class PostingResult(BaseModel):
     exchange_rate: Decimal | None = Field(default=None, gt=0)
     exchange_rate_date: date | None = None
     attachment_external_id: str | None = Field(default=None, max_length=50)
-    error_code: str | None = Field(default=None, max_length=100)
+    # Failure facts; the core decides what they mean (retry, stop, review)
+    error_code: str | None = Field(default=None, max_length=100)  # a failure named by the workflow
     error_message: str | None = Field(default=None, max_length=2000)
-    retryable: bool = True
+    http_status: int | None = Field(default=None, ge=0, le=599)  # 0 = no response (network error)
+    fault_code: str | None = Field(default=None, max_length=20)  # QuickBooks Fault.Error[0].code
     execution_id: str | None = Field(default=None, max_length=100)
 
 
 @app.post("/postings/{invoice_id}/result", dependencies=Auth)
-def posting_result(invoice_id: str, body: PostingResult, cfg: AcctCfg) -> dict:
+def posting_result(invoice_id: str, body: PostingResult, cfg: AcctCfg) -> JsonDict:
     if body.outcome == "posted" and not (body.external_id and body.vendor_external_id):
         raise HTTPException(422, "posted requires external_id and vendor_external_id")
     if body.outcome == "attached" and not body.attachment_external_id:
@@ -239,12 +242,52 @@ def posting_result(invoice_id: str, body: PostingResult, cfg: AcctCfg) -> dict:
     return _json(posting)
 
 
+class EmailAttachment(BaseModel):
+    key: str = Field(pattern=r"^attachment_\d+$")
+    mime_type: str | None = Field(default=None, max_length=200)
+    file_name: str | None = Field(default=None, max_length=500)
+    size: str | int | None = None
+
+
+class EmailToScreen(BaseModel):
+    recipients: list[str] = Field(default=[], max_length=500)
+    delivered_to: str = Field(default="", max_length=2000)
+    attachments: list[EmailAttachment] = Field(default=[], max_length=100)
+
+
+@app.post("/intake/email/screen", dependencies=Auth)
+def screen_email(body: EmailToScreen) -> JsonDict:
+    """Which attachments of an email go to processing (metadata only; nothing is stored)."""
+    screening = intake.screen_email(
+        body.recipients,
+        body.delivered_to,
+        [intake.Attachment(a.key, a.mime_type, a.file_name, a.size) for a in body.attachments],
+        get_settings().intake_email_alias,
+    )
+    return asdict(screening)
+
+
+class Lookup(BaseModel):
+    """A QuickBooks search response, passed through unchanged by the workflow."""
+
+    status_code: int = Field(ge=0, le=599)
+    body: Any = None
+    vendor_id: str | None = Field(default=None, max_length=50)  # document lookups only
+
+
+@app.post("/postings/{invoice_id}/lookup/{kind}", dependencies=Auth)
+def posting_lookup(invoice_id: str, kind: Literal["vendor", "document"], body: Lookup, cfg: AcctCfg) -> JsonDict:
+    with db.connect(cfg.database_url) as conn:
+        decision = accounting.lookup_decision(conn, invoice_id, kind, body.status_code, body.body, body.vendor_id)
+    return asdict(decision)
+
+
 class Retry(BaseModel):
     note: str | None = Field(default=None, max_length=200)
 
 
 @app.post("/postings/{invoice_id}/retry", dependencies=Auth)
-def posting_retry(invoice_id: str, body: Retry, cfg: AcctCfg) -> dict:
+def posting_retry(invoice_id: str, body: Retry, cfg: AcctCfg) -> JsonDict:
     with db.connect(cfg.database_url) as conn:
         return _json(accounting.retry_posting(conn, invoice_id, body.note))
 
@@ -257,7 +300,7 @@ class VendorLink(BaseModel):
 
 
 @app.put("/vendor-links", dependencies=Auth)
-def vendor_link(body: VendorLink, cfg: AcctCfg) -> dict:
+def vendor_link(body: VendorLink, cfg: AcctCfg) -> JsonDict:
     with db.connect(cfg.database_url) as conn:
         return _json(
             accounting.link_vendor(conn, body.supplier_key, body.currency, body.external_id, body.display_name)
@@ -270,27 +313,27 @@ class BankAccount(BaseModel):
 
 
 @app.put("/bank/accounts/{item_key}", dependencies=Auth)
-def bank_account(item_key: str, body: BankAccount, cfg: AcctCfg) -> dict:
+def bank_account(item_key: str, body: BankAccount, cfg: AcctCfg) -> JsonDict:
     with db.connect(cfg.database_url) as conn:
         return _json(accounting.register_account(conn, item_key, body.account_id, body.account_currency))
 
 
 @app.get("/bank/sync-state/{item_key}", dependencies=Auth)
-def bank_sync_state(item_key: str, cfg: AcctCfg) -> dict:
+def bank_sync_state(item_key: str, cfg: AcctCfg) -> JsonDict:
     with db.connect(cfg.database_url) as conn:
         return _json(accounting.sync_state(conn, item_key))
 
 
 class SyncPage(BaseModel):
-    added: list[dict] = []
-    modified: list[dict] = []
-    removed: list[dict] = []
+    added: list[JsonDict] = []
+    modified: list[JsonDict] = []
+    removed: list[JsonDict] = []
     next_cursor: str
     has_more: bool
 
 
 @app.post("/bank/sync-page/{item_key}", dependencies=Auth)
-def bank_sync_page(item_key: str, body: SyncPage, cfg: AcctCfg) -> dict:
+def bank_sync_page(item_key: str, body: SyncPage, cfg: AcctCfg) -> JsonDict:
     with db.connect(cfg.database_url) as conn:
         return accounting.store_sync_page(
             conn, item_key, body.added, body.modified, body.removed, body.next_cursor, body.has_more
@@ -298,7 +341,7 @@ def bank_sync_page(item_key: str, body: SyncPage, cfg: AcctCfg) -> dict:
 
 
 @app.post("/matching/run/{item_key}", dependencies=Auth)
-def matching_run(item_key: str, cfg: AcctCfg, rules: Annotated[matching.Rules, Depends(get_rules)]) -> dict:
+def matching_run(item_key: str, cfg: AcctCfg, rules: Annotated[matching.Rules, Depends(get_rules)]) -> JsonDict:
     with db.connect(cfg.database_url) as conn:
         return accounting.run_matching(conn, cfg, item_key, rules)
 
@@ -309,6 +352,6 @@ class PaymentRecorded(BaseModel):
 
 
 @app.post("/matches/{match_id}/payment", dependencies=Auth)
-def match_payment(match_id: int, body: PaymentRecorded, cfg: AcctCfg) -> dict:
+def match_payment(match_id: int, body: PaymentRecorded, cfg: AcctCfg) -> JsonDict:
     with db.connect(cfg.database_url) as conn:
         return _json(accounting.record_payment(conn, match_id, body.external_payment_id, body.execution_id))

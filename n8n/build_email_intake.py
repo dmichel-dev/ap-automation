@@ -1,26 +1,43 @@
 """Builds the 'AP – Email intake' n8n workflow JSON.
 
 Usage:
-  python3 n8n/build_email_intake.py > out.json                       # no credential IDs (committable)
+  python3 n8n/build_email_intake.py > out.json                         # no credential IDs (committable)
   python3 n8n/build_email_intake.py --credentials ids.json > out.json  # with local credential IDs, for import
 
-Generated rather than hand-edited so the canvas layout and wiring stay consistent and reviewable.
+Flow: Gmail trigger → email metadata → the core screens it (alias guard, which attachments) →
+one item per attachment → the core processes it → Gmail labels by status, posting started for
+ready invoices. Emails without a valid attachment, or not for the alias, are labelled and logged.
 """
 
-import json
-import sys
+from typing import Any
 
-ALIAS = "invoices@davidmichel.dev"
-CORE_URL = "http://core:8000/invoices/process"
+from nodes import CORE, Connections, Node, code_node, condition, core_call, main, workflow
 
-GUARD_JS = r"""
-// Guard and split: one item per invoice attachment, or one item explaining why there is none.
-// Deterministic code only: nothing here reads the document content.
-const ALIAS = '__ALIAS__';
-const LABELS = { processed: 'AP/Processed', ready: 'AP/Ready', review: 'AP/Review', rejected: 'AP/Rejected', error: 'AP/Error' };
-const BY_MIME = { 'application/pdf': 1, 'image/png': 1, 'image/jpeg': 1, 'image/webp': 1, 'image/tiff': 1 };
-const BY_EXT = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', tif: 'image/tiff', tiff: 'image/tiff' };
-const MIN_IMAGE_BYTES = 15000;   // smaller images are almost always signature logos
+ALIAS = "invoices@davidmichel.dev"  # Gmail search filter; the core checks the recipients again
+SPLIT = "Split by attachment"
+ITEM = f"$('{SPLIT}').item.json"
+
+DESCRIBE_EMAIL_JS = r"""
+// Metadata only (recipients, attachment types, names, sizes) for the core's screening.
+return $('Gmail Trigger').all().map((email, i) => {
+  const mail = email.json;
+  const files = Object.entries(email.binary ?? {}).filter(([key]) => /^attachment_\d+$/.test(key));
+  return { json: {
+    message_id: mail.id,
+    thread_id: mail.threadId,
+    recipients: [...(mail.to?.value ?? []), ...(mail.cc?.value ?? [])].map(a => String(a.address ?? '')),
+    delivered_to: String(mail.headers?.['delivered-to'] ?? ''),
+    attachments: files.map(([key, b]) => ({ key, mime_type: b.mimeType ?? null, file_name: b.fileName ?? null,
+                                           size: b.fileSize ?? null })),
+  }, pairedItem: { item: i } };
+});
+"""
+
+SPLIT_JS = r"""
+// One item per attachment the core accepted (with its file), or one item saying why there is none.
+// File names are not passed on to the logs: they may be personal data.
+const LABELS = { processed: 'AP/Processed', ready: 'AP/Ready', review: 'AP/Review',
+                 rejected: 'AP/Rejected', error: 'AP/Error' };
 
 // Label IDs, looked up by name so nothing is hard-coded
 const byName = Object.fromEntries($('Get AP labels').all().map(i => [i.json.name, i.json.id]));
@@ -30,57 +47,31 @@ for (const [key, name] of Object.entries(LABELS)) {
   labels[key] = byName[name];
 }
 
-// n8n stores a human-readable size ("45.2 kB"); convert it back to bytes
-function toBytes(size) {
-  const m = String(size ?? '').match(/([\d.]+)\s*(B|kB|MB|GB)/i);
-  if (!m) return 0;
-  return Math.round(parseFloat(m[1]) * { b: 1, kb: 1e3, mb: 1e6, gb: 1e9 }[m[2].toLowerCase()]);
-}
-
+const emails = $('Describe email').all();
+const files = $('Gmail Trigger').all();
 const out = [];
-for (const email of $('Gmail Trigger').all()) {
-  const mail = email.json;
-  const base = { message_id: mail.id, thread_id: mail.threadId, labels };
-
-  // Second guard after the Gmail search: the alias must be a recipient
-  const recipients = [...(mail.to?.value ?? []), ...(mail.cc?.value ?? [])].map(a => String(a.address ?? '').toLowerCase());
-  const deliveredTo = String(mail.headers?.['delivered-to'] ?? '').toLowerCase();
-  if (!recipients.includes(ALIAS) && !deliveredTo.includes(ALIAS)) {
-    out.push({ json: { ...base, route: 'not_for_alias', reason: 'not_addressed_to_alias' }, pairedItem: { item: 0 } });
-    continue;
+$input.all().forEach((screen, i) => {
+  if (screen.json.statusCode !== 200) {
+    throw new Error(`email screening failed (core HTTP ${screen.json.statusCode ?? 'no response'})`);
   }
-
-  const binary = email.binary ?? {};
-  const keys = Object.keys(binary).filter(k => k.startsWith('attachment_'))
-    .sort((a, b) => Number(a.split('_')[1]) - Number(b.split('_')[1]));
-  const accepted = [], skipped = [];
-  for (const key of keys) {
-    const b = binary[key];
-    const ext = String(b.fileName ?? '').split('.').pop().toLowerCase();
-    const mime = BY_MIME[b.mimeType] ? b.mimeType : BY_EXT[ext];
-    const size = toBytes(b.fileSize);
-    if (!mime) { skipped.push({ type: b.mimeType ?? 'unknown', size, why: 'unsupported_type' }); continue; }
-    if (mime.startsWith('image/') && size < MIN_IMAGE_BYTES) { skipped.push({ type: mime, size, why: 'small_image' }); continue; }
-    accepted.push({ key, index: Number(key.split('_')[1]), mime, size });
+  const mail = emails[i].json, s = screen.json.body;
+  const base = { message_id: mail.message_id, thread_id: mail.thread_id, labels };
+  if (s.route !== 'process') {
+    out.push({ json: { ...base, route: s.route, reason: s.reason,
+                       details: { attachments: s.attachments, skipped: s.skipped } }, pairedItem: { item: i } });
+    return;
   }
-
-  if (accepted.length === 0) {
-    // Never silently ignored: logged and labelled (file names are not logged, they may be personal data)
-    out.push({ json: { ...base, route: 'no_valid_attachment', reason: 'no_valid_attachment',
-                       details: { attachments: keys.length, skipped } }, pairedItem: { item: 0 } });
-    continue;
-  }
-  for (const a of accepted) {
+  for (const a of s.accepted) {
     out.push({
-      json: { ...base, route: 'process', source_ref: `gmail:${mail.id}:${a.index}`, mime: a.mime, size: a.size,
-              attachments_in_email: accepted.length },
-      binary: { file: binary[a.key] },
-      pairedItem: { item: 0 },
+      json: { ...base, route: 'process', source_ref: `gmail:${mail.message_id}:${a.index}`, mime: a.mime,
+              size: a.size, attachments_in_email: s.accepted.length },
+      binary: { file: files[i].binary[a.key] },
+      pairedItem: { item: i },
     });
   }
-}
+});
 return out;
-""".replace("__ALIAS__", ALIAS).strip()
+"""
 
 LOG_SQL = (
     "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details)\n"
@@ -88,28 +79,27 @@ LOG_SQL = (
 )
 
 
-def switch_rule(output_key: str, expression: str) -> dict:
-    """Switch v3 rule that matches when a boolean expression is true."""
+def switch_rule(output_key: str, expression: str) -> dict[str, Any]:
+    """Switch rule that matches when a boolean expression is true."""
     return {
-        "conditions": {
-            "options": {"caseSensitive": True, "leftValue": "", "typeValidation": "strict", "version": 2},
-            "conditions": [
-                {
-                    "id": output_key.replace(" ", "-"),
-                    "leftValue": "={{ " + expression + " }}",
-                    "rightValue": "",
-                    "operator": {"type": "boolean", "operation": "true", "singleValue": True},
-                }
-            ],
-            "combinator": "and",
-        },
+        "conditions": condition(expression, "strict", output_key.replace(" ", "-")),
         "renameOutput": True,
         "outputKey": output_key,
     }
 
 
-def label_node(name: str, label_keys: list[str], position: list[int]) -> dict:
-    labels = ", ".join(f"$('Guard and split').item.json.labels.{k}" for k in label_keys)
+def switch(name: str, position: list[int], rules: list[dict[str, Any]], options: dict[str, Any]) -> Node:
+    return {
+        "name": name,
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.2,
+        "position": position,
+        "parameters": {"rules": {"values": rules}, "options": options},
+    }
+
+
+def label_node(name: str, label_keys: list[str], position: list[int]) -> Node:
+    labels = ", ".join(f"{ITEM}.labels.{k}" for k in label_keys)
     return {
         "name": name,
         "type": "n8n-nodes-base.gmail",
@@ -118,7 +108,7 @@ def label_node(name: str, label_keys: list[str], position: list[int]) -> dict:
         "parameters": {
             "resource": "message",
             "operation": "addLabels",
-            "messageId": "={{ $('Guard and split').item.json.message_id }}",
+            "messageId": "={{ " + ITEM + ".message_id }}",
             "labelIds": "={{ [" + labels + "] }}",
         },
         "credentials": {"gmailOAuth2": "GMAIL"},
@@ -127,7 +117,8 @@ def label_node(name: str, label_keys: list[str], position: list[int]) -> dict:
 
 def log_node(
     name: str, position: list[int], step: str, level: str, message: str, source_ref: str, details: str
-) -> dict:
+) -> Node:
+    replacements = [source_ref, "$execution.id", f"'{step}'", f"'{level}'", message, f"JSON.stringify({details})"]
     return {
         "name": name,
         "type": "n8n-nodes-base.postgres",
@@ -136,28 +127,14 @@ def log_node(
         "parameters": {
             "operation": "executeQuery",
             "query": LOG_SQL,
-            "options": {
-                "queryReplacement": "={{ ["
-                + ", ".join(
-                    [
-                        source_ref,
-                        "$execution.id",
-                        f"'{step}'",
-                        f"'{level}'",
-                        message,
-                        f"JSON.stringify({details})",
-                    ]
-                )
-                + "] }}"
-            },
+            "options": {"queryReplacement": "={{ [" + ", ".join(replacements) + "] }}"},
         },
         "credentials": {"postgres": "POSTGRES"},
     }
 
 
-def build(cred_ids: dict | None) -> dict:
-    g = "$('Guard and split').item.json"
-    nodes = [
+def _intake_nodes() -> list[Node]:
+    return [
         {
             "name": "Gmail Trigger",
             "type": "n8n-nodes-base.gmailTrigger",
@@ -181,38 +158,40 @@ def build(cred_ids: dict | None) -> dict:
             "parameters": {"resource": "label", "operation": "getAll", "returnAll": True},
             "credentials": {"gmailOAuth2": "GMAIL"},
         },
-        {
-            "name": "Guard and split",
-            "type": "n8n-nodes-base.code",
-            "typeVersion": 2,
-            "position": [440, 300],
-            "parameters": {"mode": "runOnceForAllItems", "language": "javaScript", "jsCode": GUARD_JS},
-        },
-        {
-            "name": "Route intake",
-            "type": "n8n-nodes-base.switch",
-            "typeVersion": 3.2,
-            "position": [660, 300],
-            "parameters": {
-                "rules": {
-                    "values": [
-                        switch_rule("invoice attachment", "$json.route === 'process'"),
-                        switch_rule("no valid attachment", "$json.route === 'no_valid_attachment'"),
-                        switch_rule("not for alias", "$json.route === 'not_for_alias'"),
-                    ]
-                },
-                "options": {},
-            },
-        },
+        code_node("Describe email", [440, 300], DESCRIBE_EMAIL_JS),
+        core_call(
+            "Screen email (core)",
+            [660, 300],
+            "POST",
+            f"={CORE}/intake/email/screen",
+            body="JSON.stringify({ recipients: $json.recipients, delivered_to: $json.delivered_to, "
+            "attachments: $json.attachments })",
+        ),
+        code_node(SPLIT, [880, 300], SPLIT_JS),
+        switch(
+            "Route intake",
+            [1100, 300],
+            [
+                switch_rule("invoice attachment", "$json.route === 'process'"),
+                switch_rule("no valid attachment", "$json.route === 'no_valid_attachment'"),
+                switch_rule("not for alias", "$json.route === 'not_for_alias'"),
+            ],
+            {},
+        ),
+    ]
+
+
+def _processing_nodes() -> list[Node]:
+    return [
         {
             "name": "Process invoice (core)",
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.2,
-            "position": [900, 120],
+            "position": [1340, 120],
             "onError": "continueErrorOutput",
             "parameters": {
                 "method": "POST",
-                "url": CORE_URL,
+                "url": f"{CORE}/invoices/process",
                 "authentication": "genericCredentialType",
                 "genericAuthType": "httpHeaderAuth",
                 "sendBody": True,
@@ -232,34 +211,29 @@ def build(cred_ids: dict | None) -> dict:
             },
             "credentials": {"httpHeaderAuth": "CORE"},
         },
-        {
-            "name": "Route by status",
-            "type": "n8n-nodes-base.switch",
-            "typeVersion": 3.2,
-            "position": [1140, 100],
-            "parameters": {
-                "rules": {
-                    "values": [
-                        switch_rule("ready", "$json.statusCode === 200 && $json.body.status === 'ready'"),
-                        switch_rule("needs_review", "$json.statusCode === 200 && $json.body.status === 'needs_review'"),
-                        # 413/415: file too large / not a supported file → nothing a human can do with it
-                        switch_rule(
-                            "rejected",
-                            "($json.statusCode === 200 && $json.body.status === 'rejected') || [413, 415].includes($json.statusCode)",
-                        ),
-                    ]
-                },
-                "options": {"fallbackOutput": "extra", "renameFallbackOutput": "error"},
-            },
-        },
-        label_node("Label: ready", ["ready", "processed"], [1400, -100]),
-        # Day 2: post ready invoices right away (the 15-minute schedule is the safety net).
+        # Routing on the core's answer; 413/415 (too large / not a supported file): nothing a human can do
+        switch(
+            "Route by status",
+            [1580, 100],
+            [
+                switch_rule("ready", "$json.statusCode === 200 && $json.body.status === 'ready'"),
+                switch_rule("needs_review", "$json.statusCode === 200 && $json.body.status === 'needs_review'"),
+                switch_rule(
+                    "rejected",
+                    "($json.statusCode === 200 && $json.body.status === 'rejected')"
+                    " || [413, 415].includes($json.statusCode)",
+                ),
+            ],
+            {"fallbackOutput": "extra", "renameFallbackOutput": "error"},
+        ),
+        label_node("Label: ready", ["ready", "processed"], [1840, -100]),
+        # Post ready invoices right away (the 15-minute schedule is the safety net).
         # Fire and forget: the intake doesn't wait for QuickBooks.
         {
             "name": "Post to QuickBooks",
             "type": "n8n-nodes-base.executeWorkflow",
             "typeVersion": 1.2,
-            "position": [1620, -100],
+            "position": [2060, -100],
             "executeOnce": True,
             "parameters": {
                 "source": "database",
@@ -267,33 +241,39 @@ def build(cred_ids: dict | None) -> dict:
                 "options": {"waitForSubWorkflow": False},
             },
         },
-        label_node("Label: review", ["review", "processed"], [1400, 40]),
-        label_node("Label: rejected", ["rejected", "processed"], [1400, 180]),
+        label_node("Label: review", ["review", "processed"], [1840, 40]),
+        label_node("Label: rejected", ["rejected", "processed"], [1840, 180]),
         # Technical error: AP/Error only, NOT AP/Processed (re-checked on Day 3)
-        label_node("Label: error", ["error"], [1400, 340]),
+        label_node("Label: error", ["error"], [1840, 340]),
         log_node(
             "Log core error",
-            [1620, 340],
+            [2060, 340],
             "core_call",
             "error",
             "'core service call failed'",
-            f"{g}.source_ref",
+            f"{ITEM}.source_ref",
             "{ status_code: $('Process invoice (core)').item.json.statusCode ?? null, "
-            "error: $('Process invoice (core)').item.json.body?.error ?? $('Process invoice (core)').item.json.error?.message ?? null }",
+            "error: $('Process invoice (core)').item.json.body?.error"
+            " ?? $('Process invoice (core)').item.json.error?.message ?? null }",
         ),
-        label_node("Label: no valid attachment", ["rejected", "processed"], [900, 360]),
+    ]
+
+
+def _not_processed_nodes() -> list[Node]:
+    return [
+        label_node("Label: no valid attachment", ["rejected", "processed"], [1340, 360]),
         log_node(
             "Log no valid attachment",
-            [1120, 360],
+            [1560, 360],
             "intake",
             "warning",
             "'email without a valid invoice attachment'",
-            f"'gmail:' + {g}.message_id",
-            f"{g}.details",
+            f"'gmail:' + {ITEM}.message_id",
+            f"{ITEM}.details",
         ),
         log_node(
             "Log not for alias",
-            [900, 540],
+            [1340, 540],
             "intake",
             "warning",
             "'email not addressed to the invoices alias'",
@@ -301,56 +281,36 @@ def build(cred_ids: dict | None) -> dict:
             "{}",
         ),
     ]
-    connections = {
-        "Gmail Trigger": [[("Get AP labels", 0)]],
-        "Get AP labels": [[("Guard and split", 0)]],
-        "Guard and split": [[("Route intake", 0)]],
-        "Route intake": [
-            [("Process invoice (core)", 0)],
-            [("Label: no valid attachment", 0)],
-            [("Log not for alias", 0)],
-        ],
-        "Process invoice (core)": [[("Route by status", 0)], [("Label: error", 0)]],
-        "Route by status": [
-            [("Label: ready", 0)],
-            [("Label: review", 0)],
-            [("Label: rejected", 0)],
-            [("Label: error", 0)],
-        ],
-        "Label: ready": [[("Post to QuickBooks", 0)]],
-        "Label: error": [[("Log core error", 0)]],
-        "Label: no valid attachment": [[("Log no valid attachment", 0)]],
-    }
 
-    names = {"GMAIL": "Gmail – david@davidmichel.dev", "CORE": "AP core token", "POSTGRES": "AP database (ap_app)"}
-    for node in nodes:
-        node["id"] = node["name"].lower().replace(" ", "-").replace(":", "").replace("(", "").replace(")", "")
-        for ctype, key in node.get("credentials", {}).items():
-            ref = {"name": names[key]}
-            if cred_ids:
-                ref["id"] = cred_ids[key]
-            node["credentials"][ctype] = ref
-    return {
-        "name": "AP – Email intake",
-        "nodes": nodes,
-        "connections": {
-            src: {"main": [[{"node": n, "type": "main", "index": i} for n, i in out] for out in outs]}
-            for src, outs in connections.items()
-        },
-        "settings": {
-            "executionOrder": "v1",
-            "saveDataErrorExecution": "all",
-            "saveDataSuccessExecution": "all",
-            "saveManualExecutions": True,
-            "timezone": "Europe/Paris",
-        },
-        "pinData": {},
-        "active": False,
-    }
+
+CONNECTIONS: Connections = {
+    "Gmail Trigger": [[("Get AP labels", 0)]],
+    "Get AP labels": [[("Describe email", 0)]],
+    "Describe email": [[("Screen email (core)", 0)]],
+    "Screen email (core)": [[(SPLIT, 0)]],
+    SPLIT: [[("Route intake", 0)]],
+    "Route intake": [
+        [("Process invoice (core)", 0)],
+        [("Label: no valid attachment", 0)],
+        [("Log not for alias", 0)],
+    ],
+    "Process invoice (core)": [[("Route by status", 0)], [("Label: error", 0)]],
+    "Route by status": [
+        [("Label: ready", 0)],
+        [("Label: review", 0)],
+        [("Label: rejected", 0)],
+        [("Label: error", 0)],
+    ],
+    "Label: ready": [[("Post to QuickBooks", 0)]],
+    "Label: error": [[("Log core error", 0)]],
+    "Label: no valid attachment": [[("Log no valid attachment", 0)]],
+}
+
+
+def build(cred_ids: dict[str, str] | None) -> dict[str, Any]:
+    nodes = _intake_nodes() + _processing_nodes() + _not_processed_nodes()
+    return workflow("AP – Email intake", nodes, CONNECTIONS, cred_ids)
 
 
 if __name__ == "__main__":
-    ids = None
-    if len(sys.argv) == 3 and sys.argv[1] == "--credentials":
-        ids = json.load(open(sys.argv[2]))
-    print(json.dumps(build(ids), indent=2, ensure_ascii=False, sort_keys=True))
+    main(build)

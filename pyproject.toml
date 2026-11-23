@@ -20,6 +20,8 @@ select = [
 ignore = [
   # Multilingual invoices are the point of the test set: ×, –, «», CJK, Arabic, Devanagari are intended
   "RUF001", "RUF002", "RUF003",
+  # "AED AFN ALL ...".split() keeps long code lists readable; the list form would be one huge line
+  "SIM905",
 ]
 
 [tool.ruff.lint.mccabe]
@@ -39,7 +41,7 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 check_untyped_defs = true
 explicit_package_bases = true
-mypy_path = "services/core"
+mypy_path = "services/core:n8n"
 
 # The core service: the flags of --strict (strict itself can't be set per module)
 [[tool.mypy.overrides]]

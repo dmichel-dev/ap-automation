@@ -1,14 +1,29 @@
 import os
 from pathlib import Path
+from typing import Any
 
 import psycopg
 import pytest
+from psycopg.rows import dict_row
 
 MIGRATIONS = Path("/migrations")
 TABLES = (
     "matches, bank_transactions, bank_sync_state, accounting_postings, vendor_links, "
     "invoice_lines, invoice_tax_lines, review_queue, processing_log, invoices"
 )
+
+
+# --- shared by several test files -------------------------------------------------------
+AUTH = {"Authorization": "Bearer test-token"}
+OCR_TEXT = "Quillmoor Paper Supply LLC ... Total due: USD 641.24 (all amounts in $)"
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def query(url: str, sql: str, *args: Any) -> list[dict[str, Any]]:
+    """Runs one statement on the test database; the rows it returns (none for an UPDATE)."""
+    with psycopg.connect(url, row_factory=dict_row) as conn:
+        cur = conn.execute(sql, args)
+        return cur.fetchall() if cur.description else []
 
 
 def base_annotation(**overrides):

@@ -13,7 +13,8 @@ import io
 import json
 import random
 import zipfile
-from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal as D
+from decimal import ROUND_DOWN, ROUND_HALF_UP
+from decimal import Decimal as D
 from pathlib import Path
 
 from fpdf import FPDF
@@ -46,7 +47,7 @@ def fmt_en(v: D) -> str:  # 1,598.61
     return f"{q(v):,.2f}"
 
 
-def fmt_jp(v: D) -> str:  # 18,135
+def fmt_jp(v: D | int) -> str:  # 18,135
     return f"{int(v):,}"
 
 
@@ -72,12 +73,12 @@ class Doc(FPDF):
     def table(self, header: list[str], rows: list[list[str]], widths: list[float], aligns: str):
         self.set_font("main", "B", 9)
         self.set_fill_color(235, 235, 235)
-        for text, w, a in zip(header, widths, aligns):
+        for text, w, a in zip(header, widths, aligns, strict=True):
             self.cell(w, 7, text, border="B", align=a, fill=True)
         self.ln()
         self.set_font("main", "", 9)
         for row in rows:
-            for text, w, a in zip(row, widths, aligns):
+            for text, w, a in zip(row, widths, aligns, strict=True):
                 self.cell(w, 6.5, text, align=a)
             self.ln()
         self.ln(2)
@@ -102,7 +103,7 @@ def save_expected(doc_id: str, file: str, email: dict, expect: dict, note: str =
 # =====================================================================================
 def us_quillmoor() -> bytes:
     lines = [("Copy paper A4 (box)", 10, D("42.00")), ("Toner cartridge", 2, D("85.50"))]
-    subtotal = sum(qty * price for _, qty, price in lines)
+    subtotal = sum((qty * price for _, qty, price in lines), D(0))
     tax = q(subtotal * D("0.085"))
     total = subtotal + tax
     assert (subtotal, tax, total) == (D("591.00"), D("50.24"), D("641.24"))
@@ -140,10 +141,10 @@ def doc_a() -> None:
         ("Papier recyclé A4, ramette", 20, D("6.40"), D("20")),
         ("Ouvrages techniques reliés", 4, D("32.50"), D("5.5")),
     ]
-    gross = sum(n * p for _, n, p, _ in lines)
+    gross = sum((n * p for _, n, p, _ in lines), D(0))
     discount = q(gross * D("0.05"))
     net = gross - discount
-    bases = {}
+    bases: dict[D, D] = {}
     for _, n, p, r in lines:
         bases[r] = bases.get(r, D(0)) + n * p
     bases = {r: q(b * D("0.95")) for r, b in bases.items()}
@@ -289,7 +290,7 @@ def doc_c() -> None:
         ("Lagerbuchse Messing", 40, D("3.25")),
         ("Versandkosten", 1, D("15.00")),
     ]
-    net = sum(n * p for _, n, p in lines)
+    net = sum((n * p for _, n, p in lines), D(0))
     vat = q(net * D("0.19"))
     correct = net + vat
     printed = correct + D("10.00")  # deliberate error
@@ -353,7 +354,7 @@ def doc_d() -> None:
         ("Diseño de identidad visual", "1", D("1200.00"), D("1200.00")),
         ("Maquetación de folleto (horas)", "8", D("45.00"), D("360.00")),
     ]
-    base = sum(l[3] for l in lines)
+    base = sum((ln[3] for ln in lines), D(0))
     iva = q(base * D("0.21"))
     irpf = q(base * D("0.15"))
     total = base + iva - irpf
@@ -416,7 +417,7 @@ def doc_d() -> None:
 # =====================================================================================
 def doc_e() -> None:
     lines = [("Returned desk lamps", 2, D("34.50")), ("Credit for damaged toner", 1, D("58.00"))]
-    sub = sum(n * p for _, n, p in lines)
+    sub = sum((n * p for _, n, p in lines), D(0))
     vat = q(sub * D("0.20"))
     total = sub + vat
     assert (sub, vat, total) == (D("127.00"), D("25.40"), D("152.40"))
@@ -442,12 +443,12 @@ def doc_e() -> None:
     line(f"Customer: {BUYER[0]}")
     y += 30
     cols = [110, 700, 830, 1010]
-    for x, t in zip(cols, ["Description", "Qty", "Unit price", "Amount"]):
+    for x, t in zip(cols, ["Description", "Qty", "Unit price", "Amount"], strict=True):
         d.text((x, y), t, fill=25, font=f(26, True))
     y += 50
     d.line((110, y - 8, 1140, y - 8), fill=80, width=2)
     for desc, n, p in lines:
-        for x, t in zip(cols, [desc, str(n), f"£{fmt_en(p)}", f"£{fmt_en(n * p)}"]):
+        for x, t in zip(cols, [desc, str(n), f"£{fmt_en(p)}", f"£{fmt_en(n * p)}"], strict=True):
             d.text((x, y), t, fill=25, font=f(26))
         y += 46
     y += 30
@@ -463,13 +464,16 @@ def doc_e() -> None:
     line("This amount will be deducted from your next payment. Fictional document for a demo.", 20)
 
     # "Scan" effect: slight rotation, blur, sensor noise, uneven paper tone
-    img = img.rotate(1.2, resample=Image.BICUBIC, expand=False, fillcolor=245)
+    img = img.rotate(1.2, resample=Image.Resampling.BICUBIC, expand=False, fillcolor=245)
     img = img.filter(ImageFilter.GaussianBlur(0.7))
     rnd = random.Random(42)
     px = img.load()
+    assert px is not None
     for _ in range(60000):
         x, yy = rnd.randrange(w), rnd.randrange(h)
-        px[x, yy] = max(0, min(255, px[x, yy] + rnd.randint(-60, 60)))
+        pixel = px[x, yy]
+        assert isinstance(pixel, int)  # grayscale image: one int per pixel
+        px[x, yy] = max(0, min(255, pixel + rnd.randint(-60, 60)))
     buf = io.BytesIO()
     img.convert("RGB").save(buf, format="PNG", optimize=True)
     (OUT / "E-en-gbp-credit-note-scan.png").write_bytes(buf.getvalue())
@@ -578,12 +582,14 @@ def doc_g_h() -> None:
             '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
             '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
             '<Default Extension="xml" ContentType="application/xml"/>'
-            '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>',
+            '<Override PartName="/word/document.xml" ContentType="application/'
+            'vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>',
         )
         z.writestr(
             "_rels/.rels",
             '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>',
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/'
+            'relationships/officeDocument" Target="word/document.xml"/></Relationships>',
         )
         z.writestr("word/document.xml", document)
     (OUT / "H-delivery-note.docx").write_bytes(buf.getvalue())

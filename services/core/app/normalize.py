@@ -9,6 +9,7 @@ import unicodedata
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
+from typing import Literal
 
 from . import reference as ref
 
@@ -57,29 +58,41 @@ def parse_amount(raw: str | None, currency: str | None = None) -> Decimal | None
         return None
     if "%" in s:
         raise NormalizationError("unparseable_amount", f"percentage instead of an amount in {raw!r}")
-    negative = (s.startswith("(") and s.endswith(")")) or bool(re.search(r"-\s*\D*\d", s)) or s.endswith("-")
-    runs = [r.strip() for r in _NUMBER_RUN.findall(s)]
-    runs = [r for r in runs if r]
+    num = _single_number(s, raw)
+    value = _to_decimal(num, _decimal_separator(num, currency), raw)
+    return -value if _is_negative(s) else value
+
+
+def _is_negative(s: str) -> bool:
+    """'(50.00)', '-50.00', '€ -50', '50.00-'."""
+    return (s.startswith("(") and s.endswith(")")) or bool(re.search(r"-\s*\D*\d", s)) or s.endswith("-")
+
+
+def _single_number(s: str, raw: str | None) -> str:
+    """The one number in the text, without space or apostrophe grouping."""
+    runs = [r for r in (r.strip() for r in _NUMBER_RUN.findall(s)) if r]
     if not runs:
         raise NormalizationError("unparseable_amount", f"no number in {raw!r}")
     if len(runs) > 1:
         raise NormalizationError("unparseable_amount", f"several numbers in {raw!r}")
-    num = runs[0].replace(" ", "").replace("'", "")
+    return str(runs[0]).replace(" ", "").replace("'", "")
 
+
+def _decimal_separator(num: str, currency: str | None) -> str | None:
+    """'.' or ',' when the number has a decimal part, None when every separator groups thousands."""
     if "." in num and "," in num:
-        decimal_sep = "." if num.rfind(".") > num.rfind(",") else ","
-    elif "." in num or "," in num:
-        sep = "." if "." in num else ","
-        int_part, _, frac = num.rpartition(sep)
-        if num.count(sep) > 1:
-            decimal_sep = None
-        elif len(frac) == 3 and ref.minor_units(currency) != 3 and int_part not in ("0", ""):
-            decimal_sep = None
-        else:
-            decimal_sep = sep
-    else:
-        decimal_sep = None
+        return "." if num.rfind(".") > num.rfind(",") else ","
+    if "." not in num and "," not in num:
+        return None
+    sep = "." if "." in num else ","
+    int_part, _, frac = num.rpartition(sep)
+    thousands_only = num.count(sep) > 1 or (
+        len(frac) == 3 and ref.minor_units(currency) != 3 and int_part not in ("0", "")
+    )
+    return None if thousands_only else sep
 
+
+def _to_decimal(num: str, decimal_sep: str | None, raw: str | None) -> Decimal:
     if decimal_sep is None:
         digits = num.replace(".", "").replace(",", "")
     else:
@@ -87,10 +100,9 @@ def parse_amount(raw: str | None, currency: str | None = None) -> Decimal | None
         int_part, _, frac = num.rpartition(decimal_sep)
         digits = int_part.replace(thousands, "") + "." + frac
     try:
-        value = Decimal(digits)
+        return Decimal(digits)
     except InvalidOperation as exc:
         raise NormalizationError("unparseable_amount", f"cannot read {raw!r}") from exc
-    return -value if negative else value
 
 
 def parse_rate(raw: str | None) -> Decimal | None:
@@ -110,12 +122,21 @@ def parse_rate(raw: str | None) -> Decimal | None:
 # ---------------------------------------------------------------------------
 # Dates
 # ---------------------------------------------------------------------------
+DateOrder = Literal["DMY", "MDY"]
+
+
 @dataclass(frozen=True)
 class ParsedDate:
     value: date | None  # set when unambiguous
     dmy: date | None = None  # candidates when the day/month order is unknown
     mdy: date | None = None
-    order: str | None = None  # 'DMY' / 'MDY' when the numbers prove the order
+    order: DateOrder | None = None  # when the numbers prove the order
+
+    def reading(self, order: DateOrder) -> date | None:
+        """The date itself, or for an ambiguous one, its reading in the given order."""
+        if not self.ambiguous:
+            return self.value
+        return self.dmy if order == "DMY" else self.mdy
 
     @property
     def ambiguous(self) -> bool:
@@ -135,7 +156,7 @@ def _year(token: str) -> int:
 
 
 def _strip_accents_latin(s: str) -> str:
-    out = []
+    out: list[str] = []
     for ch in unicodedata.normalize("NFKD", s):
         if unicodedata.combining(ch) and out and out[-1].isascii():
             continue
@@ -160,43 +181,53 @@ def parse_date(raw: str | None) -> ParsedDate | None:
     s = clean_text(raw)
     if s is None:
         return None
-
-    if m := _REIWA_DATE.search(s):
-        era_year = 1 if m.group(1) == "元" else int(m.group(1))
-        if d := _safe_date(2018 + era_year, int(m.group(2)), int(m.group(3))):
-            return ParsedDate(d)
-    if m := _CJK_DATE.search(s):
-        if d := _safe_date(int(m.group(1)), int(m.group(2)), int(m.group(3))):
-            return ParsedDate(d)
-    if m := _ISO_DATE.match(s):
-        if d := _safe_date(int(m.group(1)), int(m.group(2)), int(m.group(3))):
-            return ParsedDate(d)
-
+    if d := _year_first_date(s):
+        return ParsedDate(d)
     if m := _NUMERIC_DATE.match(s):
-        a, b, y = int(m.group(1)), int(m.group(2)), _year(m.group(3))
-        dmy, mdy = _safe_date(y, b, a), _safe_date(y, a, b)
-        if dmy and not mdy:
-            return ParsedDate(dmy, order="DMY")
-        if mdy and not dmy:
-            return ParsedDate(mdy, order="MDY")
-        if dmy and mdy:
-            return ParsedDate(dmy) if dmy == mdy else ParsedDate(None, dmy=dmy, mdy=mdy)
-        raise NormalizationError("unparseable_date", f"invalid date {raw!r}")
+        return _numeric_date(m, raw)
+    if d := _month_name_date(s):
+        return ParsedDate(d)
+    raise NormalizationError("unparseable_date", f"cannot read date {raw!r}")
 
-    # Month name: one month word, one 4-digit year, one day number
+
+def _year_first_date(s: str) -> date | None:
+    """Japanese era (令和), CJK (2026年11月18日) or ISO-like (2026-11-18) dates."""
+    if (m := _REIWA_DATE.search(s)) and (
+        d := _safe_date(2018 + (1 if m.group(1) == "元" else int(m.group(1))), int(m.group(2)), int(m.group(3)))
+    ):
+        return d
+    for find in (_CJK_DATE.search, _ISO_DATE.match):  # year, month, day groups
+        if (m := find(s)) and (d := _safe_date(int(m.group(1)), int(m.group(2)), int(m.group(3)))):
+            return d
+    return None
+
+
+def _numeric_date(m: re.Match[str], raw: str | None) -> ParsedDate:
+    """dd/mm/yyyy or mm/dd/yyyy: decided only when one reading is impossible or both agree."""
+    a, b, y = int(m.group(1)), int(m.group(2)), _year(m.group(3))
+    dmy, mdy = _safe_date(y, b, a), _safe_date(y, a, b)
+    if dmy and not mdy:
+        return ParsedDate(dmy, order="DMY")
+    if mdy and not dmy:
+        return ParsedDate(mdy, order="MDY")
+    if dmy and mdy:
+        return ParsedDate(dmy) if dmy == mdy else ParsedDate(None, dmy=dmy, mdy=mdy)
+    raise NormalizationError("unparseable_date", f"invalid date {raw!r}")
+
+
+def _month_name_date(s: str) -> date | None:
+    """One month word, one 4-digit year, one day number."""
     text = _strip_accents_latin(s).lower()
-    words = re.findall(r"[a-z]+", text)
-    months = {ref.MONTH_LOOKUP[w] for w in words if w in ref.MONTH_LOOKUP}
+    months = {ref.MONTH_LOOKUP[w] for w in re.findall(r"[a-z]+", text) if w in ref.MONTH_LOOKUP}
     numbers = re.findall(r"\d+", text)
     years = [n for n in numbers if len(n) == 4]
     days = [n for n in numbers if len(n) <= 2]
     if len(months) == 1 and len(years) == 1 and len(days) == 1:
-        if d := _safe_date(int(years[0]), months.pop(), int(days[0])):
-            return ParsedDate(d)
-    raise NormalizationError("unparseable_date", f"cannot read date {raw!r}")
+        return _safe_date(int(years[0]), months.pop(), int(days[0]))
+    return None
 
 
-def date_order_suggestion(country: str | None) -> tuple[str | None, str]:
+def date_order_suggestion(country: str | None) -> tuple[DateOrder | None, str]:
     """Suggested day/month order for ambiguous numeric dates, from the supplier country."""
     if not country:
         return None, "supplier country unknown"
@@ -216,17 +247,15 @@ def resolve_currency(candidates: list[str | None], country: str | None) -> tuple
     Returns (code, note). code is None when nothing or only an ambiguous symbol was found.
     An explicit ISO code always wins over a symbol.
     """
-    texts = [clean_text(c) for c in candidates if c]
-    texts = [t.upper() for t in texts if t]
+    cleaned = (clean_text(c) for c in candidates if c)
+    texts = [t.upper() for t in cleaned if t]
     for t in texts:
         for token in re.findall(r"(?<![A-Z])[A-Z]{3}(?![A-Z])", t):
             if token in ref.ISO_4217:
                 return token, None
     for t in texts:
         for symbol in sorted(ref.CURRENCY_SYMBOLS, key=len, reverse=True):
-            # Letter symbols (RM, ZŁ, LEI) must be whole tokens, so 'FIRM' never matches 'RM'
-            pattern = rf"(?<![A-Z]){re.escape(symbol)}(?![A-Z])" if re.search(r"[A-Z]", symbol) else re.escape(symbol)
-            if re.search(pattern, t):
+            if re.search(_symbol_pattern(symbol), t):
                 return ref.CURRENCY_SYMBOLS[symbol], None
         tokens = re.findall(r"[^\d\s.,'()+-]+", t)
         for token in tokens:
@@ -249,11 +278,13 @@ def currency_evidence(code: str, ocr_text: str) -> bool:
     symbols = [s for s, c in ref.CURRENCY_SYMBOLS.items() if c == code]
     symbols += [s for s, by_country in ref.AMBIGUOUS_SYMBOLS.items() if code in by_country.values()]
     symbols += [s for s, c in ref.AMBIGUOUS_SYMBOL_DEFAULT.items() if c == code]
-    for s in symbols:
-        pattern = rf"(?<![A-Z]){re.escape(s)}(?![A-Z])" if re.search(r"[A-Z]", s) else re.escape(s)
-        if re.search(pattern, text):
-            return True
-    return False
+    return any(re.search(_symbol_pattern(s), text) for s in symbols)
+
+
+def _symbol_pattern(symbol: str) -> str:
+    """Letter symbols (RM, ZŁ, LEI) must be whole tokens, so 'FIRM' never matches 'RM'."""
+    escaped = re.escape(symbol)
+    return rf"(?<![A-Z]){escaped}(?![A-Z])" if re.search(r"[A-Z]", symbol) else escaped
 
 
 def resolve_country(code: str | None, tax_id: str | None) -> str | None:
@@ -277,14 +308,18 @@ def _alnum(s: str) -> str:
     return "".join(ch for ch in s if ch.isalnum())
 
 
-def normalize_invoice_number(raw: str | None) -> str | None:
+def _alnum_key(raw: str | None) -> str | None:
+    """Letters and digits only, upper case: 'FR 12-345' and 'fr12345' give the same key."""
     s = clean_text(raw)
     return (_alnum(s).upper() or None) if s else None
+
+
+def normalize_invoice_number(raw: str | None) -> str | None:
+    return _alnum_key(raw)
 
 
 def normalize_tax_id(raw: str | None) -> str | None:
-    s = clean_text(raw)
-    return (_alnum(s).upper() or None) if s else None
+    return _alnum_key(raw)
 
 
 def normalize_supplier_name(raw: str | None) -> str | None:

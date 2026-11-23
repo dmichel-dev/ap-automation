@@ -1,14 +1,9 @@
-from decimal import Decimal
-
 import pytest
-
 from app.extraction import build_common_invoice
 from app.providers.base import ProviderResult
 from app.validation import Duplicate, validate
 
-from .conftest import base_annotation
-
-OCR_TEXT = "Quillmoor Paper Supply LLC ... Total due: USD 641.24 (all amounts in $)"
+from .conftest import OCR_TEXT, base_annotation
 
 
 def check(ocr_avg=0.98, ocr_text=OCR_TEXT, duplicates=None, threshold=0.85, **overrides):
@@ -80,7 +75,7 @@ def test_wrong_sign_goes_to_review():
 
 @pytest.mark.parametrize("field", ["supplier_name", "invoice_number", "currency"])
 def test_missing_required_field(field):
-    overrides = {field: None}
+    overrides: dict[str, str | None] = {field: None}
     if field == "currency":
         overrides["total"] = "641.24"
     v = check(**overrides)

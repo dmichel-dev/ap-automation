@@ -8,14 +8,13 @@ from decimal import Decimal as D
 
 import psycopg
 import pytest
-from fastapi.testclient import TestClient
-from psycopg.rows import dict_row
-
 from app import accounting, db
 from app.main import app, get_accounting_config
 from app.matching import Rules
+from fastapi.testclient import TestClient
 
-AUTH = {"Authorization": "Bearer test-token"}
+from .conftest import AUTH, query
+
 ITEM = "plaid-test"
 ACCOUNT = "acc-checking"
 
@@ -37,10 +36,8 @@ def cfg(clean_db, tmp_path):
     app.dependency_overrides.clear()
 
 
-def sql(cfg, query, *args):
-    with psycopg.connect(cfg.database_url, row_factory=dict_row) as conn:
-        cur = conn.execute(query, args)
-        return cur.fetchall() if cur.description else None
+def sql(cfg, statement, *args):
+    return query(cfg.database_url, statement, *args)
 
 
 def make_invoice(
@@ -179,13 +176,13 @@ def test_claim_creates_postings_for_ready_invoices_only(cfg):
     assert set(items) == {ready, credit}
     bill = items[ready]
     assert bill["action"] == "create" and bill["entity"] == "Bill" and bill["needs_exchange_rate"] is False
-    assert sum(D(str(l["Amount"])) for l in bill["document"]["Line"]) == D("641.24")
+    assert sum(D(str(ln["Amount"])) for ln in bill["document"]["Line"]) == D("641.24")
     assert bill["document"]["DocNumber"] == "QM-1042" and bill["request_id"] == f"ap-bill-{ready}"
     vc = items[credit]
     assert (
         vc["entity"] == "VendorCredit" and vc["needs_exchange_rate"] and vc["vendor"]["display_name"].endswith("(GBP)")
     )
-    assert sum(D(str(l["Amount"])) for l in vc["document"]["Line"]) == D("120.00")
+    assert sum(D(str(ln["Amount"])) for ln in vc["document"]["Line"]) == D("120.00")
     assert posting(cfg, credit)["payment_status"] == "not_applicable"
 
 
@@ -257,7 +254,7 @@ def test_file_endpoint_serves_and_then_404s(cfg):
 def test_permanent_failure_stops_retries(cfg):
     inv = make_invoice(cfg)
     claim(cfg)
-    r = result(cfg, inv, outcome="failed", error_code="6240", error_message="Duplicate Name Exists", retryable=False)
+    r = result(cfg, inv, outcome="failed", http_status=400, fault_code="6240", error_message="Duplicate Name Exists")
     assert r.json()["status"] == "failed" and r.json()["attempts"] == cfg.max_attempts
     sql(cfg, "UPDATE ap.accounting_postings SET next_attempt_at = now()")
     assert claim(cfg) == []
@@ -356,7 +353,7 @@ def test_exact_match_is_paid(cfg):
 @pytest.mark.parametrize("bank, applied", [("641.64", "641.24"), ("640.84", "640.84")])
 def test_difference_within_tolerance_is_flagged(cfg, bank, applied):
     register_bank(cfg)
-    inv = posted_bill(cfg)
+    posted_bill(cfg)
     bank_page(cfg, plaid_tx("t1", float(bank)))
     pay = run(cfg)["payments_due"][0]
     assert D(str(pay["document"]["TotalAmt"])) == D(applied)  # never more than the bill
@@ -440,8 +437,10 @@ def test_concurrent_matching_runs_produce_one_payment(cfg):
         due.extend(run(cfg)["payments_due"])
 
     threads = [threading.Thread(target=go) for _ in range(4)]
-    [t.start() for t in threads]
-    [t.join() for t in threads]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
     assert len(due) == 1
     assert sql(cfg, "SELECT count(*) AS n FROM ap.matches WHERE status = 'accepted'")[0]["n"] == 1
 
@@ -471,8 +470,8 @@ def test_vendor_currency_conflict_opens_a_posting_review(cfg):
         outcome="failed",
         error_code="vendor_currency_conflict",
         error_message="vendor 58 uses USD",
-        retryable=True,
-    )  # retryable is overridden
+        http_status=503,
+    )  # a failure that needs a person is never retried, whatever the HTTP status
     assert r.status_code == 200 and r.json()["status"] == "failed" and r.json()["attempts"] == cfg.max_attempts
     review = sql(cfg, "SELECT * FROM ap.review_queue WHERE invoice_id = %s", inv)
     assert len(review) == 1 and review[0]["stage"] == "posting" and review[0]["status"] == "open"
@@ -488,7 +487,7 @@ def test_vendor_currency_conflict_opens_a_posting_review(cfg):
 def test_ordinary_failure_opens_no_review(cfg):
     inv = make_invoice(cfg)
     claim(cfg)
-    result(cfg, inv, outcome="failed", error_code="http_503", error_message="unavailable")
+    result(cfg, inv, outcome="failed", http_status=503, error_message="unavailable")
     assert sql(cfg, "SELECT id FROM ap.review_queue") == []
     assert posting(cfg, inv)["attempts"] == 1  # will be retried
 
@@ -517,7 +516,7 @@ def test_retry_resets_a_failed_posting_only(cfg):
     claim(cfg)
     c = TestClient(app)
     assert c.post(f"/postings/{inv}/retry", headers=AUTH, json={}).status_code == 409  # still pending
-    result(cfg, inv, outcome="failed", error_code="qbo_6000", error_message="bad", retryable=False)
+    result(cfg, inv, outcome="failed", http_status=400, fault_code="6000", error_message="bad")
     r = c.post(f"/postings/{inv}/retry", headers=AUTH, json={"note": "request id fixed"})
     assert r.status_code == 200 and r.json()["attempts"] == 0
     assert claim(cfg)[0]["invoice_id"] == inv
@@ -528,3 +527,28 @@ def test_retry_refused_while_a_posting_review_is_open(cfg):
     claim(cfg)
     result(cfg, inv, outcome="failed", error_code="vendor_currency_conflict", error_message="x")
     assert TestClient(app).post(f"/postings/{inv}/retry", headers=AUTH, json={}).status_code == 409
+
+
+def test_lookup_endpoints_decide_from_quickbooks_answers(cfg):
+    inv = make_invoice(cfg, currency="EUR")
+    claim(cfg)
+    c = TestClient(app)
+    found = {"QueryResponse": {"Vendor": [{"Id": "58", "CurrencyRef": {"value": "USD"}, "Active": True}]}}
+    r = c.post(f"/postings/{inv}/lookup/vendor", headers=AUTH, json={"status_code": 200, "body": found})
+    assert r.status_code == 200 and r.json()["decision"] == "review"
+    assert r.json()["error_code"] == "vendor_currency_conflict"
+    bills = {"QueryResponse": {"Bill": [{"Id": "150", "VendorRef": {"value": "58"}}]}}
+    r = c.post(
+        f"/postings/{inv}/lookup/document", headers=AUTH, json={"status_code": 200, "body": bills, "vendor_id": "58"}
+    )
+    assert r.json() == {**r.json(), "decision": "exists", "external_id": "150"}
+    unknown = "00000000-0000-0000-0000-000000000000"
+    assert c.post(f"/postings/{unknown}/lookup/vendor", headers=AUTH, json={"status_code": 200}).status_code == 404
+
+
+def test_duplicate_in_accounting_opens_a_review_on_the_invoice_number(cfg):
+    inv = make_invoice(cfg)
+    claim(cfg)
+    result(cfg, inv, outcome="failed", error_code="duplicate_in_accounting", error_message="2 Bill records")
+    review = sql(cfg, "SELECT stage, reasons FROM ap.review_queue WHERE invoice_id = %s", inv)[0]
+    assert review["stage"] == "posting" and review["reasons"][0]["field"] == "invoice_number"

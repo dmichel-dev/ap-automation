@@ -3,7 +3,7 @@
 from decimal import Decimal as D
 
 import pytest
-
+from app import postings as p
 from app.postings import PostingError, doc_number, document_lines, qbo_quote, vendor_display_name
 
 
@@ -45,7 +45,7 @@ def test_qbo_quote():
 
 # --- lines --------------------------------------------------------------------------
 def total_of(lines):
-    return sum(l.amount for l in lines)
+    return sum(ln.amount for ln in lines)
 
 
 def test_tax_exclusive_invoice_lines_sum_to_total():
@@ -57,7 +57,7 @@ def test_tax_exclusive_invoice_lines_sum_to_total():
         currency="USD",
         is_credit_note=False,
     )
-    assert total_of(out) == D("641.24") and [l.account for l in out] == ["expense", "expense", "tax"]
+    assert total_of(out) == D("641.24") and [ln.account for ln in out] == ["expense", "expense", "tax"]
 
 
 def test_discount_and_withholding_are_negative_lines():
@@ -69,7 +69,7 @@ def test_discount_and_withholding_are_negative_lines():
         currency="EUR",
         is_credit_note=False,
     )
-    assert [l.amount for l in out] == [D("1560.00"), D("-78.00"), D("311.22"), D("-222.30")]
+    assert [ln.amount for ln in out] == [D("1560.00"), D("-78.00"), D("311.22"), D("-222.30")]
     assert total_of(out) == D("1570.92")
 
 
@@ -82,7 +82,7 @@ def test_tax_inclusive_invoice_does_not_add_tax_again():
         currency="JPY",
         is_credit_note=False,
     )
-    assert [(l.amount, l.account) for l in out] == [(D("11000"), "expense")]
+    assert [(ln.amount, ln.account) for ln in out] == [(D("11000"), "expense")]
 
 
 def test_credit_note_lines_are_positive():
@@ -94,7 +94,7 @@ def test_credit_note_lines_are_positive():
         currency="GBP",
         is_credit_note=True,
     )
-    assert total_of(out) == D("152.40") and all(l.amount > 0 for l in out)
+    assert total_of(out) == D("152.40") and all(ln.amount > 0 for ln in out)
 
 
 def test_rounding_residual_within_tolerance_becomes_a_line():
@@ -139,4 +139,55 @@ def test_zero_decimal_currency_amounts_are_integers():
         currency="JPY",
         is_credit_note=False,
     )
-    assert all(l.amount == l.amount.to_integral_value() for l in out) and total_of(out) == D("18135")
+    assert all(ln.amount == ln.amount.to_integral_value() for ln in out) and total_of(out) == D("18135")
+
+
+# --- decisions on QuickBooks answers ----------------------------------------------------
+def vendors(*found):
+    return {"QueryResponse": {"Vendor": list(found)} if found else {}}
+
+
+def test_vendor_decision():
+    v = {"Id": "58", "CurrencyRef": {"value": "EUR"}, "Active": True}
+    assert p.vendor_decision(200, vendors(), "EUR").decision == "create"
+    assert p.vendor_decision(200, vendors(v), "EUR") == p.Decision("use", external_id="58")
+    conflict = p.vendor_decision(200, vendors(v), "USD")
+    assert (conflict.decision, conflict.error_code) == ("review", "vendor_currency_conflict")
+    inactive = p.vendor_decision(200, vendors({**v, "Active": False}), "EUR")
+    assert (inactive.decision, inactive.error_code) == ("review", "vendor_inactive")
+
+
+def test_vendor_decision_on_query_error():
+    fault = {"Fault": {"Error": [{"code": "4001", "Message": "Invalid query"}]}}
+    d = p.vendor_decision(400, fault, "EUR")
+    assert (d.decision, d.http_status, d.fault_code, d.error_code) == ("error", 400, "4001", None)
+    assert p.vendor_decision(0, None, "EUR").decision == "error"  # network error: no response
+
+
+def test_existing_document_decision():
+    doc = lambda i, vendor: {"Id": i, "VendorRef": {"value": vendor}}  # noqa: E731
+    answer = lambda *docs: {"QueryResponse": {"Bill": list(docs)}}  # noqa: E731
+    assert p.existing_document_decision(200, answer(), "Bill", "7").decision == "create"
+    assert p.existing_document_decision(200, answer(doc("150", "9")), "Bill", "7").decision == "create"  # other vendor
+    assert p.existing_document_decision(200, answer(doc("150", "7")), "Bill", "7") == p.Decision("exists", "150")
+    dup = p.existing_document_decision(200, answer(doc("150", "7"), doc("151", "7")), "Bill", "7")
+    assert (dup.decision, dup.error_code) == ("review", "duplicate_in_accounting")
+
+
+@pytest.mark.parametrize(
+    ("error_code", "status", "fault", "expected"),
+    [
+        (None, 0, None, ("http_0", True)),  # network error
+        (None, 401, None, ("http_401", True)),  # token refresh
+        (None, 425, None, ("http_425", True)),  # request already sent: the next run finds it
+        (None, 429, None, ("http_429", True)),
+        (None, 503, None, ("http_503", True)),
+        (None, 400, "6240", ("qbo_6240", False)),  # validation error: same data fails again
+        ("exchange_rate_unavailable", None, None, ("exchange_rate_unavailable", True)),
+        ("attachment_failed", 400, "2010", ("attachment_failed", True)),
+        ("vendor_currency_conflict", 503, None, ("vendor_currency_conflict", False)),  # a person decides
+        ("something_new", None, None, ("something_new", False)),
+    ],
+)
+def test_classify_failure(error_code, status, fault, expected):
+    assert p.classify_failure(error_code, status, fault, {"vendor_currency_conflict"}) == expected

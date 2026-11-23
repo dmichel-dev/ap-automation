@@ -15,7 +15,7 @@ import json
 import os
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -89,7 +89,7 @@ def main() -> int:
     args = ap.parse_args()
     since = datetime.fromisoformat(args.since)
     if since.tzinfo is None:
-        since = since.replace(tzinfo=timezone.utc)
+        since = since.replace(tzinfo=UTC)
 
     expectations = load_expectations()
     deadline = time.monotonic() + args.timeout

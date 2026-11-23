@@ -1,12 +1,23 @@
 {
   "active": false,
   "connections": {
+    "Describe email": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Screen email (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
     "Get AP labels": {
       "main": [
         [
           {
             "index": 0,
-            "node": "Guard and split",
+            "node": "Describe email",
             "type": "main"
           }
         ]
@@ -18,17 +29,6 @@
           {
             "index": 0,
             "node": "Get AP labels",
-            "type": "main"
-          }
-        ]
-      ]
-    },
-    "Guard and split": {
-      "main": [
-        [
-          {
-            "index": 0,
-            "node": "Route intake",
             "type": "main"
           }
         ]
@@ -141,6 +141,28 @@
           }
         ]
       ]
+    },
+    "Screen email (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Split by attachment",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Split by attachment": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Route intake",
+            "type": "main"
+          }
+        ]
+      ]
     }
   },
   "name": "AP – Email intake",
@@ -201,15 +223,66 @@
       "typeVersion": 2.1
     },
     {
-      "id": "guard-and-split",
-      "name": "Guard and split",
+      "id": "describe-email",
+      "name": "Describe email",
       "parameters": {
-        "jsCode": "// Guard and split: one item per invoice attachment, or one item explaining why there is none.\n// Deterministic code only: nothing here reads the document content.\nconst ALIAS = 'invoices@davidmichel.dev';\nconst LABELS = { processed: 'AP/Processed', ready: 'AP/Ready', review: 'AP/Review', rejected: 'AP/Rejected', error: 'AP/Error' };\nconst BY_MIME = { 'application/pdf': 1, 'image/png': 1, 'image/jpeg': 1, 'image/webp': 1, 'image/tiff': 1 };\nconst BY_EXT = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', tif: 'image/tiff', tiff: 'image/tiff' };\nconst MIN_IMAGE_BYTES = 15000;   // smaller images are almost always signature logos\n\n// Label IDs, looked up by name so nothing is hard-coded\nconst byName = Object.fromEntries($('Get AP labels').all().map(i => [i.json.name, i.json.id]));\nconst labels = {};\nfor (const [key, name] of Object.entries(LABELS)) {\n  if (!byName[name]) throw new Error(`Gmail label \"${name}\" not found: create it in Gmail first`);\n  labels[key] = byName[name];\n}\n\n// n8n stores a human-readable size (\"45.2 kB\"); convert it back to bytes\nfunction toBytes(size) {\n  const m = String(size ?? '').match(/([\\d.]+)\\s*(B|kB|MB|GB)/i);\n  if (!m) return 0;\n  return Math.round(parseFloat(m[1]) * { b: 1, kb: 1e3, mb: 1e6, gb: 1e9 }[m[2].toLowerCase()]);\n}\n\nconst out = [];\nfor (const email of $('Gmail Trigger').all()) {\n  const mail = email.json;\n  const base = { message_id: mail.id, thread_id: mail.threadId, labels };\n\n  // Second guard after the Gmail search: the alias must be a recipient\n  const recipients = [...(mail.to?.value ?? []), ...(mail.cc?.value ?? [])].map(a => String(a.address ?? '').toLowerCase());\n  const deliveredTo = String(mail.headers?.['delivered-to'] ?? '').toLowerCase();\n  if (!recipients.includes(ALIAS) && !deliveredTo.includes(ALIAS)) {\n    out.push({ json: { ...base, route: 'not_for_alias', reason: 'not_addressed_to_alias' }, pairedItem: { item: 0 } });\n    continue;\n  }\n\n  const binary = email.binary ?? {};\n  const keys = Object.keys(binary).filter(k => k.startsWith('attachment_'))\n    .sort((a, b) => Number(a.split('_')[1]) - Number(b.split('_')[1]));\n  const accepted = [], skipped = [];\n  for (const key of keys) {\n    const b = binary[key];\n    const ext = String(b.fileName ?? '').split('.').pop().toLowerCase();\n    const mime = BY_MIME[b.mimeType] ? b.mimeType : BY_EXT[ext];\n    const size = toBytes(b.fileSize);\n    if (!mime) { skipped.push({ type: b.mimeType ?? 'unknown', size, why: 'unsupported_type' }); continue; }\n    if (mime.startsWith('image/') && size < MIN_IMAGE_BYTES) { skipped.push({ type: mime, size, why: 'small_image' }); continue; }\n    accepted.push({ key, index: Number(key.split('_')[1]), mime, size });\n  }\n\n  if (accepted.length === 0) {\n    // Never silently ignored: logged and labelled (file names are not logged, they may be personal data)\n    out.push({ json: { ...base, route: 'no_valid_attachment', reason: 'no_valid_attachment',\n                       details: { attachments: keys.length, skipped } }, pairedItem: { item: 0 } });\n    continue;\n  }\n  for (const a of accepted) {\n    out.push({\n      json: { ...base, route: 'process', source_ref: `gmail:${mail.id}:${a.index}`, mime: a.mime, size: a.size,\n              attachments_in_email: accepted.length },\n      binary: { file: binary[a.key] },\n      pairedItem: { item: 0 },\n    });\n  }\n}\nreturn out;",
+        "jsCode": "// Metadata only (recipients, attachment types, names, sizes) for the core's screening.\nreturn $('Gmail Trigger').all().map((email, i) => {\n  const mail = email.json;\n  const files = Object.entries(email.binary ?? {}).filter(([key]) => /^attachment_\\d+$/.test(key));\n  return { json: {\n    message_id: mail.id,\n    thread_id: mail.threadId,\n    recipients: [...(mail.to?.value ?? []), ...(mail.cc?.value ?? [])].map(a => String(a.address ?? '')),\n    delivered_to: String(mail.headers?.['delivered-to'] ?? ''),\n    attachments: files.map(([key, b]) => ({ key, mime_type: b.mimeType ?? null, file_name: b.fileName ?? null,\n                                           size: b.fileSize ?? null })),\n  }, pairedItem: { item: i } };\n});",
         "language": "javaScript",
         "mode": "runOnceForAllItems"
       },
       "position": [
         440,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "screen-email-core",
+      "maxTries": 3,
+      "name": "Screen email (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ recipients: $json.recipients, delivered_to: $json.delivered_to, attachments: $json.attachments }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "=http://core:8000/intake/email/screen"
+      },
+      "position": [
+        660,
+        300
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "split-by-attachment",
+      "name": "Split by attachment",
+      "parameters": {
+        "jsCode": "// One item per attachment the core accepted (with its file), or one item saying why there is none.\n// File names are not passed on to the logs: they may be personal data.\nconst LABELS = { processed: 'AP/Processed', ready: 'AP/Ready', review: 'AP/Review',\n                 rejected: 'AP/Rejected', error: 'AP/Error' };\n\n// Label IDs, looked up by name so nothing is hard-coded\nconst byName = Object.fromEntries($('Get AP labels').all().map(i => [i.json.name, i.json.id]));\nconst labels = {};\nfor (const [key, name] of Object.entries(LABELS)) {\n  if (!byName[name]) throw new Error(`Gmail label \"${name}\" not found: create it in Gmail first`);\n  labels[key] = byName[name];\n}\n\nconst emails = $('Describe email').all();\nconst files = $('Gmail Trigger').all();\nconst out = [];\n$input.all().forEach((screen, i) => {\n  if (screen.json.statusCode !== 200) {\n    throw new Error(`email screening failed (core HTTP ${screen.json.statusCode ?? 'no response'})`);\n  }\n  const mail = emails[i].json, s = screen.json.body;\n  const base = { message_id: mail.message_id, thread_id: mail.thread_id, labels };\n  if (s.route !== 'process') {\n    out.push({ json: { ...base, route: s.route, reason: s.reason,\n                       details: { attachments: s.attachments, skipped: s.skipped } }, pairedItem: { item: i } });\n    return;\n  }\n  for (const a of s.accepted) {\n    out.push({\n      json: { ...base, route: 'process', source_ref: `gmail:${mail.message_id}:${a.index}`, mime: a.mime,\n              size: a.size, attachments_in_email: s.accepted.length },\n      binary: { file: files[i].binary[a.key] },\n      pairedItem: { item: i },\n    });\n  }\n});\nreturn out;",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        880,
         300
       ],
       "type": "n8n-nodes-base.code",
@@ -301,7 +374,7 @@
         }
       },
       "position": [
-        660,
+        1100,
         300
       ],
       "type": "n8n-nodes-base.switch",
@@ -356,7 +429,7 @@
         "url": "http://core:8000/invoices/process"
       },
       "position": [
-        900,
+        1340,
         120
       ],
       "type": "n8n-nodes-base.httpRequest",
@@ -451,7 +524,7 @@
         }
       },
       "position": [
-        1140,
+        1580,
         100
       ],
       "type": "n8n-nodes-base.switch",
@@ -466,13 +539,13 @@
       "id": "label-ready",
       "name": "Label: ready",
       "parameters": {
-        "labelIds": "={{ [$('Guard and split').item.json.labels.ready, $('Guard and split').item.json.labels.processed] }}",
-        "messageId": "={{ $('Guard and split').item.json.message_id }}",
+        "labelIds": "={{ [$('Split by attachment').item.json.labels.ready, $('Split by attachment').item.json.labels.processed] }}",
+        "messageId": "={{ $('Split by attachment').item.json.message_id }}",
         "operation": "addLabels",
         "resource": "message"
       },
       "position": [
-        1400,
+        1840,
         -100
       ],
       "type": "n8n-nodes-base.gmail",
@@ -494,7 +567,7 @@
         }
       },
       "position": [
-        1620,
+        2060,
         -100
       ],
       "type": "n8n-nodes-base.executeWorkflow",
@@ -509,13 +582,13 @@
       "id": "label-review",
       "name": "Label: review",
       "parameters": {
-        "labelIds": "={{ [$('Guard and split').item.json.labels.review, $('Guard and split').item.json.labels.processed] }}",
-        "messageId": "={{ $('Guard and split').item.json.message_id }}",
+        "labelIds": "={{ [$('Split by attachment').item.json.labels.review, $('Split by attachment').item.json.labels.processed] }}",
+        "messageId": "={{ $('Split by attachment').item.json.message_id }}",
         "operation": "addLabels",
         "resource": "message"
       },
       "position": [
-        1400,
+        1840,
         40
       ],
       "type": "n8n-nodes-base.gmail",
@@ -530,13 +603,13 @@
       "id": "label-rejected",
       "name": "Label: rejected",
       "parameters": {
-        "labelIds": "={{ [$('Guard and split').item.json.labels.rejected, $('Guard and split').item.json.labels.processed] }}",
-        "messageId": "={{ $('Guard and split').item.json.message_id }}",
+        "labelIds": "={{ [$('Split by attachment').item.json.labels.rejected, $('Split by attachment').item.json.labels.processed] }}",
+        "messageId": "={{ $('Split by attachment').item.json.message_id }}",
         "operation": "addLabels",
         "resource": "message"
       },
       "position": [
-        1400,
+        1840,
         180
       ],
       "type": "n8n-nodes-base.gmail",
@@ -551,13 +624,13 @@
       "id": "label-error",
       "name": "Label: error",
       "parameters": {
-        "labelIds": "={{ [$('Guard and split').item.json.labels.error] }}",
-        "messageId": "={{ $('Guard and split').item.json.message_id }}",
+        "labelIds": "={{ [$('Split by attachment').item.json.labels.error] }}",
+        "messageId": "={{ $('Split by attachment').item.json.message_id }}",
         "operation": "addLabels",
         "resource": "message"
       },
       "position": [
-        1400,
+        1840,
         340
       ],
       "type": "n8n-nodes-base.gmail",
@@ -574,12 +647,12 @@
       "parameters": {
         "operation": "executeQuery",
         "options": {
-          "queryReplacement": "={{ [$('Guard and split').item.json.source_ref, $execution.id, 'core_call', 'error', 'core service call failed', JSON.stringify({ status_code: $('Process invoice (core)').item.json.statusCode ?? null, error: $('Process invoice (core)').item.json.body?.error ?? $('Process invoice (core)').item.json.error?.message ?? null })] }}"
+          "queryReplacement": "={{ [$('Split by attachment').item.json.source_ref, $execution.id, 'core_call', 'error', 'core service call failed', JSON.stringify({ status_code: $('Process invoice (core)').item.json.statusCode ?? null, error: $('Process invoice (core)').item.json.body?.error ?? $('Process invoice (core)').item.json.error?.message ?? null })] }}"
         },
         "query": "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details)\nVALUES ('email', $1, $2, $3, $4, $5, $6::jsonb)"
       },
       "position": [
-        1620,
+        2060,
         340
       ],
       "type": "n8n-nodes-base.postgres",
@@ -594,13 +667,13 @@
       "id": "label-no-valid-attachment",
       "name": "Label: no valid attachment",
       "parameters": {
-        "labelIds": "={{ [$('Guard and split').item.json.labels.rejected, $('Guard and split').item.json.labels.processed] }}",
-        "messageId": "={{ $('Guard and split').item.json.message_id }}",
+        "labelIds": "={{ [$('Split by attachment').item.json.labels.rejected, $('Split by attachment').item.json.labels.processed] }}",
+        "messageId": "={{ $('Split by attachment').item.json.message_id }}",
         "operation": "addLabels",
         "resource": "message"
       },
       "position": [
-        900,
+        1340,
         360
       ],
       "type": "n8n-nodes-base.gmail",
@@ -617,12 +690,12 @@
       "parameters": {
         "operation": "executeQuery",
         "options": {
-          "queryReplacement": "={{ ['gmail:' + $('Guard and split').item.json.message_id, $execution.id, 'intake', 'warning', 'email without a valid invoice attachment', JSON.stringify($('Guard and split').item.json.details)] }}"
+          "queryReplacement": "={{ ['gmail:' + $('Split by attachment').item.json.message_id, $execution.id, 'intake', 'warning', 'email without a valid invoice attachment', JSON.stringify($('Split by attachment').item.json.details)] }}"
         },
         "query": "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details)\nVALUES ('email', $1, $2, $3, $4, $5, $6::jsonb)"
       },
       "position": [
-        1120,
+        1560,
         360
       ],
       "type": "n8n-nodes-base.postgres",
@@ -644,7 +717,7 @@
         "query": "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details)\nVALUES ('email', $1, $2, $3, $4, $5, $6::jsonb)"
       },
       "position": [
-        900,
+        1340,
         540
       ],
       "type": "n8n-nodes-base.postgres",

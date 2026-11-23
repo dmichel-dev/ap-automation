@@ -85,6 +85,17 @@
         ]
       ]
     },
+    "Document decision (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Route document",
+            "type": "main"
+          }
+        ]
+      ]
+    },
     "Document ready": {
       "main": [
         [
@@ -102,17 +113,6 @@
           {
             "index": 0,
             "node": "Claim postings (core)",
-            "type": "main"
-          }
-        ]
-      ]
-    },
-    "Existing?": {
-      "main": [
-        [
-          {
-            "index": 0,
-            "node": "Route document",
             "type": "main"
           }
         ]
@@ -159,7 +159,7 @@
         [
           {
             "index": 0,
-            "node": "Existing?",
+            "node": "Document decision (core)",
             "type": "main"
           }
         ]
@@ -170,7 +170,7 @@
         [
           {
             "index": 0,
-            "node": "Vendor lookup",
+            "node": "Vendor decision (core)",
             "type": "main"
           }
         ]
@@ -366,6 +366,13 @@
             "node": "Describe failure",
             "type": "main"
           }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Describe failure",
+            "type": "main"
+          }
         ]
       ]
     },
@@ -382,6 +389,13 @@
           {
             "index": 0,
             "node": "Create vendor (QBO)",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Describe failure",
             "type": "main"
           }
         ],
@@ -452,6 +466,17 @@
         ]
       ]
     },
+    "Vendor decision (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Route vendor",
+            "type": "main"
+          }
+        ]
+      ]
+    },
     "Vendor linked?": {
       "main": [
         [
@@ -465,17 +490,6 @@
           {
             "index": 0,
             "node": "Find vendor (QBO)",
-            "type": "main"
-          }
-        ]
-      ]
-    },
-    "Vendor lookup": {
-      "main": [
-        [
-          {
-            "index": 0,
-            "node": "Route vendor",
             "type": "main"
           }
         ]
@@ -762,25 +776,49 @@
       "waitBetweenTries": 2000
     },
     {
-      "id": "vendor-lookup",
-      "name": "Vendor lookup",
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "vendor-decision-core",
+      "maxTries": 3,
+      "name": "Vendor decision (core)",
+      "onError": "continueRegularOutput",
       "parameters": {
-        "jsCode": "// Decide what to do with the vendor search result. Only IDs and currencies go into messages.\nconst r = $json, item = $('One at a time').first().json;\nif (r.statusCode !== 200) return [{ json: { decision: 'error', statusCode: r.statusCode, body: r.body } }];\nconst found = r.body?.QueryResponse?.Vendor ?? [];\nif (found.length === 0) return [{ json: { decision: 'create' } }];\nconst v = found[0];\nconst currency = v.CurrencyRef?.value;\nif (currency !== item.currency) {\n  return [{ json: { decision: 'review', error_code: 'vendor_currency_conflict',\n    error_message: `vendor ${v.Id} with this name uses ${currency}; the invoice is in ${item.currency}` } }];\n}\nif (v.Active === false) {\n  return [{ json: { decision: 'review', error_code: 'vendor_inactive', error_message: `vendor ${v.Id} is inactive` } }];\n}\nreturn [{ json: { decision: 'use', vendor_id: v.Id } }];",
-        "language": "javaScript",
-        "mode": "runOnceForAllItems"
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ status_code: $json.statusCode ?? 0, body: $json.body ?? null }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "=http://core:8000/postings/{{ $('One at a time').first().json.invoice_id }}/lookup/vendor"
       },
       "position": [
         1560,
         300
       ],
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
     },
     {
       "id": "route-vendor",
       "name": "Route vendor",
       "parameters": {
-        "options": {},
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "core error"
+        },
         "rules": {
           "values": [
             {
@@ -789,7 +827,7 @@
                 "conditions": [
                   {
                     "id": "c1",
-                    "leftValue": "={{ $json.decision === 'use' }}",
+                    "leftValue": "={{ $json.body?.decision === 'use' }}",
                     "operator": {
                       "operation": "true",
                       "singleValue": true,
@@ -814,7 +852,7 @@
                 "conditions": [
                   {
                     "id": "c1",
-                    "leftValue": "={{ $json.decision === 'create' }}",
+                    "leftValue": "={{ $json.body?.decision === 'create' }}",
                     "operator": {
                       "operation": "true",
                       "singleValue": true,
@@ -839,7 +877,7 @@
                 "conditions": [
                   {
                     "id": "c1",
-                    "leftValue": "={{ $json.decision === 'review' }}",
+                    "leftValue": "={{ $json.body?.decision === 'review' }}",
                     "operator": {
                       "operation": "true",
                       "singleValue": true,
@@ -864,7 +902,7 @@
                 "conditions": [
                   {
                     "id": "c1",
-                    "leftValue": "={{ $json.decision === 'error' }}",
+                    "leftValue": "={{ $json.body?.decision === 'error' }}",
                     "operator": {
                       "operation": "true",
                       "singleValue": true,
@@ -1004,7 +1042,7 @@
       "parameters": {
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "jsonBody": "={{ JSON.stringify({ supplier_key: $('One at a time').first().json.vendor.supplier_key, currency: $('One at a time').first().json.currency, external_id: String($json.vendor_id ?? $json.body.Vendor.Id), display_name: $('One at a time').first().json.vendor.display_name }) }}",
+        "jsonBody": "={{ JSON.stringify({ supplier_key: $('One at a time').first().json.vendor.supplier_key, currency: $('One at a time').first().json.currency, external_id: String($json.body.external_id ?? $json.body.Vendor.Id), display_name: $('One at a time').first().json.vendor.display_name }) }}",
         "method": "PUT",
         "options": {
           "response": {
@@ -1312,25 +1350,49 @@
       "waitBetweenTries": 2000
     },
     {
-      "id": "existing",
-      "name": "Existing?",
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "document-decision-core",
+      "maxTries": 3,
+      "name": "Document decision (core)",
+      "onError": "continueRegularOutput",
       "parameters": {
-        "jsCode": "// Was this document already created (an earlier run that crashed after the call)? Number + vendor.\nconst r = $json, vendorId = $('Rate').first().json.vendor_id, entity = $('One at a time').first().json.entity;\nif (r.statusCode !== 200) return [{ json: { decision: 'error', statusCode: r.statusCode, body: r.body } }];\nconst docs = (r.body?.QueryResponse?.[entity] ?? []).filter(d => d.VendorRef?.value === vendorId);\nif (docs.length > 1) {\n  return [{ json: { decision: 'review_dup', error_code: 'duplicate_in_accounting',\n    error_message: `${docs.length} ${entity} records with this number for vendor ${vendorId}` } }];\n}\nreturn [{ json: docs.length ? { decision: 'exists', external_id: docs[0].Id } : { decision: 'create' } }];",
-        "language": "javaScript",
-        "mode": "runOnceForAllItems"
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ status_code: $json.statusCode ?? 0, body: $json.body ?? null, vendor_id: $('Rate').first().json.vendor_id }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "=http://core:8000/postings/{{ $('One at a time').first().json.invoice_id }}/lookup/document"
       },
       "position": [
         4200,
         120
       ],
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
     },
     {
       "id": "route-document",
       "name": "Route document",
       "parameters": {
-        "options": {},
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "core error"
+        },
         "rules": {
           "values": [
             {
@@ -1339,7 +1401,7 @@
                 "conditions": [
                   {
                     "id": "c1",
-                    "leftValue": "={{ $json.decision === 'create' }}",
+                    "leftValue": "={{ $json.body?.decision === 'create' }}",
                     "operator": {
                       "operation": "true",
                       "singleValue": true,
@@ -1364,7 +1426,7 @@
                 "conditions": [
                   {
                     "id": "c1",
-                    "leftValue": "={{ $json.decision === 'exists' }}",
+                    "leftValue": "={{ $json.body?.decision === 'exists' }}",
                     "operator": {
                       "operation": "true",
                       "singleValue": true,
@@ -1389,7 +1451,7 @@
                 "conditions": [
                   {
                     "id": "c1",
-                    "leftValue": "={{ $json.decision === 'review_dup' }}",
+                    "leftValue": "={{ $json.body?.decision === 'review' }}",
                     "operator": {
                       "operation": "true",
                       "singleValue": true,
@@ -1405,7 +1467,7 @@
                   "version": 2
                 }
               },
-              "outputKey": "review_dup",
+              "outputKey": "review",
               "renameOutput": true
             },
             {
@@ -1414,7 +1476,7 @@
                 "conditions": [
                   {
                     "id": "c1",
-                    "leftValue": "={{ $json.decision === 'error' }}",
+                    "leftValue": "={{ $json.body?.decision === 'error' }}",
                     "operator": {
                       "operation": "true",
                       "singleValue": true,
@@ -1551,7 +1613,7 @@
               "id": "external_id",
               "name": "external_id",
               "type": "string",
-              "value": "={{ String($json.external_id ?? $json.body[$('One at a time').first().json.entity].Id) }}"
+              "value": "={{ String($json.body.external_id ?? $json.body[$('One at a time').first().json.entity].Id) }}"
             }
           ]
         },
@@ -1755,7 +1817,7 @@
       "id": "upload-result",
       "name": "Upload result",
       "parameters": {
-        "jsCode": "// Keep only the attachment ID: the response also holds a temporary signed download URL (never stored).\nconst r = $json;\nconst att = r.body?.AttachableResponse?.[0];\nconst id = r.statusCode === 200 && !r.body?.Fault && !att?.Fault ? att?.Attachable?.Id ?? null : null;\nconst fault = r.body?.Fault?.Error?.[0] ?? att?.Fault?.Error?.[0];\nreturn [{ json: { attachment_id: id, upload_error: id ? null : (fault ? `qbo_${fault.code}` : `http_${r.statusCode}`) } }];",
+        "jsCode": "// Keep only the attachment ID and the failure facts: the response also holds a temporary signed\n// download URL (never stored). QuickBooks can report a Fault with HTTP 200.\nconst r = $json;\nconst att = r.body?.AttachableResponse?.[0];\nconst fault = r.body?.Fault?.Error?.[0] ?? att?.Fault?.Error?.[0];\nconst id = r.statusCode === 200 && !fault ? att?.Attachable?.Id ?? null : null;\nreturn [{ json: { attachment_id: id, http_status: r.statusCode ?? 0, fault_code: fault?.code ?? null } }];",
         "language": "javaScript",
         "mode": "runOnceForAllItems"
       },
@@ -1770,7 +1832,7 @@
       "id": "build-result",
       "name": "Build result",
       "parameters": {
-        "jsCode": "// Outcome for the core service. The bill/credit exists at this point; the attachment may not.\nconst item = $('One at a time').first().json;\nconst node = $prevNode.name;\nconst att = node === 'Upload result' ? $json : { attachment_id: null, upload_error: node === 'File OK?' ? 'file_fetch_failed' : null };\nlet body;\nif (item.action === 'create') {\n  const rate = $('Rate').first().json;\n  body = { outcome: 'posted', external_id: $('Document ready').first().json.external_id,\n           vendor_external_id: rate.vendor_id,\n           exchange_rate: item.needs_exchange_rate ? rate.exchange_rate : null,\n           exchange_rate_date: item.needs_exchange_rate ? item.exchange_rate_date : null,\n           attachment_external_id: att.attachment_id };\n} else if (att.attachment_id) {\n  body = { outcome: 'attached', attachment_external_id: att.attachment_id };\n} else {\n  body = { outcome: 'failed', error_code: att.upload_error ?? 'attachment_failed', error_message: 'attachment not uploaded',\n           retryable: true };\n}\nreturn [{ json: { invoice_id: item.invoice_id, body: { ...body, execution_id: $execution.id } } }];",
+        "jsCode": "// What happened, for the core. The bill/credit exists at this point; the attachment may not.\nconst item = $('One at a time').first().json;\nconst node = $prevNode.name;\nconst att = node === 'Upload result' ? $json : { attachment_id: null, http_status: null, fault_code: null };\nlet body;\nif (item.action === 'create') {\n  const rate = $('Rate').first().json;\n  body = { outcome: 'posted', external_id: $('Document ready').first().json.external_id,\n           vendor_external_id: rate.vendor_id,\n           exchange_rate: item.needs_exchange_rate ? rate.exchange_rate : null,\n           exchange_rate_date: item.needs_exchange_rate ? item.exchange_rate_date : null,\n           attachment_external_id: att.attachment_id };\n} else if (att.attachment_id) {\n  body = { outcome: 'attached', attachment_external_id: att.attachment_id };\n} else {\n  body = { outcome: 'failed', error_code: node === 'File OK?' ? 'file_fetch_failed' : 'attachment_failed',\n           error_message: 'attachment not uploaded', http_status: att.http_status, fault_code: att.fault_code };\n}\nreturn [{ json: { invoice_id: item.invoice_id, body: { ...body, execution_id: $execution.id } } }];",
         "language": "javaScript",
         "mode": "runOnceForAllItems"
       },
@@ -1785,7 +1847,7 @@
       "id": "describe-failure",
       "name": "Describe failure",
       "parameters": {
-        "jsCode": "// Turns any failed step into a result for the core: error code, short message, retryable or not.\n// Retryable: network errors, 401 (token refresh), 425 (request already sent: the next run finds it),\n// 429 and 5xx. Validation errors (other 4xx) are permanent: retrying the same data can't help.\nconst item = $('One at a time').first().json;\nconst step = $prevNode.name;\nconst r = $json;\nlet code, message, retryable;\nif (r.error_code) {                                  // decided upstream (vendor conflict, duplicates)\n  code = r.error_code; message = r.error_message; retryable = false;\n} else if (step === 'Rate OK?' && r.statusCode === 200) {\n  code = 'exchange_rate_unavailable'; message = `no ${item.currency} rate for ${item.exchange_rate_date}`; retryable = true;\n} else {\n  const status = r.statusCode ?? 0;\n  const fault = r.body?.Fault?.Error?.[0];\n  code = fault?.code ? `qbo_${fault.code}` : `http_${status}`;\n  message = fault ? `${fault.Message ?? ''} ${fault.Detail ?? ''}`.trim() : (r.body?.message ?? r.error?.message ?? '');\n  retryable = status === 0 || status === 401 || status === 425 || status === 429 || status >= 500;\n}\nreturn [{ json: { invoice_id: item.invoice_id, body: {\n  outcome: 'failed', error_code: code, error_message: `${step}: ${message}`.slice(0, 1000), retryable,\n  execution_id: $execution.id } } }];",
+        "jsCode": "// Facts about the step that failed. The core decides what they mean (retry later, stop, review).\nconst item = $('One at a time').first().json;\nconst step = $prevNode.name;\nconst r = $json;\nconst b = r.body ?? {};\nlet facts;\nif (b.decision) {                     // the core's answer to a lookup: review, or QuickBooks query error\n  facts = { error_code: b.error_code, error_message: b.error_message, http_status: b.http_status,\n            fault_code: b.fault_code };\n} else {                              // a QuickBooks or core call that failed\n  const fault = b.Fault?.Error?.[0];\n  facts = { http_status: r.statusCode ?? 0, fault_code: fault?.code ?? null,\n            error_message: fault ? `${fault.Message ?? ''} ${fault.Detail ?? ''}`.trim()\n                                 : String(b.message ?? b.detail ?? r.error?.message ?? '') };\n  if (step === 'Rate OK?' && r.statusCode === 200) facts.error_code = 'exchange_rate_unavailable';\n}\nreturn [{ json: { invoice_id: item.invoice_id, body: {\n  outcome: 'failed', ...facts, error_message: `${step}: ${facts.error_message ?? ''}`.slice(0, 1000),\n  execution_id: $execution.id } } }];",
         "language": "javaScript",
         "mode": "runOnceForAllItems"
       },

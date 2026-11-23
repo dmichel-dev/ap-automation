@@ -1,15 +1,12 @@
 import json
 from datetime import date
 from decimal import Decimal
-from pathlib import Path
 
 from app.extraction import build_common_invoice
 from app.providers.base import ProviderResult
 from app.providers.mistral import MistralOcrProvider
 
-from .conftest import base_annotation
-
-FIXTURES = Path(__file__).parent / "fixtures"
+from .conftest import FIXTURES, base_annotation
 
 
 def annotation(**overrides):
@@ -139,8 +136,8 @@ def test_recorded_mistral_response_parses():
     provider = MistralOcrProvider("dummy-key")
     result = provider.parse_response(data)
     assert result.pages == 1 and "Quillmoor" in result.ocr_text
-    assert 0.9 < result.ocr_confidence_avg <= 1
-    assert result.annotation["invoice_number"] == "QM-1042"
+    assert result.ocr_confidence_avg is not None and 0.9 < result.ocr_confidence_avg <= 1
+    assert result.annotation is not None and result.annotation["invoice_number"] == "QM-1042"
     assert "word_confidence_scores" not in json.dumps(result.raw)
 
 

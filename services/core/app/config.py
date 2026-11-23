@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     mistral_ocr_model: str = "mistral-ocr-latest"
     confidence_threshold: float = 0.85
     home_currency: str = "USD"
+    intake_email_alias: str = "invoices@davidmichel.dev"  # only emails to this address are processed
     file_storage_dir: str = "/data/files"
     file_retention_days: int = 30
 

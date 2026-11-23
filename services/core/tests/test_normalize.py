@@ -2,7 +2,6 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
-
 from app import normalize as n
 
 
@@ -85,19 +84,20 @@ def test_parse_rate_out_of_range():
 )
 def test_parse_date_unambiguous(raw, expected):
     parsed = n.parse_date(raw)
+    assert parsed is not None
     assert parsed.value == expected and not parsed.ambiguous
 
 
 def test_parse_date_ambiguous_keeps_both_readings():
     p = n.parse_date("03/04/2026")
+    assert p is not None
     assert p.value is None and p.ambiguous
     assert p.dmy == date(2026, 4, 3) and p.mdy == date(2026, 3, 4)
 
 
 def test_parse_date_order_is_recorded():
-    assert n.parse_date("23/11/2026").order == "DMY"
-    assert n.parse_date("11/23/2026").order == "MDY"
-    assert n.parse_date("2026-11-23").order is None
+    orders = {raw: getattr(n.parse_date(raw), "order", "missing") for raw in ("23/11/2026", "11/23/2026", "2026-11-23")}
+    assert orders == {"23/11/2026": "DMY", "11/23/2026": "MDY", "2026-11-23": None}
 
 
 @pytest.mark.parametrize("raw", ["32/13/2026", "soon", "Q4 2026"])
@@ -150,7 +150,7 @@ def test_resolve_currency_by_country(symbol, country, code):
 @pytest.mark.parametrize("symbol", ["$", "¥", "kr"])
 def test_resolve_currency_ambiguous_without_country(symbol):
     got, note = n.resolve_currency([symbol], None)
-    assert got is None and "ambiguous" in note
+    assert got is None and "ambiguous" in (note or "")
 
 
 def test_resolve_currency_ignores_letters_inside_words():

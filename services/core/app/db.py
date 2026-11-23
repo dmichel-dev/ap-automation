@@ -12,19 +12,30 @@ from psycopg.types.json import Jsonb
 from .models import CommonInvoice, Issue
 from .validation import Duplicate, Validation
 
+Row = dict[str, Any]
+Conn = psycopg.Connection[Row]  # every connection returns rows as dicts
 
-def connect(url: str) -> psycopg.Connection:
-    return psycopg.connect(url, row_factory=dict_row, options="-c search_path=ap", connect_timeout=5)
+
+def connect(url: str) -> Conn:
+    return psycopg.Connection.connect(url, row_factory=dict_row, options="-c search_path=ap", connect_timeout=5)
 
 
-def lock(conn: psycopg.Connection, *keys: str) -> None:
+def one(conn: Conn, query: str, params: Any = None) -> Row:
+    """A query that always returns a row (INSERT … RETURNING, aggregates)."""
+    row = conn.execute(query, params).fetchone()
+    if row is None:
+        raise LookupError("query returned no row")
+    return row
+
+
+def lock(conn: Conn, *keys: str) -> None:
     """Transaction-level advisory locks, taken in a fixed order (no deadlocks).
     Serializes concurrent processing of the same source, file or supplier+number."""
     for key in sorted(keys):
         conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (key,))
 
 
-def find_by_source(conn, channel: str, source_ref: str) -> dict[str, Any] | None:
+def find_by_source(conn: Conn, channel: str, source_ref: str) -> dict[str, Any] | None:
     return conn.execute(
         """SELECT i.id, i.status, i.status_reasons, r.id AS review_id
              FROM invoices i LEFT JOIN review_queue r ON r.invoice_id = i.id AND r.status = 'open'
@@ -33,7 +44,7 @@ def find_by_source(conn, channel: str, source_ref: str) -> dict[str, Any] | None
     ).fetchone()
 
 
-def find_same_file(conn, sha256: str) -> dict[str, Any] | None:
+def find_same_file(conn: Conn, sha256: str) -> dict[str, Any] | None:
     """Earliest earlier document with the same bytes (exact duplicate file)."""
     return conn.execute(
         "SELECT id, status FROM invoices WHERE file_sha256 = %s ORDER BY created_at LIMIT 1", (sha256,)
@@ -45,7 +56,7 @@ def supplier_key(inv: CommonInvoice) -> str | None:
     return inv.normalized.supplier_tax_id or inv.normalized.supplier_name
 
 
-def find_possible_duplicates(conn, inv: CommonInvoice) -> list[Duplicate]:
+def find_possible_duplicates(conn: Conn, inv: CommonInvoice) -> list[Duplicate]:
     key, number = supplier_key(inv), inv.normalized.invoice_number
     if not key or not number or not inv.document_type:
         return []
@@ -64,7 +75,7 @@ def _reasons(items: list[Issue]) -> Jsonb:
 
 
 def insert_invoice(
-    conn,
+    conn: Conn,
     *,
     invoice_id: str,
     channel: str,
@@ -78,7 +89,7 @@ def insert_invoice(
     file_delete_after: datetime | None,
     inv: CommonInvoice | None,
     validation: Validation,
-    raw_extraction: dict | None,
+    raw_extraction: dict[str, Any] | None,
     execution_id: str | None,
     confidence_threshold: float,
     duplicate_of: str | None = None,
@@ -172,15 +183,17 @@ def insert_invoice(
         )
 
 
-def open_review(conn, invoice_id: str, reasons: list[Issue]) -> int:
-    return conn.execute(
+def open_review(conn: Conn, invoice_id: str, reasons: list[Issue]) -> int:
+    row = one(
+        conn,
         "INSERT INTO review_queue (invoice_id, reasons) VALUES (%s, %s) RETURNING id",
         (invoice_id, _reasons(reasons)),
-    ).fetchone()["id"]
+    )
+    return int(row["id"])
 
 
 def log(
-    conn,
+    conn: Conn,
     *,
     step: str,
     level: str,
@@ -189,7 +202,7 @@ def log(
     channel: str | None = None,
     source_ref: str | None = None,
     execution_id: str | None = None,
-    details: dict | None = None,
+    details: dict[str, Any] | None = None,
 ) -> None:
     """Append to processing_log. Never pass document content in message/details (privacy)."""
     conn.execute(

@@ -1,14 +1,13 @@
 import io
 
 import pytest
-from fastapi.testclient import TestClient
-from PIL import Image
-
 from app import files
 from app.main import app, get_provider
 from app.providers.base import ProviderError, ProviderResult
+from fastapi.testclient import TestClient
+from PIL import Image
 
-AUTH = {"Authorization": "Bearer test-token"}
+from .conftest import AUTH
 
 
 class FakeProvider:
@@ -16,7 +15,7 @@ class FakeProvider:
 
     def __init__(self, error: ProviderError | None = None):
         self.error = error
-        self.calls = []
+        self.calls: list[str] = []
 
     def extract(self, content, mime_type):
         self.calls.append(mime_type)
@@ -28,8 +27,9 @@ class FakeProvider:
                 **{
                     k: None
                     for k in (
-                        "supplier_name supplier_tax_id supplier_address supplier_country_code buyer_name buyer_tax_id "
-                        "invoice_number related_invoice_number invoice_date due_date currency subtotal tax_total total language"
+                        "supplier_name supplier_tax_id supplier_address supplier_country_code buyer_name "
+                        "buyer_tax_id invoice_number related_invoice_number invoice_date due_date currency "
+                        "subtotal tax_total total language"
                     ).split()
                 },
                 "line_items": [],

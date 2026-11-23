@@ -6,20 +6,19 @@ import io
 import os
 from datetime import date
 from decimal import Decimal
-from pathlib import Path
 
 import pytest
-from PIL import Image, ImageDraw, ImageFont
-
 from app.extraction import build_common_invoice
 from app.files import prepare
 from app.providers.mistral import MistralOcrProvider
+from PIL import Image, ImageDraw, ImageFont
+
+from .conftest import FIXTURES
 
 pytestmark = [
     pytest.mark.live,
     pytest.mark.skipif(not os.environ.get("MISTRAL_API_KEY"), reason="MISTRAL_API_KEY not set"),
 ]
-FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def run(content: bytes):
@@ -84,6 +83,7 @@ def test_live_full_pipeline_against_test_db(clean_db, tmp_path):
 
     first = process(ProcessRequest(pdf, "qm.pdf", "email", "gmail:live:1"), provider, cfg)
     print(first.model_dump_json(indent=2))
+    assert first.summary is not None and first.confidence is not None
     assert first.status == "ready" and first.summary["total"] == Decimal("641.24")
     assert first.confidence["ocr"] > 0.9 and first.confidence["completeness"] == 1
 
