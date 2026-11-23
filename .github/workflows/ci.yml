@@ -1,0 +1,60 @@
+# Runs on every push and pull request: lint, workflow check, type check, tests.
+# The tests run in the core's test image against a throwaway PostgreSQL; live OCR tests are skipped.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint and workflow check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: ruff (same version as pre-commit)
+        run: |
+          pip install "ruff==0.15.22"
+          ruff check .
+          ruff format --check .
+      - name: Each n8n workflow JSON equals its builder's output
+        run: sh scripts/check_workflows.sh
+
+  test:
+    name: Type check and tests
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17.12-alpine
+        env:
+          POSTGRES_USER: ap_ci
+          POSTGRES_PASSWORD: ap_ci
+          POSTGRES_DB: ap_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ap_ci -d ap_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the core's test image
+        run: docker build --target test -t ap-core-test services/core
+      - name: mypy (strict on the core service)
+        run: docker run --rm -v "$PWD:/repo:ro" -w /repo --entrypoint mypy ap-core-test
+      - name: Unit and integration tests
+        run: >-
+          docker run --rm --network host
+          -e AP_DATABASE_URL=postgresql://unused@localhost/unused
+          -e CORE_API_TOKEN=test-token
+          -e AP_TEST_DATABASE_URL=postgresql://ap_ci:ap_ci@localhost:5432/ap_test
+          -v "$PWD/services/core:/app:ro" -v "$PWD/db/migrations:/migrations:ro" -v "$PWD/test-data:/test-data:ro"
+          ap-core-test pytest -q -m "not live" -p no:cacheprovider
