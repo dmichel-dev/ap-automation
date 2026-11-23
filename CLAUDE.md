@@ -24,6 +24,13 @@ Intake channels → **common invoice format** → shared processing core → ban
 - **Python service** (FastAPI, in Docker) for parsing/validation helpers: `pypdf`/`pdfplumber`, later `factur-x` and a UBL/CII parser
 - **Docker Compose** for everything; later deployed to my OVH VPS (Ubuntu 24.04, 4 GB RAM) behind **Caddy** at `n8n.davidmichel.dev`
 
+## Coding conventions
+- **DRY:** one implementation per rule or helper. Shared code goes in a module (e.g. `n8n/nodes.py` for the workflow builders, `tests/conftest.py` for test helpers), never copied.
+- **Small, typed functions:** full type hints (mypy strict on `services/core/app`), cyclomatic complexity ≤ 10, one job per function with a name that says it.
+- **Business rules live only in the Python core:** validation, routing, matching, posting content, what an accounting answer means, retry and review policy, email screening. n8n triggers, calls services and routes on the core's answers; its Code nodes only reshape data and never decide. A rule is never duplicated in a Code node.
+- **Checks before every commit:** `pre-commit` runs ruff (lint + format), mypy (in the core's test image) and a check that each committed workflow JSON equals its builder's output. All tests must stay green.
+- **Refactors don't change behaviour:** prove it (old vs new on stored real data where possible), and say so in the commit.
+
 ## Environment and constraints
 - **Local dev machine:** Ubuntu 22.04, Docker 29. Ports **5432/5433/5434 and 3306 are already used** on the host. Port 5678 (n8n) is free. Don't publish Postgres to the host unless needed; if needed, use port **5440**. RAM is limited (~3 GB free), so keep the containers lean.
 - **Secrets:** everything goes in `.env` (gitignored) with a committed `.env.example`. **Never commit secrets, n8n credentials or OAuth tokens.** Exported n8n workflow JSON must contain no credentials.
