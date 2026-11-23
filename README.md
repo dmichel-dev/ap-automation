@@ -52,7 +52,7 @@ Three levels, from fastest to most realistic:
 
 | Level | What it covers | Command |
 |---|---|---|
-| Unit + integration (445) | Normalization, validation, totals, dates, duplicates, email screening, posting content and decisions, matching, review decisions, the review page's security (sign-in, lockout, sessions, CSRF, listeners, scope, document rendering, headers), the full pipeline on a test database | `docker compose run --rm core-test` |
+| Unit + integration (447) | Normalization, validation, totals, dates, duplicates, email screening, posting content and decisions, matching, review decisions, the review page's security (sign-in, lockout, sessions, CSRF, listeners, scope, document rendering, headers), the full pipeline on a test database | `docker compose run --rm core-test` |
 | Live provider (3) | Real Mistral OCR calls on a fictional invoice | `docker compose run --rm core-test pytest -m live` |
 | End to end (12 emails) | Gmail → n8n → core → database → Gmail labels → QuickBooks → bank matching | send the test set, then `scripts/run_e2e.sh --since <start time>` |
 
@@ -96,7 +96,8 @@ services/core/       FastAPI core service; app/web/ is the review page (its own 
 n8n/                 Workflow builders (shared nodes.py) + exported workflows (no credentials)
 test-data/invoices/  Fictional test invoices + expected results
 test-data/bank/      Bank transactions for the matching tests
-scripts/             Workflow export, end-to-end check, backup, Plaid sandbox setup
+config/              Reference setup data (standard US chart of accounts)
+scripts/             Workflow export, end-to-end check, backup, Plaid sandbox setup, QuickBooks chart of accounts
 docs/                Architecture and data-format documentation
 ```
 

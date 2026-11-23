@@ -41,7 +41,7 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 check_untyped_defs = true
 explicit_package_bases = true
-mypy_path = "services/core:n8n"
+mypy_path = "services/core:n8n:scripts"
 
 # The core service: the flags of --strict (strict itself can't be set per module)
 [[tool.mypy.overrides]]

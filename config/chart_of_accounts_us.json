@@ -1,0 +1,32 @@
+{
+  "description": "Standard chart of accounts for a US small business: the accounts an AP reviewer codes supplier invoices to. Created once in QuickBooks by scripts/create_chart_of_accounts.py, which only adds missing accounts. same_as: existing QuickBooks accounts that already play this role (no duplicate is created). parent: created as a sub-account of that account.",
+  "accounts": [
+    {"name": "Software & Subscriptions", "type": "Expense", "sub_type": "DuesSubscriptions"},
+    {"name": "Hosting & Cloud Services", "type": "Expense", "sub_type": "DuesSubscriptions"},
+    {"name": "Phone & Internet", "type": "Expense", "sub_type": "Utilities"},
+    {"name": "Office Supplies", "type": "Expense", "sub_type": "OfficeGeneralAdministrativeExpenses"},
+    {"name": "Rent", "type": "Expense", "sub_type": "RentOrLeaseOfBuildings", "same_as": ["Rent or Lease"]},
+    {"name": "Utilities", "type": "Expense", "sub_type": "Utilities"},
+    {"name": "Travel", "type": "Expense", "sub_type": "Travel"},
+    {"name": "Meals", "type": "Expense", "sub_type": "EntertainmentMeals", "same_as": ["Meals and Entertainment"]},
+    {"name": "Insurance", "type": "Expense", "sub_type": "Insurance"},
+    {"name": "Legal & Professional Fees", "type": "Expense", "sub_type": "LegalProfessionalFees"},
+    {"name": "Bank Fees", "type": "Expense", "sub_type": "BankCharges", "same_as": ["Bank Charges"]},
+    {"name": "Shipping & Postage", "type": "Expense", "sub_type": "ShippingFreightDelivery"},
+    {"name": "Contractors", "type": "Expense", "sub_type": "CostOfLabor"},
+    {"name": "Training & Education", "type": "Expense", "sub_type": "OtherBusinessExpenses"},
+    {"name": "Repairs & Maintenance", "type": "Expense", "sub_type": "RepairMaintenance", "same_as": ["Maintenance and Repair"]},
+    {"name": "Advertising", "type": "Expense", "sub_type": "AdvertisingPromotional"},
+
+    {"name": "Computer Equipment", "type": "Fixed Asset", "sub_type": "MachineryAndEquipment"},
+    {"name": "Furniture & Fixtures", "type": "Fixed Asset", "sub_type": "FurnitureAndFixtures"},
+    {"name": "Machinery & Equipment", "type": "Fixed Asset", "sub_type": "MachineryAndEquipment"},
+    {"name": "Vehicles", "type": "Fixed Asset", "sub_type": "Vehicles"},
+    {"name": "Leasehold Improvements", "type": "Fixed Asset", "sub_type": "LeaseholdImprovements"},
+
+    {"name": "Prepaid Expenses", "type": "Other Current Asset", "sub_type": "PrepaidExpenses"},
+
+    {"name": "Materials", "type": "Cost of Goods Sold", "sub_type": "SuppliesMaterialsCogs", "parent": "Cost of Goods Sold"},
+    {"name": "Freight In", "type": "Cost of Goods Sold", "sub_type": "ShippingFreightDeliveryCos", "parent": "Cost of Goods Sold"}
+  ]
+}

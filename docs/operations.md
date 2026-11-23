@@ -80,6 +80,22 @@ The workflow **AP – Bank sync & match** runs every hour (or by hand). A failed
 
 The workflow **AP – Sync QuickBooks reference data** runs every hour (or by hand). It copies the chart of accounts and the vendor list into `ap.qbo_accounts` / `ap.qbo_vendors`: the account picker and the known-supplier check read this copy, so QuickBooks tokens stay in n8n. After creating an account in QuickBooks, run it by hand to see it in the picker at once. If the core refuses an answer (QuickBooks error, empty account list, a full page of 1,000 rows), the run fails and the previous copy stays.
 
+## Chart of accounts (QuickBooks)
+
+[`config/chart_of_accounts_us.json`](../config/chart_of_accounts_us.json) lists a standard US small-business chart: the expense accounts supplier invoices are usually coded to, fixed assets, prepaid expenses and cost of goods sold, each with its QuickBooks account type and detail type. `same_as` names an existing account that already plays the role (e.g. *Rent or Lease* for rent), so no near-duplicate is created.
+
+```bash
+set -a; . ./.env; set +a
+python3 scripts/create_chart_of_accounts.py           # dry run: which accounts exist, which would be created
+python3 scripts/create_chart_of_accounts.py --apply   # create the missing ones
+```
+
+- **It never changes or deletes an account.** It only reads the chart and creates accounts: the QuickBooks helper ([`scripts/qbo_via_n8n.py`](../scripts/qbo_via_n8n.py)) refuses any request that could update one.
+- **Running it twice does nothing.** An account that exists (by full name, or a `same_as` name) is skipped, and each create carries a fixed request ID.
+- **QuickBooks tokens stay in n8n.** The calls run through a temporary n8n workflow using the QuickBooks credential, deleted with its execution after the run.
+
+Then run **AP – Sync QuickBooks reference data** by hand, so the review page's picker shows the new accounts at once.
+
 ## Review page accounts
 
 The review page (`http://localhost:8081`, internal listener) has no self-registration. Accounts are managed with a CLI in its container; passwords are typed at a prompt (twice), never passed as arguments:
