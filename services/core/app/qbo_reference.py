@@ -23,8 +23,17 @@ PAGE_SIZE = 1000  # the workflow asks for this many; a full page means there may
 _POLICY = json.loads(Path(__file__).with_name("account_coding.json").read_text())
 CODING_ACCOUNT_TYPES: tuple[str, ...] = tuple(_POLICY["coding_account_types"])
 SYSTEM_SUB_TYPES: tuple[str, ...] = tuple(_POLICY["hidden_detail_types"])
-_CODING = "active AND account_type = ANY(%(types)s) AND NOT (coalesce(account_sub_type, '') = ANY(%(system)s))"
-_CODING_PARAMS = {"types": list(CODING_ACCOUNT_TYPES), "system": list(SYSTEM_SUB_TYPES)}
+# Catch-all accounts recognised by their default (US) name only: their detail types are shared
+HIDDEN_NAMES: tuple[str, ...] = tuple(_POLICY["hidden_default_names"]["names"])
+_CODING = (
+    "active AND account_type = ANY(%(types)s) AND NOT (coalesce(account_sub_type, '') = ANY(%(system)s))"
+    " AND NOT (lower(fully_qualified_name) = ANY(%(names)s))"
+)
+_CODING_PARAMS = {
+    "types": list(CODING_ACCOUNT_TYPES),
+    "system": list(SYSTEM_SUB_TYPES),
+    "names": [n.lower() for n in HIDDEN_NAMES],
+}
 
 _CURRENCY_SUFFIX = re.compile(r"\s*\([A-Z]{3}\)\s*$")  # vendors created per currency: "Name (EUR)"
 

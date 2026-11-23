@@ -465,6 +465,26 @@ def test_accounts_a_bill_must_never_use_are_hidden_by_detail_type(items, sub_typ
     assert r.status_code == 409 and review_row(url, live)["status"] == "open"  # refused by the core too
 
 
+@pytest.mark.parametrize(
+    "name, kind, sub_type",
+    [
+        ("Uncategorized Expense", "Expense", "OtherMiscellaneousServiceCost"),
+        ("Uncategorized Asset", "Other Current Asset", "OtherCurrentAssets"),
+    ],
+)
+def test_catch_all_accounts_are_hidden_by_their_default_name(items, name, kind, sub_type):
+    c, url, live, _demo = items
+    sql = """INSERT INTO ap.qbo_accounts
+             (external_id, name, fully_qualified_name, account_type, account_sub_type, active)
+             VALUES (%s, %s, %s, %s, %s, true)"""
+    q(url, sql, "901", name, name, kind, sub_type)
+    q(url, sql, "902", "Commissions & fees", "Commissions & fees", kind, sub_type)  # same detail type: stays
+    page = c.get(f"/items/{live}").text
+    assert 'value="901"' not in page and 'value="902"' in page
+    r = c.post(f"/items/{live}/approve", data={"csrf": csrf(c), "account_id": "901"})
+    assert r.status_code == 409 and review_row(url, live)["status"] == "open"  # refused by the core too
+
+
 def test_without_a_default_the_reviewer_must_choose(items):
     c, _url, live, _demo = items
     html = c.get(f"/items/{live}").text

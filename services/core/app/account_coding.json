@@ -1,10 +1,23 @@
 {
   "description": "Which QuickBooks accounts a supplier invoice may be coded to (the review page's picker and the approval check). By QuickBooks account type and detail type (AccountSubType), never by name, so it works on any company's chart.",
-  "coding_account_types": ["Expense", "Other Expense", "Cost of Goods Sold", "Fixed Asset", "Other Current Asset"],
+  "coding_account_types": [
+    "Expense",
+    "Other Expense",
+    "Cost of Goods Sold",
+    "Fixed Asset",
+    "Other Current Asset"
+  ],
   "hidden_detail_types": {
     "UnappliedCashBillPaymentExpense": "QuickBooks system account for unapplied bill payments",
     "AccumulatedDepreciation": "contra-asset: only depreciation entries post here",
     "Inventory": "inventory asset: moved by item purchases, not by expense coding",
     "UndepositedFunds": "money received but not yet deposited: never a cost"
+  },
+  "hidden_default_names": {
+    "note": "QuickBooks' default US names for its catch-all accounts, which share generic detail types with real accounts, so they can only be recognised by name. For a company set up in another language, add the localized names here.",
+    "names": [
+      "Uncategorized Expense",
+      "Uncategorized Asset"
+    ]
   }
 }
