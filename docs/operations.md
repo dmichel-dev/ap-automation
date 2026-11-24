@@ -196,6 +196,7 @@ Sections, in this order. A section with nothing to say is left out. A day with n
 |---|---|
 | Fraud alerts | Invoices with `possible_bank_detail_change` (supplier, number, **masked** account labels), and emails labelled AP/Fraud alert |
 | Invoices | Received (straight through / sent to review / rejected, by what intake decided), bills and credit notes posted to QuickBooks (saying how many were received before the period), payments recorded, write-offs **per currency** (never added across currencies), touchless rate |
+| Bank amounts not booked to the cent | Foreign-currency payments whose bank amount QuickBooks couldn't book exactly (7-decimal rate): bill, bank amount, amount booked, gap, and how to fix it ([known limit](matching.md#known-limit-cents-on-large-foreign-currency-bills)) |
 | Waiting for review | Every open item, oldest first, with its age and reasons in plain language. Only the first 10 are listed; the rest are counted |
 | Bank details seen for the first time | `bank_details_first_seen`: supplier and masked label, "not verified" |
 | Email intake problems | From `GET /intake/failures/summary`: emails given up (with the reason), still retrying, recovered, failed workflow runs |

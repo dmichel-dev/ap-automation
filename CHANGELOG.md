@@ -7,6 +7,7 @@ All notable changes to this project. The format follows [Keep a Changelog](https
 ### Added
 
 - **Foreign-currency bank matching:** a bill in EUR, JPY, GBP… is matched with a payment from the USD bank account at the ECB reference rate of the payment date (Frankfurter API, ECB only, fetched by the bank workflow), within 3 %. The bill payment settles the whole bill at the bank's actual rate (bank amount ÷ bill amount, at the 7 decimals QuickBooks keeps), and QuickBooks posts the exchange gain or loss. An exchange difference is never written off. A payment outside the tolerance, or a currency without a usable rate (e.g. AED, SAR), goes to review with the expected and actual amounts.
+- **Daily summary: bank amounts not booked to the cent.** On a foreign-currency bill over 100,000 units, QuickBooks' 7-decimal rate can leave the bank account a few cents off the bank amount; each case is listed (bill, bank amount, amount booked, gap) to be fixed by a journal entry. A documented known limit.
 
 ### Changed
 

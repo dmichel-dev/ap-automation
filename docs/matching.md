@@ -66,9 +66,18 @@ The reviewer confirms the transaction or rejects it, as for an ambiguous match. 
 - **QuickBooks posts the exchange gain or loss** to *Exchange Gain or Loss*. The ECB rate is only used to decide the match; the gain or loss comes from the bill's rate and the payment's rate;
 - an FX difference is **never a payment difference** and never written off: the posting is `paid`.
 
-With 7 decimals, bill × rate lands on the exact bank amount for any bill under 100,000 currency units. Above that (e.g. a 2,345,678 JPY bill, where one rate step is worth 0.23 USD), the booked amount can be off by up to half a step: the payment is still recorded, and the gap is logged as a warning (`bank amount not booked to the cent`, with the booked amount, the gap and the rate) so the bank account can be adjusted by hand. It is never adjusted silently.
+With 7 decimals, bill × rate lands on the exact bank amount for any bill under 100,000 currency units. Above that, see the known limit below.
 
 Verified live on 2026-11-24 (bill AV-2026-0147, 1,598.61 EUR, posted at 1.099904; Plaid sandbox payment of 1,760.00 USD on 2026-11-24, from `test-data/bank/fx-transactions.json`): matched at the ECB rate of 2026-11-24 (1.0963: 1,752.56 USD expected, +0.42 %); bill payment `AP-PAY-29` of 1,598.61 EUR at 1.1009565. In QuickBooks: Cr Checking **1,760.00** (the bank amount to the cent), Dr A/P-EUR 1,758.32, Dr *Exchange Gain or Loss* 1.68; bill balance 0. A second run created nothing.
+
+### Known limit: cents on large foreign-currency bills
+
+QuickBooks keeps **7 decimals** of an exchange rate. On a bill over **100,000 currency units** (common in JPY, INR, KRW…), one rate step is worth more than a cent, so the bank account can be credited a few cents more or less than the bank amount (at most half a step: e.g. 2,345,678 JPY paid with 14,801.00 USD is booked as 14,800.99 USD).
+
+- The payment is recorded as usual and the bill is paid; nothing is adjusted silently.
+- The gap is logged (`bank amount not booked to the cent`) and listed in the **daily summary** under *Bank amounts not booked to the cent*: the bill, the bank amount, the amount booked and the gap.
+- **Fix it by hand** with a journal entry between the bank account and *Exchange Gain or Loss* for the gap, so the bank account matches the statement.
+- An automatic adjustment is on the roadmap.
 
 A 0.01 line on *Exchange Gain or Loss* when a foreign-currency **bill** is posted is QuickBooks' own rounding (it converts each line and the total separately), not an error.
 
