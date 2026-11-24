@@ -6,6 +6,7 @@ from datetime import timedelta
 
 import pytest
 from app import intake_failures
+from app.config import get_settings
 from app.main import app
 from fastapi.testclient import TestClient
 
@@ -152,7 +153,8 @@ def test_operator_retry_after_a_fix(cfg):
 
 def test_an_email_with_nothing_to_process_ends_its_recheck(cfg):
     report()
-    body = {"recipients": ["invoices@davidmichel.dev"], "attachments": [], "message_id": "m1", "execution_id": "2"}
+    alias = get_settings().intake_email_alias
+    body = {"recipients": [alias], "attachments": [], "message_id": "m1", "execution_id": "2"}
     assert c.post("/intake/email/screen", headers=AUTH, json=body).json()["route"] == "no_valid_attachment"
     assert failure(cfg.database_url)["state"] == "resolved"
 

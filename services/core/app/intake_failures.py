@@ -107,14 +107,19 @@ def _lock_row(conn: db.Conn, channel: str, message_id: str) -> db.Row | None:
     ).fetchone()
 
 
+def _code(row: db.Row) -> str:
+    """The last failure's code (an intake code, never a review reason)."""
+    return str(row["last_error_code"])
+
+
 def _answer(row: db.Row) -> dict[str, Any]:
     return {
         "state": row["state"],
         "attempts": row["attempts"],
         "max_attempts": MAX_ATTEMPTS,
         "next_attempt_at": row["next_attempt_at"].isoformat() if row["state"] == "waiting" else None,
-        "code": row["last_error_code"],
-        "explanation": explain(row["last_error_code"]),
+        "code": _code(row),
+        "explanation": explain(_code(row)),
     }
 
 
@@ -223,7 +228,7 @@ def claim_due(conn: db.Conn, channel: str, found: list[str], execution_id: str |
             channel=channel,
             source_ref=source_ref(channel, row["message_id"]),
             execution_id=execution_id,
-            details={"code": row["last_error_code"], "attempts": row["attempts"]},
+            details={"code": _code(row), "attempts": row["attempts"]},
         )
     return [r["message_id"] for r in rows]
 
@@ -236,7 +241,7 @@ def _give_up_exhausted(conn: db.Conn, channel: str, execution_id: str | None) ->
         (channel, MAX_ATTEMPTS),
     ).fetchall()
     for row in rows:
-        failure = Failure(row["last_error_code"], row["permanent"], explain(row["last_error_code"]))
+        failure = Failure(_code(row), row["permanent"], explain(_code(row)))
         _log_failure(conn, row, failure, execution_id)
 
 
@@ -262,7 +267,7 @@ def resolve(conn: db.Conn, channel: str, message_id: str | None, execution_id: s
         channel=channel,
         source_ref=source_ref(channel, message_id),
         execution_id=execution_id,
-        details={"code": row["last_error_code"], "attempts": row["attempts"]},
+        details={"code": _code(row), "attempts": row["attempts"]},
     )
     return True
 
