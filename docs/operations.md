@@ -118,6 +118,20 @@ Roles: `reviewer` and `admin` work on `live` (or `e2e`) data and sign in only on
 
 Used once on 2026-11-22 for invoice `f6a94cb0-…` (BW-1042, Step 5 test of Day 1): its fictional supplier name was too close to a real company and was renamed in the test set, and it has the same amount as the renamed invoice, so posting it would also confuse bank matching.
 
+## Google Drive intake
+
+**AP – Drive intake** (`n8n/build_drive_intake.py`) is the second intake channel. Files dropped in the Google Drive folder **AP Automation/Inbox** go through the same core endpoint as email attachments (`POST /invoices/process`, channel `drive`, source `drive:<file ID>`): same extraction, checks, duplicate detection and review.
+
+- **The Inbox folder is the queue.** Every minute n8n lists it (up to 50 files, oldest first) and sends the files' metadata (ID, name, type, size; never the content) to the core (`POST /intake/drive/screen`). A file leaves Inbox only once it has an answer. A scheduled listing was chosen over n8n's Drive trigger: the trigger only sees files created after its last poll, so a file moved into the folder could be missed, and a failed file would need a second retry loop.
+- **The core answers per file** (`drive_intake.py`): `process` (at most 5 per run), `wait` (stays in Inbox: being processed by another run, retry not due yet, or over this run's limit) or `error` (not a PDF or image, over the size limit, or given up). A refused file is logged (step `intake`, its type and size, never its name).
+- **Folders:** Inbox, Processed and Error inside **AP Automation** in My Drive. Missing ones are created by the workflow: AP Automation on one run, its subfolders on the next, processing on the run after.
+- **After processing:** any status (ready, needs review, rejected) → **Processed**, and ready invoices start the posting. A file the core refuses after download (413/415: too large, not really a PDF or image) → **Error**.
+- **No double OCR call:** a file handed out for processing is leased for 15 minutes (`intake_leases`), so a run that starts while an earlier one is still waiting for the OCR service leaves it alone. Expired leases are removed at each screening.
+- **Duplicates across channels:** the exact-duplicate check compares the file's SHA-256 whatever the channel, so the same file by email and by Drive (or twice in Drive) is `rejected` with `duplicate_file` on the second arrival. The same Drive file processed again (e.g. its move failed) returns the stored result.
+- **Failures** use the email backoff (`intake_failures`, channel `drive`, keyed by the file ID): the download or processing failed → logged by n8n, reported to the core; temporary → the file stays in Inbox and is retried when due; permanent or 5 attempts used → moved to **Error**. To try a given-up file again: give it fresh attempts (`{"channel": "drive", "message_id": "<file ID>"}` to `/intake/failures/retry`), then move it back to Inbox.
+
+Live check (2026-11-24): the folders were created by the workflow over two runs. Six files dropped in Inbox: a never-seen invoice → `needs_review` (`total_mismatch`); an invoice already received by email, twice → `rejected` (`duplicate_file` of the email's invoice); a second copy of the first invoice → `rejected` (`duplicate_file`); a `.docx`, twice → moved to Error and logged as `unsupported_type`. All PDFs were moved to Processed. The invoices, their review item and stored file were then deleted and the files trashed.
+
 ## Errors and retries
 
 Every failure is either **temporary** (tried again on its own) or **permanent** (a person looks at once). The core decides, from what the workflow saw; n8n only reports it.
@@ -125,6 +139,7 @@ Every failure is either **temporary** (tried again on its own) or **permanent** 
 | Where | Temporary: retried | Permanent: a person looks |
 |---|---|---|
 | Email intake | OCR service timeout, rate limit (429) or server error (5xx), after its own 3 tries; core unreachable, restarting or 5xx (e.g. its database restarting); n8n timed out waiting; Gmail download failed | The OCR service refuses the file (damaged, password-protected, too large) or its answer can't be read; the OCR API key is rejected; the core refuses n8n's token |
+| Drive intake | Same as email; Drive download failed (the file stays in Inbox) | Same as email (the file moves to Error) |
 | QuickBooks (bill, vendor credit, payment, write-off) | Network error, 401 (token refresh), 425, 429, 5xx | Validation errors (other 4xx), duplicate in QuickBooks, vendor in another currency, closed period, attempts used up → review item with QuickBooks' error and **Try again** |
 
 ### Failed emails: the AP/Error re-check
@@ -160,6 +175,7 @@ The crash tests (`services/core/tests/test_crash.py`) replay the dangerous cases
 ### Where a person sees failures
 
 - **Gmail:** AP/Error = being retried; AP/Error + AP/Processed = given up.
+- **Google Drive:** a file still in AP Automation/Inbox after a few minutes = being retried; in Error = not processable or given up.
 - **Review page:** QuickBooks failures with no retry left (`quickbooks_refused`), with **Try again**.
 - **Log** (`processing_log`): step `intake_retry` (each failed attempt, warning; given up, error; recovered, info), `core_call` (what n8n saw), `workflow_error` (a workflow run that failed, see below).
 - **[Daily summary](#daily-summary):** `GET /intake/failures/summary` lists the given-up emails with their reason, and counts the emails still being retried, the ones recovered and the failed workflow runs in the last 24 hours.
@@ -269,4 +285,4 @@ python3 n8n/build_bank_sync.py --credentials cred_ids.json \
 docker compose restart n8n
 ```
 
-Workflow IDs: `apEmailIntake001`, `apPostQbo0000001`, `apBankSync000001`, `apSyncQboRef0001`, `apRunNow00000001`, `apDailySummary01`, `apDailyE2eTest01`, `apE2eCleanup0001` (import it before the e2e test, which calls it), `apErrorLog000001` (import it before the others: they name it as their error workflow). An import leaves the workflow unpublished, so publish it again. Wait until the log says "Finished building workflow dependency index" before calling a webhook (until then it answers 404). `scripts/export_workflow.sh` brings editor changes back for comparison.
+Workflow IDs: `apEmailIntake001`, `apDriveIntake001`, `apPostQbo0000001`, `apBankSync000001`, `apSyncQboRef0001`, `apRunNow00000001`, `apDailySummary01`, `apDailyE2eTest01`, `apE2eCleanup0001` (import it before the e2e test, which calls it), `apErrorLog000001` (import it before the others: they name it as their error workflow). An import leaves the workflow unpublished, so publish it again. Wait until the log says "Finished building workflow dependency index" before calling a webhook (until then it answers 404). `scripts/export_workflow.sh` brings editor changes back for comparison.
