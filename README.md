@@ -113,7 +113,7 @@ docs/                Architecture and data-format documentation
 - [x] Day 1: Email intake, Mistral OCR extraction, validation, duplicate check
 - [x] Day 2: QuickBooks bills, Plaid bank matching and bill payments
 - [x] Day 3: Human review, fraud alert, error handling, daily summary, daily end-to-end test
-- [ ] Day 4: Google Drive intake, Factur-X/UBL e-invoices, FX conversion
+- [ ] Day 4: Google Drive intake, foreign-currency bank matching, test set of 20 invoices and confidence calibration
 - [ ] Day 5: VPS deployment (Caddy, HTTPS)
 - [ ] Day 6: Public demo page
 - [ ] Day 7: Video, architecture diagram, case study
@@ -128,6 +128,8 @@ docs/                Architecture and data-format documentation
 - **Segregation of duties:** whoever sets up a supplier or its bank details can't approve its invoices or payments; enforced by the roles in the database.
 - **AP ageing report:** open bills by due-date bucket (current, 1–30, 31–60, 61–90, 90+ days), per supplier and currency.
 - **Purchase orders and 3-way matching:** invoice ↔ PO ↔ goods receipt, with quantity and price tolerances.
+- **Structured e-invoices:** Factur-X/ZUGFeRD and UBL/CII parsed directly, without OCR.
+- **Home-currency conversion of invoices:** each invoice's amount in USD at validation (today ECB rates are used for bank matching only).
 - **Early-payment discounts:** read terms such as "2/10 net 30" and flag bills worth paying early.
 
 ## Copyright

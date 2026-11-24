@@ -10,8 +10,8 @@ Intake channels → **common invoice format** → shared processing core → ban
 
 - **Channels:** Email to `invoices@davidmichel.dev` (an alias of my Google Workspace account `david@davidmichel.dev`; process ONLY emails addressed to the alias); Google Drive folder `AP Automation/Inbox`; later, a web upload form (demo only).
 - **Google auth:** one **Internal** OAuth app (Google Workspace, so tokens don't expire after 7 days), used for both Gmail and Drive. No service account.
-- **Extraction:** structured e-invoices (Factur-X/ZUGFeRD, UBL/CII) are parsed directly (Day 4). PDFs and scans go to **Mistral OCR / Document AI** (`mistral-ocr-latest`, with a JSON-schema annotation for structured output; check the current Mistral docs). **No LLM fallback for now**: if validation fails, the invoice goes to human review. Keep a slot in the design for a fallback provider later.
-- **Common invoice format (country-neutral, worldwide):** supplier name, supplier tax ID, invoice number, invoice and due dates (ISO 8601; ambiguous dates are flagged, not guessed), ISO 4217 currency, line items, generic tax lines (VAT/GST/sales tax/withholding/none), totals, converted amount in the home currency (USD, via the Frankfurter/ECB API, Day 4), original-language text kept, confidence score.
+- **Extraction:** structured e-invoices (Factur-X/ZUGFeRD, UBL/CII) are parsed directly (after go-live, not before). PDFs and scans go to **Mistral OCR / Document AI** (`mistral-ocr-latest`, with a JSON-schema annotation for structured output; check the current Mistral docs). **No LLM fallback for now**: if validation fails, the invoice goes to human review. Keep a slot in the design for a fallback provider later.
+- **Common invoice format (country-neutral, worldwide):** supplier name, supplier tax ID, invoice number, invoice and due dates (ISO 8601; ambiguous dates are flagged, not guessed), ISO 4217 currency, line items, generic tax lines (VAT/GST/sales tax/withholding/none), totals, converted amount in the home currency (USD; **not planned before go-live**: ECB rates via Frankfurter are used for foreign-currency bank matching only), original-language text kept, confidence score.
 - **Core checks:** required fields present, line items + tax = total, duplicate check (supplier + invoice number), confidence threshold.
 - **Bank (Day 2):** Plaid sandbox (US). Matching rules: amount tolerance, date window, fuzzy supplier name. `/sandbox/transactions/create` exists for custom test transactions.
 - **Accounting (Day 2):** QuickBooks Online sandbox (US, Plus, **home currency USD, multi-currency ON**). Flow: vendor (find or create) → bill + PDF attachment → payment if matched; unmatched → unpaid bill, re-checked on later runs.
@@ -21,7 +21,7 @@ Intake channels → **common invoice format** → shared processing core → ban
 ## Stack
 - **n8n Community Edition** (self-hosted, Docker)
 - **PostgreSQL** (n8n database + an `ap` schema for invoices, matches, review queue, error log)
-- **Python service** (FastAPI, in Docker) for parsing/validation helpers: `pypdf`/`pdfplumber`, later `factur-x` and a UBL/CII parser
+- **Python service** (FastAPI, in Docker) for parsing/validation helpers: `pypdf`/`pdfplumber`; `factur-x` and a UBL/CII parser after go-live
 - **Docker Compose** for everything; later deployed to my OVH VPS (Ubuntu 24.04, 4 GB RAM) behind **Caddy** at `n8n.davidmichel.dev`
 
 ## Coding conventions
@@ -72,7 +72,7 @@ Intake channels → **common invoice format** → shared processing core → ban
 7. Export the workflow JSON (no credentials) and commit.
 
 ## Later days (for context only, don't build yet)
-Day 2: Plaid + QuickBooks. Day 3: human review, error handling, daily summary, **daily automated end-to-end test with alert**, test set of 10. Day 4: Drive channel, Factur-X/UBL, multi-currency/FX, test set of 20. Day 5: deploy to VPS (Caddy, HTTPS, firewall). Day 6: public demo page (upload, `invoices+CODE@` email, Drive drop), live tracking page, privacy notice, rate limits, file deletion. Day 7: video, README, architecture diagram, case study.
+Day 2: Plaid + QuickBooks. Day 3: human review, error handling, daily summary, **daily automated end-to-end test with alert**, test set of 10. Day 4: Drive channel, foreign-currency bank matching (ECB rates), test set of 20 + confidence calibration, then start deployment. After go-live: Factur-X/UBL. Not planned before go-live: home-currency conversion of invoices. Day 5: deploy to VPS (Caddy, HTTPS, firewall). Day 6: public demo page (upload, `invoices+CODE@` email, Drive drop), live tracking page, privacy notice, rate limits, file deletion. Day 7: video, README, architecture diagram, case study.
 
 ## Pre-publication task (end of the project, before the repo goes public)
 1. Back up first: push a `backup/pre-rewrite` branch (and keep a local bundle).
