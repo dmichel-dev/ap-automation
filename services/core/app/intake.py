@@ -64,11 +64,12 @@ def _index(key: str) -> int:
     return int(key.split("_")[1])
 
 
-def _mime(a: Attachment) -> str | None:
-    """The declared type if supported, otherwise the type of the file extension (if supported)."""
-    if a.mime_type in SUPPORTED_MIME:
-        return a.mime_type
-    ext = (a.file_name or "").rsplit(".", 1)[-1].lower()
+def file_mime(mime_type: str | None, file_name: str | None) -> str | None:
+    """The declared type if supported, otherwise the type of the file extension (if supported).
+    None: not a file the core processes. The one file-type rule for every channel."""
+    if mime_type in SUPPORTED_MIME:
+        return mime_type
+    ext = (file_name or "").rsplit(".", 1)[-1].lower()
     return MIME_BY_EXTENSION.get(ext)
 
 
@@ -112,7 +113,7 @@ def screen_email(
     files = sorted((a for a in attachments if a.key.startswith("attachment_")), key=lambda a: _index(a.key))
     screening = Screening("process", attachments=len(files), scope=addressed[0], e2e_run=addressed[1])
     for a in files:
-        mime, size = _mime(a), size_in_bytes(a.size)
+        mime, size = file_mime(a.mime_type, a.file_name), size_in_bytes(a.size)
         if not mime:
             screening.skipped.append({"type": a.mime_type or "unknown", "size": size, "why": "unsupported_type"})
         elif mime.startswith("image/") and size < MIN_IMAGE_BYTES:

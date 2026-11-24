@@ -7,7 +7,7 @@ set -eu
 cd "$(dirname "$0")/.."
 
 # workflow ID → committed file
-WORKFLOWS="apEmailIntake001:ap-email-intake.json apPostQbo0000001:ap-post-to-quickbooks.json
+WORKFLOWS="apEmailIntake001:ap-email-intake.json apDriveIntake001:ap-drive-intake.json apPostQbo0000001:ap-post-to-quickbooks.json
   apBankSync000001:ap-bank-sync-and-match.json apSyncQboRef0001:ap-sync-quickbooks-reference.json
   apRunNow00000001:ap-run-now.json apDailySummary01:ap-daily-summary.json
   apDailyE2eTest01:ap-daily-e2e-test.json apE2eCleanup0001:ap-e2e-quickbooks-cleanup.json"

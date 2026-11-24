@@ -22,13 +22,17 @@ from nodes import (
     Node,
     Section,
     code_node,
-    condition,
     core_call,
     gmail,
     if_node,
     lay_out,
+    log_node,
     main,
-    postgres_query,
+    post_to_quickbooks,
+    process_invoice,
+    route_by_status,
+    switch,
+    switch_rule,
     workflow,
 )
 
@@ -127,33 +131,9 @@ if (answer.statusCode !== 200) {
 return answer.body.due.map(id => ({ json: { id } }));
 """
 
-# Scope: the core's screening answer; unknown (the screening failed) → the column's default, live
-LOG_SQL = (
-    "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details, scope)\n"
-    "VALUES ('email', $1, $2, $3, $4, $5, $6::jsonb, COALESCE(NULLIF($7, ''), 'live'))"
-)
 # Emails that failed and are not given up; the core also hands out due ones whose label was lost
 RECHECK_QUERY = f"{TO_US} label:ap-error -label:ap-processed newer_than:14d"
 GMAIL_ATTACHMENTS = {"downloadAttachments": True, "dataPropertyAttachmentsPrefixName": "attachment_"}
-
-
-def switch_rule(output_key: str, expression: str) -> dict[str, Any]:
-    """Switch rule that matches when a boolean expression is true."""
-    return {
-        "conditions": condition(expression, "strict", output_key.replace(" ", "-")),
-        "renameOutput": True,
-        "outputKey": output_key,
-    }
-
-
-def switch(name: str, position: list[int], rules: list[dict[str, Any]], options: dict[str, Any]) -> Node:
-    return {
-        "name": name,
-        "type": "n8n-nodes-base.switch",
-        "typeVersion": 3.2,
-        "position": position,
-        "parameters": {"rules": {"values": rules}, "options": options},
-    }
 
 
 def label_node(name: str, label_keys: list[str], operation: str = "addLabels") -> Node:
@@ -167,19 +147,6 @@ def label_node(name: str, label_keys: list[str], operation: str = "addLabels") -
             "labelIds": "={{ [" + labels + "] }}",
         },
     )
-
-
-def log_node(name: str, step: str, level: str, message: str, source_ref: str, details: str, scope: str) -> Node:
-    replacements = [
-        source_ref,
-        "$execution.id",
-        f"'{step}'",
-        f"'{level}'",
-        message,
-        f"JSON.stringify({details})",
-        f"{scope} ?? ''",
-    ]
-    return postgres_query(name, AUTO, LOG_SQL, replacements)
 
 
 def _intake_nodes() -> list[Node]:
@@ -272,67 +239,19 @@ def _recheck_nodes() -> list[Node]:
 
 def _processing_nodes() -> list[Node]:
     return [
-        {
-            "name": "Process invoice (core)",
-            "type": "n8n-nodes-base.httpRequest",
-            "typeVersion": 4.2,
-            "position": AUTO,
-            "onError": "continueErrorOutput",
-            "parameters": {
-                "method": "POST",
-                "url": f"{CORE}/invoices/process",
-                "authentication": "genericCredentialType",
-                "genericAuthType": "httpHeaderAuth",
-                "sendBody": True,
-                "contentType": "multipart-form-data",
-                "bodyParameters": {
-                    "parameters": [
-                        {"parameterType": "formBinaryData", "name": "file", "inputDataFieldName": "file"},
-                        {"name": "channel", "value": "email"},
-                        {"name": "source_ref", "value": "={{ $json.source_ref }}"},
-                        {"name": "message_id", "value": "={{ $json.message_id }}"},
-                        {"name": "n8n_execution_id", "value": "={{ $execution.id }}"},
-                        {"name": "email_text", "value": "={{ $json.email_text }}"},
-                        {"name": "scope", "value": "={{ $json.scope }}"},
-                    ]
-                },
-                "options": {
-                    "timeout": 300000,
-                    "response": {"response": {"fullResponse": True, "neverError": True, "responseFormat": "json"}},
-                },
-            },
-            "credentials": {"httpHeaderAuth": "CORE"},
-        },
-        # Routing on the core's answer; 413/415 (too large / not a supported file): nothing a human can do
-        switch(
-            "Route by status",
-            AUTO,
+        process_invoice(
+            "email",
             [
-                switch_rule("ready", "$json.statusCode === 200 && $json.body.status === 'ready'"),
-                switch_rule("needs_review", "$json.statusCode === 200 && $json.body.status === 'needs_review'"),
-                switch_rule(
-                    "rejected",
-                    "($json.statusCode === 200 && $json.body.status === 'rejected')"
-                    " || [413, 415].includes($json.statusCode)",
-                ),
+                ("source_ref", "$json.source_ref"),
+                ("message_id", "$json.message_id"),
+                ("n8n_execution_id", "$execution.id"),
+                ("email_text", "$json.email_text"),
+                ("scope", "$json.scope"),
             ],
-            {"fallbackOutput": "extra", "renameFallbackOutput": "error"},
         ),
+        route_by_status(),
         label_node("Label: ready", ["ready", "processed"]),
-        # Post ready invoices right away (the 15-minute schedule is the safety net).
-        # Fire and forget: the intake doesn't wait for QuickBooks.
-        {
-            "name": "Post to QuickBooks",
-            "type": "n8n-nodes-base.executeWorkflow",
-            "typeVersion": 1.2,
-            "position": AUTO,
-            "executeOnce": True,
-            "parameters": {
-                "source": "database",
-                "workflowId": {"__rl": True, "value": "apPostQbo0000001", "mode": "id"},
-                "options": {"waitForSubWorkflow": False},
-            },
-        },
+        post_to_quickbooks(),
         label_node("Label: review", ["review", "processed"]),
         label_node("Label: rejected", ["rejected", "processed"]),
         # An email that got an answer is no longer in error (a re-checked one, or nothing to remove)
@@ -348,6 +267,7 @@ def _error_nodes() -> list[Node]:
         # Logged here first: if the core is unreachable, this is the only record (the label is the other)
         log_node(
             "Log core error",
+            "email",
             "core_call",
             "error",
             f"'core service call failed (' + {ERR}.stage + ')'",
@@ -374,6 +294,7 @@ def _not_processed_nodes() -> list[Node]:
         label_node("Label: no valid attachment", ["rejected", "processed"]),
         log_node(
             "Log no valid attachment",
+            "email",
             "intake",
             "warning",
             "'email without a valid invoice attachment'",
@@ -384,6 +305,7 @@ def _not_processed_nodes() -> list[Node]:
         label_node("Label: fraud alert", ["fraud", "processed"]),
         log_node(
             "Log fraud alert",
+            "email",
             "intake",
             "warning",
             "'possible_bank_detail_change: email asks to change bank details, no invoice attached'",
@@ -393,6 +315,7 @@ def _not_processed_nodes() -> list[Node]:
         ),
         log_node(
             "Log not for alias",
+            "email",
             "intake",
             "warning",
             "'email not addressed to the invoices alias'",

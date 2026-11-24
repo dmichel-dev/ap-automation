@@ -1,0 +1,1176 @@
+{
+  "active": false,
+  "connections": {
+    "Download file": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Process invoice (core)",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Error facts",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Error facts": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Log core error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Every minute": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Find AP folders",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Files to screen": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Screen files (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Find AP folders": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Folder plan",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Folder plan": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Folders ready?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Folders ready?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "List Inbox",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Missing folders",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Given up?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Move to Error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "List Inbox": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Files to screen",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Log core error": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Report failure (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Missing folders": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Create folder",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Move to Processed": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Ready?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Process invoice (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Route by status",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Error facts",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Ready?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Post to QuickBooks",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Report failure (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Given up?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Route by status": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Move to Processed",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Move to Processed",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Move to Processed",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Move to Error",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Error facts",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Route file": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Download file",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Move to Error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Screen files (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Split by file",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Split by file": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Route file",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "AP – Drive intake",
+  "nodes": [
+    {
+      "id": "note-drive-intake",
+      "name": "Note: Drive intake",
+      "parameters": {
+        "color": 5,
+        "content": "## Drive intake\nTurns files dropped in the Google Drive folder **AP Automation/Inbox** into processed invoices, through the same core as email: same extraction, checks, duplicate detection and review.\n\nn8n lists the folder and moves the files. The **core service decides** which files to process, the status, and what a failure means. The AI only extracts data; every decision is deterministic code.",
+        "height": 350,
+        "width": 1620
+      },
+      "position": [
+        -40,
+        -150
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-find-folders",
+      "name": "Note: Find folders",
+      "parameters": {
+        "color": 7,
+        "content": "## Find folders\nEvery minute: finds **AP Automation** and its **Inbox**, **Processed** and **Error** folders. Missing ones are created (the subfolders on the run after a new AP Automation); processing starts on the next run.",
+        "height": 550,
+        "width": 900
+      },
+      "position": [
+        -40,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-screen-core",
+      "name": "Note: Screen (core)",
+      "parameters": {
+        "color": 7,
+        "content": "## Screen (core)\nThe Inbox is the queue. The core answers per file: **process** now, **wait** (being processed, retry not due, or next run), or **error** (not a PDF or image, too large, given up: logged).",
+        "height": 350,
+        "width": 1140
+      },
+      "position": [
+        920,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-process-core",
+      "name": "Note: Process (core)",
+      "parameters": {
+        "color": 7,
+        "content": "## Process (core)\nDownload, then extract, normalize, check, store: the same endpoint as email (source **drive:<file ID>**). The same file already received by email is an exact duplicate.",
+        "height": 350,
+        "width": 660
+      },
+      "position": [
+        2120,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-move,-then-post",
+      "name": "Note: Move, then post",
+      "parameters": {
+        "color": 7,
+        "content": "## Move, then post\nAny status (ready, needs review, rejected) → **Processed**; ready invoices start the posting workflow. A file the core refuses (too large, not really a PDF or image) → **Error**.",
+        "height": 550,
+        "width": 660
+      },
+      "position": [
+        2840,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-technical-error",
+      "name": "Note: Technical error",
+      "parameters": {
+        "color": 3,
+        "content": "## Technical error\nDownload or processing failed (e.g. OCR service down, core unreachable): logged and reported to the core. Temporary → the file stays in **Inbox** and is retried when due (15 min, 1 h, 4 h, 12 h). Permanent, or 5 attempts used → **given up**, moved to **Error**: a person looks.",
+        "height": 350,
+        "width": 900
+      },
+      "position": [
+        2120,
+        850
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "every-minute",
+      "name": "Every minute",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "position": [
+        0,
+        400
+      ],
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2
+    },
+    {
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "name": "Google Drive – david@davidmichel.dev"
+        }
+      },
+      "executeOnce": true,
+      "id": "find-ap-folders",
+      "maxTries": 3,
+      "name": "Find AP folders",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "method": "GET",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "mimeType = 'application/vnd.google-apps.folder' and trashed = false and ((name = 'AP Automation' and 'root' in parents) or name = 'Inbox' or name = 'Processed' or name = 'Error')"
+            },
+            {
+              "name": "fields",
+              "value": "files(id,name,parents)"
+            },
+            {
+              "name": "orderBy",
+              "value": "createdTime"
+            },
+            {
+              "name": "pageSize",
+              "value": "100"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "url": "https://www.googleapis.com/drive/v3/files"
+      },
+      "position": [
+        240,
+        400
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "folder-plan",
+      "name": "Folder plan",
+      "parameters": {
+        "jsCode": "// The AP folders' IDs (the oldest of each name, if there are several), and the ones still missing.\n// A subfolder can only be created once its parent exists: a new 'AP Automation' gets its subfolders\n// on the next run.\nconst r = $input.first().json;\nif (r.statusCode !== 200) throw new Error(`Drive folder search: HTTP ${r.statusCode ?? 'no answer'}`);\nconst folders = r.body.files ?? [];\nconst root = folders.find(f => f.name === 'AP Automation');\nconst inRoot = name => root && folders.find(f => f.name === name && (f.parents ?? []).includes(root.id));\nconst ids = { root: root?.id ?? null, inbox: inRoot('Inbox')?.id ?? null,\n              processed: inRoot('Processed')?.id ?? null, error: inRoot('Error')?.id ?? null };\nconst missing = !root ? [{ name: 'AP Automation', parent: 'root' }]\n  : [['inbox', 'Inbox'], ['processed', 'Processed'], ['error', 'Error']]\n      .filter(([key]) => !ids[key]).map(([, name]) => ({ name, parent: root.id }));\nreturn [{ json: { ...ids, missing } }];",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        480,
+        400
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "folders-ready",
+      "name": "Folders ready?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.missing.length === 0 }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        720,
+        400
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "missing-folders",
+      "name": "Missing folders",
+      "parameters": {
+        "jsCode": "return $input.first().json.missing.map(folder => ({ json: folder }));",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        480,
+        600
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "name": "Google Drive – david@davidmichel.dev"
+        }
+      },
+      "id": "create-folder",
+      "name": "Create folder",
+      "parameters": {
+        "driveId": {
+          "__rl": true,
+          "cachedResultName": "My Drive",
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.parent }}"
+        },
+        "name": "={{ $json.name }}",
+        "options": {},
+        "resource": "folder"
+      },
+      "position": [
+        720,
+        600
+      ],
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3
+    },
+    {
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "name": "Google Drive – david@davidmichel.dev"
+        }
+      },
+      "executeOnce": true,
+      "id": "list-inbox",
+      "maxTries": 3,
+      "name": "List Inbox",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "method": "GET",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "='{{ $json.inbox }}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'"
+            },
+            {
+              "name": "fields",
+              "value": "files(id,name,mimeType,size)"
+            },
+            {
+              "name": "orderBy",
+              "value": "createdTime"
+            },
+            {
+              "name": "pageSize",
+              "value": "50"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "url": "https://www.googleapis.com/drive/v3/files"
+      },
+      "position": [
+        960,
+        400
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "files-to-screen",
+      "name": "Files to screen",
+      "parameters": {
+        "jsCode": "// The Inbox files' metadata for the core (never their content). Drive sends sizes as strings.\nconst r = $input.first().json;\nif (r.statusCode !== 200) throw new Error(`Drive Inbox listing: HTTP ${r.statusCode ?? 'no answer'}`);\nconst files = (r.body.files ?? []).map(f => ({ id: f.id, name: f.name ?? null, mime_type: f.mimeType ?? null,\n                                               size: f.size ?? null }));\nreturn [{ json: { files } }];",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        1200,
+        400
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "screen-files-core",
+      "maxTries": 3,
+      "name": "Screen files (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ files: $json.files, execution_id: $execution.id }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "=http://core:8000/intake/drive/screen"
+      },
+      "position": [
+        1440,
+        400
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "split-by-file",
+      "name": "Split by file",
+      "parameters": {
+        "jsCode": "// One item per file the core sends somewhere now: 'process' or 'error'. Files it says to 'wait'\n// (being processed by another run, retry not due yet, over this run's limit) stay in Inbox.\nconst screen = $input.first().json;\nif (screen.statusCode !== 200) {\n  throw new Error(`Drive screening: the core answered ${screen.statusCode ?? 'nothing'}; the next run tries again`);\n}\nconst folders = $('Folder plan').first().json;\nreturn screen.body.files\n  .filter(f => f.route !== 'wait')\n  .map(f => ({ json: { id: f.id, route: f.route, reason: f.reason, source_ref: `drive:${f.id}`,\n                       folders: { processed: folders.processed, error: folders.error } } }));",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        1680,
+        400
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "route-file",
+      "name": "Route file",
+      "parameters": {
+        "options": {},
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "process",
+                    "leftValue": "={{ $json.route === 'process' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                }
+              },
+              "outputKey": "process",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "error",
+                    "leftValue": "={{ $json.route === 'error' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                }
+              },
+              "outputKey": "error",
+              "renameOutput": true
+            }
+          ]
+        }
+      },
+      "position": [
+        1920,
+        400
+      ],
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2
+    },
+    {
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "name": "Google Drive – david@davidmichel.dev"
+        }
+      },
+      "id": "download-file",
+      "maxTries": 3,
+      "name": "Download file",
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.id }}"
+        },
+        "operation": "download",
+        "options": {
+          "binaryPropertyName": "file"
+        }
+      },
+      "position": [
+        2160,
+        400
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "process-invoice-core",
+      "name": "Process invoice (core)",
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "inputDataFieldName": "file",
+              "name": "file",
+              "parameterType": "formBinaryData"
+            },
+            {
+              "name": "channel",
+              "value": "drive"
+            },
+            {
+              "name": "source_ref",
+              "value": "={{ $('Split by file').item.json.source_ref }}"
+            },
+            {
+              "name": "message_id",
+              "value": "={{ $('Split by file').item.json.id }}"
+            },
+            {
+              "name": "n8n_execution_id",
+              "value": "={{ $execution.id }}"
+            }
+          ]
+        },
+        "contentType": "multipart-form-data",
+        "genericAuthType": "httpHeaderAuth",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 300000
+        },
+        "sendBody": true,
+        "url": "http://core:8000/invoices/process"
+      },
+      "position": [
+        2400,
+        400
+      ],
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2
+    },
+    {
+      "id": "route-by-status",
+      "name": "Route by status",
+      "parameters": {
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "error"
+        },
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "ready",
+                    "leftValue": "={{ $json.statusCode === 200 && $json.body.status === 'ready' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                }
+              },
+              "outputKey": "ready",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "needs_review",
+                    "leftValue": "={{ $json.statusCode === 200 && $json.body.status === 'needs_review' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                }
+              },
+              "outputKey": "needs_review",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "rejected",
+                    "leftValue": "={{ $json.statusCode === 200 && $json.body.status === 'rejected' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                }
+              },
+              "outputKey": "rejected",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "refused",
+                    "leftValue": "={{ [413, 415].includes($json.statusCode) }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                }
+              },
+              "outputKey": "refused",
+              "renameOutput": true
+            }
+          ]
+        }
+      },
+      "position": [
+        2640,
+        400
+      ],
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2
+    },
+    {
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "name": "Google Drive – david@davidmichel.dev"
+        }
+      },
+      "id": "move-to-processed",
+      "name": "Move to Processed",
+      "parameters": {
+        "driveId": {
+          "__rl": true,
+          "cachedResultName": "My Drive",
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Split by file').item.json.id }}"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Split by file').item.json.folders.processed }}"
+        },
+        "operation": "move"
+      },
+      "position": [
+        2880,
+        400
+      ],
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3
+    },
+    {
+      "id": "ready",
+      "name": "Ready?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $('Route by status').item.json.body?.status === 'ready' }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        3120,
+        400
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "executeOnce": true,
+      "id": "post-to-quickbooks",
+      "name": "Post to QuickBooks",
+      "parameters": {
+        "options": {
+          "waitForSubWorkflow": false
+        },
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apPostQbo0000001"
+        }
+      },
+      "position": [
+        3360,
+        400
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2
+    },
+    {
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "name": "Google Drive – david@davidmichel.dev"
+        }
+      },
+      "id": "move-to-error",
+      "name": "Move to Error",
+      "parameters": {
+        "driveId": {
+          "__rl": true,
+          "cachedResultName": "My Drive",
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Split by file').item.json.id }}"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Split by file').item.json.folders.error }}"
+        },
+        "operation": "move"
+      },
+      "position": [
+        2880,
+        600
+      ],
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3
+    },
+    {
+      "id": "error-facts",
+      "name": "Error facts",
+      "parameters": {
+        "jsCode": "// What failed, for the log and the core: the download or the processing of one file. The core decides\n// what it means (retried later: the file stays in Inbox; or given up: it moves to Error).\nconst stage = $prevNode.name === 'Download file' ? 'fetch' : 'process';\nreturn $input.all().map((item, i) => {\n  const file = $('Split by file').itemMatching(i).json;\n  const r = item.json;\n  return { json: { id: file.id, source_ref: file.source_ref, stage,\n                   status_code: stage === 'process' ? (r.statusCode ?? null) : null,\n                   error: r.body?.error ?? null,\n                   message: String(r.body?.message ?? r.error?.message ?? r.error ?? '').slice(0, 300) },\n           pairedItem: { item: i } };\n});",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        2160,
+        1000
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "AP database (ap_app)"
+        }
+      },
+      "id": "log-core-error",
+      "name": "Log core error",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [$('Error facts').item.json.source_ref, $execution.id, 'core_call', 'error', 'core service call failed (' + $('Error facts').item.json.stage + ')', JSON.stringify({ stage: $('Error facts').item.json.stage, status_code: $('Error facts').item.json.status_code, error: $('Error facts').item.json.error, message: $('Error facts').item.json.message }), 'live' ?? ''] }}"
+        },
+        "query": "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details, scope)\nVALUES ('drive', $1, $2, $3, $4, $5, $6::jsonb, COALESCE(NULLIF($7, ''), 'live'))"
+      },
+      "position": [
+        2400,
+        1000
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "report-failure-core",
+      "maxTries": 3,
+      "name": "Report failure (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ channel: 'drive', message_id: $('Error facts').item.json.id, stage: $('Error facts').item.json.stage, status_code: $('Error facts').item.json.status_code, error: $('Error facts').item.json.error, execution_id: $execution.id }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "=http://core:8000/intake/failures"
+      },
+      "position": [
+        2640,
+        1000
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "given-up",
+      "name": "Given up?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 && $json.body?.state === 'given_up' }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        2880,
+        1000
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    }
+  ],
+  "pinData": {},
+  "settings": {
+    "errorWorkflow": "apErrorLog000001",
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "timezone": "Europe/Paris"
+  }
+}

@@ -3,6 +3,7 @@
 Endpoints:
   GET  /health            liveness + database check (no auth)
   POST /intake/email/screen  email metadata → which attachments to process (the alias guard)
+  POST /intake/drive/screen  files listed in the Drive Inbox → process now, wait, or move to Error
   POST /intake/failures      a failed email → retried later or given up (core decides)
   POST /intake/failures/due  emails under AP/Error → the ones the re-check processes now
   POST /intake/failures/retry  operator: fresh attempts for given-up emails (logged)
@@ -59,6 +60,7 @@ from . import (
     actors,
     daily_summary,
     db,
+    drive_intake,
     e2e_test,
     files,
     fx,
@@ -157,7 +159,7 @@ def process_invoice(
     email_text: Annotated[
         str | None, Form(max_length=intake.EMAIL_TEXT_MAX, description="subject + body; checked, never stored")
     ] = None,
-    message_id: Annotated[str | None, Form(max_length=200, description="the email, for the re-check")] = None,
+    message_id: Annotated[str | None, Form(max_length=200, description="email or Drive file, for the re-check")] = None,
     scope: Annotated[Literal["live", "e2e"], Form(description="the screening's answer")] = "live",
 ) -> processing.ProcessOutcome:
     """The shared core for every channel: extract → normalize → check → store. Idempotent per source_ref."""
@@ -369,6 +371,29 @@ def screen_email(body: EmailToScreen, cfg: AcctCfg) -> JsonDict:
         if body.message_id and screening.route != "process":
             intake_failures.resolve(conn, "email", body.message_id, body.execution_id)
     return asdict(screening)
+
+
+class DriveFileIn(BaseModel):
+    """A file as the Drive API lists it (metadata only)."""
+
+    id: str = Field(min_length=1, max_length=200)
+    name: str | None = Field(default=None, max_length=1000)
+    mime_type: str | None = Field(default=None, max_length=200)
+    size: int | None = Field(default=None, ge=0)  # Drive sends a string of digits
+
+
+class DriveToScreen(BaseModel):
+    files: list[DriveFileIn] = Field(default=[], max_length=100)
+    execution_id: str | None = Field(default=None, max_length=100)
+
+
+@app.post("/intake/drive/screen", dependencies=Auth)
+def screen_drive(body: DriveToScreen, cfg: AcctCfg) -> JsonDict:
+    """For each file in the Inbox folder: process now, wait (stays in Inbox), or error (to Error)."""
+    listed = [drive_intake.DriveFile(f.id, f.name, f.mime_type, f.size) for f in body.files]
+    with db.connect(cfg.database_url) as conn:
+        answers = drive_intake.screen_files(conn, listed, body.execution_id)
+    return {"files": answers}
 
 
 Channel = Literal["email", "drive", "upload"]

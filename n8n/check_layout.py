@@ -15,6 +15,7 @@ from nodes import LABEL, NODE
 
 BUILDERS = (
     "build_email_intake",
+    "build_drive_intake",
     "build_post_qbo",
     "build_bank_sync",
     "build_sync_reference",

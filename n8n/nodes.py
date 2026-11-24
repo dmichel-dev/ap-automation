@@ -24,6 +24,7 @@ CREDENTIAL_NAMES = {
     "POSTGRES": "AP database (ap_app)",
     "QBO": "QuickBooks – Sandbox US",
     "PLAID": "Plaid – Sandbox",
+    "DRIVE": "Google Drive – david@davidmichel.dev",
 }
 # Full response, never throw on an HTTP error status: the next node checks the status itself
 FULL_RESPONSE = {"response": {"response": {"fullResponse": True, "neverError": True}}}
@@ -225,6 +226,116 @@ def postgres_query(name: str, pos: list[int], sql: str, replacements: list[str])
             "options": {"queryReplacement": "={{ [" + ", ".join(replacements) + "] }}"},
         },
         "credentials": {"postgres": "POSTGRES"},
+    }
+
+
+def switch_rule(output_key: str, expression: str) -> dict[str, Any]:
+    """Switch rule that matches when a boolean expression is true."""
+    return {
+        "conditions": condition(expression, "strict", output_key.replace(" ", "-")),
+        "renameOutput": True,
+        "outputKey": output_key,
+    }
+
+
+def switch(name: str, position: list[int], rules: list[dict[str, Any]], options: dict[str, Any]) -> Node:
+    return {
+        "name": name,
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.2,
+        "position": position,
+        "parameters": {"rules": {"values": rules}, "options": options},
+    }
+
+
+# =====================================================================================
+# Intake: shared by every channel's workflow (email, Drive)
+# =====================================================================================
+# Scope: the core's screening answer; unknown (the screening failed) → the column's default, live
+INTAKE_LOG_SQL = (
+    "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details, scope)\n"
+    "VALUES ('{channel}', $1, $2, $3, $4, $5, $6::jsonb, COALESCE(NULLIF($7, ''), 'live'))"
+)
+
+
+def log_node(
+    name: str, channel: str, step: str, level: str, message: str, source_ref: str, details: str, scope: str
+) -> Node:
+    """A processing-log row written by n8n itself (e.g. the core could not be reached)."""
+    replacements = [
+        source_ref,
+        "$execution.id",
+        f"'{step}'",
+        f"'{level}'",
+        message,
+        f"JSON.stringify({details})",
+        f"{scope} ?? ''",
+    ]
+    return postgres_query(name, AUTO, INTAKE_LOG_SQL.format(channel=channel), replacements)
+
+
+def process_invoice(channel: str, fields: list[tuple[str, str]]) -> Node:
+    """POST /invoices/process with the item's binary `file` and form fields (name, expression).
+    Full response, never throws: 'Route by status' reads the answer."""
+    return {
+        "name": "Process invoice (core)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": AUTO,
+        "onError": "continueErrorOutput",
+        "parameters": {
+            "method": "POST",
+            "url": f"{CORE}/invoices/process",
+            "authentication": "genericCredentialType",
+            "genericAuthType": "httpHeaderAuth",
+            "sendBody": True,
+            "contentType": "multipart-form-data",
+            "bodyParameters": {
+                "parameters": [
+                    {"parameterType": "formBinaryData", "name": "file", "inputDataFieldName": "file"},
+                    {"name": "channel", "value": channel},
+                    *({"name": k, "value": "={{ " + v + " }}"} for k, v in fields),
+                ]
+            },
+            "options": {
+                "timeout": 300000,
+                "response": {"response": {"fullResponse": True, "neverError": True, "responseFormat": "json"}},
+            },
+        },
+        "credentials": {"httpHeaderAuth": "CORE"},
+    }
+
+
+def route_by_status(refused: bool = False) -> Node:
+    """Routing on the core's answer. 413/415 (too large / not a supported file): nothing a human can do,
+    so 'rejected', or their own 'refused' output when `refused`. No answer, 5xx → the 'error' output."""
+    status_is = "$json.statusCode === 200 && $json.body.status === "
+    too_large_or_unsupported = "[413, 415].includes($json.statusCode)"
+    rejected = f"({status_is}'rejected') || {too_large_or_unsupported}"
+    rules = [
+        switch_rule("ready", f"{status_is}'ready'"),
+        switch_rule("needs_review", f"{status_is}'needs_review'"),
+        switch_rule("rejected", f"{status_is}'rejected'" if refused else rejected),
+    ]
+    if refused:
+        rules.append(switch_rule("refused", too_large_or_unsupported))
+    return switch("Route by status", AUTO, rules, {"fallbackOutput": "extra", "renameFallbackOutput": "error"})
+
+
+def post_to_quickbooks() -> Node:
+    """Posts ready invoices right away (the posting workflow's 15-minute schedule is the safety net).
+    Fire and forget: the intake doesn't wait for QuickBooks."""
+    return {
+        "name": "Post to QuickBooks",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.2,
+        "position": AUTO,
+        "executeOnce": True,
+        "parameters": {
+            "source": "database",
+            "workflowId": {"__rl": True, "value": "apPostQbo0000001", "mode": "id"},
+            "options": {"waitForSubWorkflow": False},
+        },
     }
 
 

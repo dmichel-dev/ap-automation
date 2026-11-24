@@ -30,6 +30,7 @@ MAX_ATTEMPTS = len(BACKOFF) + 1
 CLAIM_LIMIT = 10  # emails per re-check run
 NOT_RECORDED = "not_recorded"  # AP/Error label without a row: the core couldn't record the failure
 _REF_PREFIX = {"email": "gmail"}  # log references, as the workflow writes them (gmail:<message id>)
+_NOUN = {"email": "email", "drive": "file"}
 
 
 def source_ref(channel: str, message_id: str) -> str:
@@ -71,13 +72,16 @@ _CORE_AUTH = Failure(
 _NOT_RECORDED = Failure(
     NOT_RECORDED, False, "Labelled AP/Error while the core was unreachable, so the failure was never recorded."
 )
-_FETCH = Failure("email_fetch_failed", False, "The email or its attachments could not be downloaded from Gmail.")
+_FETCH = {
+    "email": Failure("email_fetch_failed", False, "The email or its attachments could not be downloaded from Gmail."),
+    "drive": Failure("drive_fetch_failed", False, "The file could not be downloaded from Google Drive."),
+}
 
 
-def classify(stage: str, status_code: int | None, error: str | None) -> Failure:
+def classify(stage: str, status_code: int | None, error: str | None, channel: str = "email") -> Failure:
     """What a failure means. Unknown answers count as temporary: the attempts are limited anyway."""
     if stage == "fetch":
-        return _FETCH
+        return _FETCH.get(channel, _FETCH["email"])
     if error in _PROVIDER and status_code in (502, 503):
         return _PROVIDER[error]
     if not status_code:
@@ -92,7 +96,8 @@ def classify(stage: str, status_code: int | None, error: str | None) -> Failure:
 
 
 def explain(code: str) -> str:
-    known = {f.code: f for f in (*_PROVIDER.values(), _UNREACHABLE, _CORE_ERROR, _CORE_AUTH, _NOT_RECORDED, _FETCH)}
+    failures = (*_PROVIDER.values(), _UNREACHABLE, _CORE_ERROR, _CORE_AUTH, _NOT_RECORDED, *_FETCH.values())
+    known = {f.code: f for f in failures}
     return known[code].explanation if code in known else f"Failed: {code}."
 
 
@@ -135,7 +140,7 @@ def record(
 ) -> dict[str, Any]:
     """A failure reported by the workflow. One attempt per n8n run, however many attachments failed.
     Scope: the screening's answer when the email got that far (an earlier failure is counted as live)."""
-    failure = classify(stage, status_code, error)
+    failure = classify(stage, status_code, error, channel)
     row = _lock_row(conn, channel, message_id)
     if row is None:
         row = db.one(
@@ -213,29 +218,56 @@ def claim_due(conn: db.Conn, channel: str, found: list[str], execution_id: str |
             (channel, message_id[:200], NOT_RECORDED),
         )
     _give_up_exhausted(conn, channel, execution_id)
+    return [r["message_id"] for r in _claim(conn, channel, execution_id)]
+
+
+def _claim(conn: db.Conn, channel: str, execution_id: str | None, only: list[str] | None = None) -> list[db.Row]:
+    """Due waiting rows (of `only`, if given), each counted as an attempt and logged."""
     rows = conn.execute(
         """UPDATE intake_failures f
               SET attempts = f.attempts + 1, counted_execution_id = %(run)s,
                   next_attempt_at = now() + (%(waits)s::interval[])[least(f.attempts + 1, %(n)s)]
             WHERE f.id IN (SELECT id FROM intake_failures
                             WHERE channel = %(channel)s AND state = 'waiting' AND next_attempt_at <= now()
+                              AND (%(only)s::text[] IS NULL OR message_id = ANY(%(only)s))
                             ORDER BY next_attempt_at, id LIMIT %(limit)s FOR UPDATE SKIP LOCKED)
             RETURNING f.*""",
-        {"run": execution_id, "waits": list(BACKOFF), "n": len(BACKOFF), "channel": channel, "limit": CLAIM_LIMIT},
+        {
+            "run": execution_id,
+            "waits": list(BACKOFF),
+            "n": len(BACKOFF),
+            "channel": channel,
+            "limit": CLAIM_LIMIT,
+            "only": only,
+        },
     ).fetchall()
+    noun = _NOUN.get(channel, "item")
     for row in rows:
         db.log(
             conn,
             step="intake_retry",
             level="info",
-            message=f"re-check: trying the email again (attempt {row['attempts']} of {MAX_ATTEMPTS})",
+            message=f"re-check: trying the {noun} again (attempt {row['attempts']} of {MAX_ATTEMPTS})",
             channel=channel,
             source_ref=source_ref(channel, row["message_id"]),
             execution_id=execution_id,
             scope=row["scope"],
             details={"code": _code(row), "attempts": row["attempts"]},
         )
-    return [r["message_id"] for r in rows]
+    return rows
+
+
+def listed_states(conn: db.Conn, channel: str, ids: list[str], execution_id: str | None) -> dict[str, str]:
+    """For a channel whose queue is a folder (Drive): each listed item's state. 'new' (no failure, or
+    resolved), 'due' (its retry is due: counted as an attempt now), 'waiting', or 'given_up'.
+    Rows whose attempts ran out without a final report are given up first."""
+    _give_up_exhausted(conn, channel, execution_id)
+    rows = conn.execute(
+        "SELECT message_id, state FROM intake_failures WHERE channel = %s AND message_id = ANY(%s)", (channel, ids)
+    ).fetchall()
+    states = {r["message_id"]: r["state"] for r in rows if r["state"] != "resolved"}
+    due = {r["message_id"] for r in _claim(conn, channel, execution_id, only=[i for i in ids if i in states])}
+    return {i: "due" if i in due else states.get(i, "new") for i in ids}
 
 
 def _give_up_exhausted(conn: db.Conn, channel: str, execution_id: str | None) -> None:
