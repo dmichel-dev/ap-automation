@@ -1,6 +1,24 @@
 {
   "active": false,
   "connections": {
+    "Any rates needed?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Split series",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Run matching (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
     "Applied?": {
       "main": [
         [
@@ -249,7 +267,25 @@
         [
           {
             "index": 0,
-            "node": "Run matching (core)",
+            "node": "Rates needed (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Needs OK?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Any rates needed?",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Bank sync failed",
             "type": "main"
           }
         ]
@@ -343,6 +379,46 @@
           {
             "index": 0,
             "node": "Record payment (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Rates (Frankfurter)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Store rates (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Rates needed (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Needs OK?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Rates stored?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Run matching (core)",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Bank sync failed",
             "type": "main"
           }
         ]
@@ -560,6 +636,17 @@
         ]
       ]
     },
+    "Split series": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Rates (Frankfurter)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
     "Split write-offs": {
       "main": [
         [
@@ -606,6 +693,17 @@
           {
             "index": 0,
             "node": "Stored?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Store rates (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Rates stored?",
             "type": "main"
           }
         ]
@@ -748,16 +846,32 @@
       "typeVersion": 1
     },
     {
+      "id": "note-exchange-rates-frankfurter,-ecb",
+      "name": "Note: Exchange rates (Frankfurter, ECB)",
+      "parameters": {
+        "color": 7,
+        "content": "## Exchange rates (Frankfurter, ECB)\nOnly for bills in another currency than the bank account. The core names the rate series it needs; Frankfurter returns the **ECB reference rates** for those dates, and the core stores them. A currency the ECB doesn't quote is remembered (those bills go to review); a failed call stores nothing and is retried on the next run.",
+        "height": 350,
+        "width": 1620
+      },
+      "position": [
+        2120,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
       "id": "note-matching-core",
       "name": "Note: Matching (core)",
       "parameters": {
         "color": 7,
-        "content": "## Matching (core)\nThe core matches bank payments with open bills and returns the payments to record.",
+        "content": "## Matching (core)\nThe core matches bank payments with open bills and returns the payments to record. A bill in another currency is compared at the ECB rate of the payment date (3 % tolerance) and paid in full at the bank's rate: QuickBooks posts the exchange gain or loss.",
         "height": 550,
         "width": 660
       },
       "position": [
-        2120,
+        3800,
         250
       ],
       "type": "n8n-nodes-base.stickyNote",
@@ -773,7 +887,7 @@
         "width": 2100
       },
       "position": [
-        2840,
+        4520,
         250
       ],
       "type": "n8n-nodes-base.stickyNote",
@@ -789,7 +903,7 @@
         "width": 420
       },
       "position": [
-        4040,
+        5720,
         650
       ],
       "type": "n8n-nodes-base.stickyNote",
@@ -805,7 +919,7 @@
         "width": 2340
       },
       "position": [
-        2840,
+        4520,
         1250
       ],
       "type": "n8n-nodes-base.stickyNote",
@@ -821,7 +935,7 @@
         "width": 420
       },
       "position": [
-        4040,
+        5720,
         1850
       ],
       "type": "n8n-nodes-base.stickyNote",
@@ -1181,6 +1295,239 @@
           "name": "AP core token"
         }
       },
+      "id": "rates-needed-core",
+      "maxTries": 3,
+      "name": "Rates needed (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "method": "GET",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "url": "http://core:8000/fx/needs/plaid-sandbox"
+      },
+      "position": [
+        2160,
+        400
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "needs-ok",
+      "name": "Needs OK?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        2400,
+        400
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "any-rates-needed",
+      "name": "Any rates needed?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.body.series.length > 0 }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        2640,
+        400
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "split-series",
+      "name": "Split series",
+      "parameters": {
+        "fieldToSplitOut": "body.series",
+        "options": {}
+      },
+      "position": [
+        2880,
+        400
+      ],
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1
+    },
+    {
+      "id": "rates-frankfurter",
+      "maxTries": 3,
+      "name": "Rates (Frankfurter)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "GET",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "base",
+              "value": "={{ $json.base }}"
+            },
+            {
+              "name": "quotes",
+              "value": "={{ $json.quote }}"
+            },
+            {
+              "name": "from",
+              "value": "={{ $json.from }}"
+            },
+            {
+              "name": "to",
+              "value": "={{ $json.to }}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "url": "=https://api.frankfurter.dev/v2/providers/{{ $('Rates needed (core)').first().json.body.provider }}/rates"
+      },
+      "position": [
+        3120,
+        400
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "executeOnce": true,
+      "id": "store-rates-core",
+      "maxTries": 3,
+      "name": "Store rates (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ answers: $('Split series').all().map((s, i) => ({ base: s.json.base, quote: s.json.quote, status_code: $input.all()[i]?.json.statusCode ?? 0, body: $input.all()[i]?.json.body ?? null })) }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "http://core:8000/fx/rates"
+      },
+      "position": [
+        3360,
+        400
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "rates-stored",
+      "name": "Rates stored?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        3600,
+        400
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
       "id": "run-matching-core",
       "maxTries": 3,
       "name": "Run matching (core)",
@@ -1200,7 +1547,7 @@
         "url": "http://core:8000/matching/run/plaid-sandbox"
       },
       "position": [
-        2160,
+        3840,
         400
       ],
       "retryOnFail": true,
@@ -1236,7 +1583,7 @@
         "options": {}
       },
       "position": [
-        2400,
+        4080,
         400
       ],
       "type": "n8n-nodes-base.if",
@@ -1273,10 +1620,16 @@
               "value": "={{ String($json.body.unmatched) }}"
             },
             {
-              "id": "fx_match_pending",
-              "name": "fx_match_pending",
+              "id": "foreign_currency_bills",
+              "name": "foreign_currency_bills",
               "type": "string",
-              "value": "={{ String($json.body.fx_match_pending) }}"
+              "value": "={{ String($json.body.foreign_currency_bills) }}"
+            },
+            {
+              "id": "fx_review",
+              "name": "fx_review",
+              "type": "string",
+              "value": "={{ String($json.body.fx_review) }}"
             },
             {
               "id": "payments_due",
@@ -1291,7 +1644,7 @@
         "options": {}
       },
       "position": [
-        2640,
+        4320,
         600
       ],
       "type": "n8n-nodes-base.set",
@@ -1305,7 +1658,7 @@
         "options": {}
       },
       "position": [
-        2640,
+        4320,
         400
       ],
       "type": "n8n-nodes-base.splitOut",
@@ -1319,7 +1672,7 @@
         "options": {}
       },
       "position": [
-        2880,
+        4560,
         400
       ],
       "type": "n8n-nodes-base.splitInBatches",
@@ -1378,7 +1731,7 @@
         "url": "={{ $('Run matching (core)').first().json.body.qbo_base }}/query"
       },
       "position": [
-        3120,
+        4800,
         400
       ],
       "retryOnFail": true,
@@ -1414,7 +1767,7 @@
         "url": "=http://core:8000/matches/{{ $('One payment at a time').first().json.match_id }}/lookup"
       },
       "position": [
-        3360,
+        5040,
         400
       ],
       "retryOnFail": true,
@@ -1536,7 +1889,7 @@
         }
       },
       "position": [
-        3600,
+        5280,
         400
       ],
       "type": "n8n-nodes-base.switch",
@@ -1598,7 +1951,7 @@
         "url": "={{ $('Run matching (core)').first().json.body.qbo_base }}/billpayment"
       },
       "position": [
-        3840,
+        5520,
         400
       ],
       "retryOnFail": true,
@@ -1634,7 +1987,7 @@
         "options": {}
       },
       "position": [
-        4080,
+        5760,
         400
       ],
       "type": "n8n-nodes-base.if",
@@ -1659,7 +2012,7 @@
         "options": {}
       },
       "position": [
-        4320,
+        6000,
         400
       ],
       "type": "n8n-nodes-base.set",
@@ -1693,7 +2046,7 @@
         "url": "=http://core:8000/matches/{{ $('One payment at a time').first().json.match_id }}/payment"
       },
       "position": [
-        4560,
+        6240,
         400
       ],
       "retryOnFail": true,
@@ -1729,7 +2082,7 @@
         "options": {}
       },
       "position": [
-        4800,
+        6480,
         400
       ],
       "type": "n8n-nodes-base.if",
@@ -1744,7 +2097,7 @@
         "mode": "runOnceForAllItems"
       },
       "position": [
-        4080,
+        5760,
         800
       ],
       "type": "n8n-nodes-base.code",
@@ -1778,7 +2131,7 @@
         "url": "=http://core:8000/matches/{{ $json.match_id }}/payment-failed"
       },
       "position": [
-        4320,
+        6000,
         800
       ],
       "retryOnFail": true,
@@ -1794,7 +2147,7 @@
         "options": {}
       },
       "position": [
-        2880,
+        4560,
         1400
       ],
       "type": "n8n-nodes-base.splitOut",
@@ -1808,7 +2161,7 @@
         "options": {}
       },
       "position": [
-        3120,
+        4800,
         1400
       ],
       "type": "n8n-nodes-base.splitInBatches",
@@ -1867,7 +2220,7 @@
         "url": "={{ $('Run matching (core)').first().json.body.qbo_base }}/query"
       },
       "position": [
-        3360,
+        5040,
         1400
       ],
       "retryOnFail": true,
@@ -1903,7 +2256,7 @@
         "url": "=http://core:8000/write-offs/{{ $('One write-off at a time').first().json.write_off_id }}/lookup/credit"
       },
       "position": [
-        3600,
+        5280,
         1400
       ],
       "retryOnFail": true,
@@ -2025,7 +2378,7 @@
         }
       },
       "position": [
-        3840,
+        5520,
         1400
       ],
       "type": "n8n-nodes-base.switch",
@@ -2087,7 +2440,7 @@
         "url": "={{ $('Run matching (core)').first().json.body.qbo_base }}/vendorcredit"
       },
       "position": [
-        4080,
+        5760,
         1400
       ],
       "retryOnFail": true,
@@ -2123,7 +2476,7 @@
         "options": {}
       },
       "position": [
-        4320,
+        6000,
         1400
       ],
       "type": "n8n-nodes-base.if",
@@ -2148,7 +2501,7 @@
         "options": {}
       },
       "position": [
-        4560,
+        6240,
         1400
       ],
       "type": "n8n-nodes-base.set",
@@ -2182,7 +2535,7 @@
         "url": "=http://core:8000/write-offs/{{ $('One write-off at a time').first().json.write_off_id }}/credit"
       },
       "position": [
-        4800,
+        6480,
         1400
       ],
       "retryOnFail": true,
@@ -2218,7 +2571,7 @@
         "options": {}
       },
       "position": [
-        5040,
+        6720,
         1400
       ],
       "type": "n8n-nodes-base.if",
@@ -2277,7 +2630,7 @@
         "url": "={{ $('Run matching (core)').first().json.body.qbo_base }}/query"
       },
       "position": [
-        3360,
+        5040,
         1600
       ],
       "retryOnFail": true,
@@ -2313,7 +2666,7 @@
         "url": "=http://core:8000/write-offs/{{ $('One write-off at a time').first().json.write_off_id }}/lookup/apply"
       },
       "position": [
-        3600,
+        5280,
         1600
       ],
       "retryOnFail": true,
@@ -2435,7 +2788,7 @@
         }
       },
       "position": [
-        3840,
+        5520,
         1600
       ],
       "type": "n8n-nodes-base.switch",
@@ -2497,7 +2850,7 @@
         "url": "={{ $('Run matching (core)').first().json.body.qbo_base }}/billpayment"
       },
       "position": [
-        4080,
+        5760,
         1600
       ],
       "retryOnFail": true,
@@ -2533,7 +2886,7 @@
         "options": {}
       },
       "position": [
-        4320,
+        6000,
         1600
       ],
       "type": "n8n-nodes-base.if",
@@ -2558,7 +2911,7 @@
         "options": {}
       },
       "position": [
-        4560,
+        6240,
         1600
       ],
       "type": "n8n-nodes-base.set",
@@ -2592,7 +2945,7 @@
         "url": "=http://core:8000/write-offs/{{ $('One write-off at a time').first().json.write_off_id }}/applied"
       },
       "position": [
-        4800,
+        6480,
         1600
       ],
       "retryOnFail": true,
@@ -2628,7 +2981,7 @@
         "options": {}
       },
       "position": [
-        5040,
+        6720,
         1600
       ],
       "type": "n8n-nodes-base.if",
@@ -2643,7 +2996,7 @@
         "mode": "runOnceForAllItems"
       },
       "position": [
-        4080,
+        5760,
         2000
       ],
       "type": "n8n-nodes-base.code",
@@ -2677,7 +3030,7 @@
         "url": "=http://core:8000/write-offs/{{ $json.write_off_id }}/failed"
       },
       "position": [
-        4320,
+        6000,
         2000
       ],
       "retryOnFail": true,

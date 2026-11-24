@@ -8,12 +8,16 @@ What the workflow does (every hour, or by hand):
   1. Bank sync: Plaid /transactions/sync from the saved cursor, page by page; the core stores each
      page (idempotent) and saves the cursor only after the last page. If a page fails, the run
      stops and the next run restarts from the saved cursor (as Plaid requires).
-  2. Matching: the core matches outgoing bank transactions with open bills (amount tolerance,
-     date window, supplier name or invoice number; accepted only when unique on both sides).
-  3. Payments: for each accepted match, a QuickBooks bill payment, searched by its number first
+  2. Exchange rates: for bills in another currency than the bank account, the core names the rate
+     series it needs; Frankfurter returns the ECB reference rates, and the core stores them (a
+     currency the ECB doesn't quote is remembered; a failed call is simply retried next run).
+  3. Matching: the core matches outgoing bank transactions with open bills (amount tolerance,
+     date window, supplier name or invoice number; accepted only when unique on both sides). A bill
+     in another currency is compared at the ECB rate of the transaction date.
+  4. Payments: for each accepted match, a QuickBooks bill payment, searched by its number first
      (the core decides: reuse / create / review), then created with a fixed request ID, and
      reported to the core. Failures go to the core, which decides: retry next run, or stop.
-  4. Write-offs: for each payment difference a reviewer chose to write off, a vendor credit on the
+  5. Write-offs: for each payment difference a reviewer chose to write off, a vendor credit on the
      payment-differences account, then a bill payment of 0 that applies it to the bill (no money
      moves). Both are searched by their number first, so a rerun never records one twice.
 
@@ -49,6 +53,8 @@ from nodes import (
 
 ITEM_KEY = "plaid-sandbox"  # the bank connection's key in the core (scripts/plaid_sandbox.py)
 PLAID_API = "https://sandbox.plaid.com"
+FRANKFURTER_API = "https://api.frankfurter.dev/v2"  # no API key; ECB reference rates via /providers/ecb
+NEEDS = "$('Rates needed (core)').first().json.body"
 MATCHING = "$('Run matching (core)').first().json.body"
 LOOP = "$('One payment at a time').first().json"  # the payment being worked on (batch size 1)
 MATCH_URL = "=" + CORE + "/matches/{{ " + LOOP + ".match_id }}"
@@ -137,6 +143,52 @@ def _sync_nodes() -> list[Node]:
     ]
 
 
+def _rate_nodes() -> list[Node]:
+    # Each answer is paired with its series by position (the HTTP node keeps the item order)
+    answers = (
+        "JSON.stringify({ answers: $('Split series').all().map((s, i) => ({ base: s.json.base, "
+        "quote: s.json.quote, status_code: $input.all()[i]?.json.statusCode ?? 0, "
+        "body: $input.all()[i]?.json.body ?? null })) })"
+    )
+    store = core_call("Store rates (core)", AUTO, "POST", f"{CORE}/fx/rates", body=answers)
+    return [
+        core_call("Rates needed (core)", AUTO, "GET", f"{CORE}/fx/needs/{ITEM_KEY}"),
+        if_node("Needs OK?", AUTO, "$json.statusCode === 200"),
+        if_node("Any rates needed?", AUTO, "$json.body.series.length > 0"),
+        {
+            "name": "Split series",
+            "type": "n8n-nodes-base.splitOut",
+            "typeVersion": 1,
+            "position": AUTO,
+            "parameters": {"fieldToSplitOut": "body.series", "options": {}},
+        },
+        {
+            "name": "Rates (Frankfurter)",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": AUTO,
+            "onError": "continueRegularOutput",
+            **NETWORK_RETRY,
+            "parameters": {
+                "method": "GET",
+                "url": "=" + FRANKFURTER_API + "/providers/{{ " + NEEDS + ".provider }}/rates",
+                "sendQuery": True,
+                "queryParameters": {
+                    "parameters": [
+                        {"name": "base", "value": "={{ $json.base }}"},
+                        {"name": "quotes", "value": "={{ $json.quote }}"},
+                        {"name": "from", "value": "={{ $json.from }}"},
+                        {"name": "to", "value": "={{ $json.to }}"},
+                    ]
+                },
+                "options": FULL_RESPONSE,
+            },
+        },
+        {**store, "executeOnce": True},  # one call with every answer
+        if_node("Rates stored?", AUTO, "$json.statusCode === 200"),
+    ]
+
+
 def _matching_nodes() -> list[Node]:
     return [
         core_call("Run matching (core)", AUTO, "POST", f"{CORE}/matching/run/{ITEM_KEY}"),
@@ -149,7 +201,8 @@ def _matching_nodes() -> list[Node]:
                 "accepted": "String($json.body.accepted)",
                 "ambiguous": "String($json.body.ambiguous)",
                 "unmatched": "String($json.body.unmatched)",
-                "fx_match_pending": "String($json.body.fx_match_pending)",
+                "foreign_currency_bills": "String($json.body.foreign_currency_bills)",
+                "fx_review": "String($json.body.fx_review)",
                 "payments_due": "String($json.body.payments_due.length)",
             },
         ),
@@ -318,7 +371,14 @@ CONNECTIONS: Connections = {
     "Page OK?": [[("Store page (core)", 0)], SYNC_FAILED],
     "Store page (core)": [[("Stored?", 0)]],
     "Stored?": [[("More pages?", 0)], SYNC_FAILED],
-    "More pages?": [[("Next cursor", 0)], [("Run matching (core)", 0)]],
+    "More pages?": [[("Next cursor", 0)], [("Rates needed (core)", 0)]],
+    "Rates needed (core)": [[("Needs OK?", 0)]],
+    "Needs OK?": [[("Any rates needed?", 0)], SYNC_FAILED],
+    "Any rates needed?": [[("Split series", 0)], [("Run matching (core)", 0)]],
+    "Split series": [[("Rates (Frankfurter)", 0)]],
+    "Rates (Frankfurter)": [[("Store rates (core)", 0)]],
+    "Store rates (core)": [[("Rates stored?", 0)]],
+    "Rates stored?": [[("Run matching (core)", 0)], SYNC_FAILED],
     "Next cursor": [[("Sync page (Plaid)", 0)]],
     "Run matching (core)": [[("Matching OK?", 0)]],
     "Matching OK?": [[("Matching summary", 0), ("Split payments", 0), ("Split write-offs", 0)], SYNC_FAILED],
@@ -403,9 +463,31 @@ SECTIONS = [
         kind="failure",
     ),
     Section(
-        "Matching (core)",
-        "The core matches bank payments with open bills and returns the payments to record.",
+        "Exchange rates (Frankfurter, ECB)",
+        "Only for bills in another currency than the bank account. The core names the rate series it needs; "
+        "Frankfurter returns the **ECB reference rates** for those dates, and the core stores them. A currency "
+        "the ECB doesn't quote is remembered (those bills go to review); a failed call stores nothing and is "
+        "retried on the next run.",
         col=9,
+        row=2,
+        grid=(
+            (
+                "Rates needed (core)",
+                "Needs OK?",
+                "Any rates needed?",
+                "Split series",
+                "Rates (Frankfurter)",
+                "Store rates (core)",
+                "Rates stored?",
+            ),
+        ),
+    ),
+    Section(
+        "Matching (core)",
+        "The core matches bank payments with open bills and returns the payments to record. A bill in another "
+        "currency is compared at the ECB rate of the payment date (3 % tolerance) and paid in full at the bank's "
+        "rate: QuickBooks posts the exchange gain or loss.",
+        col=16,
         row=2,
         grid=(("Run matching (core)", "Matching OK?", "Split payments"), (None, None, "Matching summary")),
     ),
@@ -413,7 +495,7 @@ SECTIONS = [
         "Bill payments in QuickBooks",
         "One at a time: searched by number first (the core decides: reuse, create or review), created with a "
         "fixed request ID, then recorded in the core.",
-        col=12,
+        col=19,
         row=2,
         grid=(
             (
@@ -432,7 +514,7 @@ SECTIONS = [
     Section(
         "Payment failures",
         "Facts about the failed step go to the core, which decides: retry on a later run, stop, or review.",
-        col=17,
+        col=24,
         row=4,
         grid=(("Collect failure facts", "Report failure (core)"),),
         kind="failure",
@@ -442,7 +524,7 @@ SECTIONS = [
         'Decided by a reviewer on an under-paid bill. A **vendor credit** for the open part ("Payment differences" '
         "account), then a **bill payment of 0** that applies it to the bill: the bill is closed, no money moves. "
         "Each is searched by its number (AP-WO-…) first, so a rerun never records it twice.",
-        col=12,
+        col=19,
         row=7,
         grid=(
             (
@@ -475,7 +557,7 @@ SECTIONS = [
         "Write-off failures",
         "The core decides: retry on a later run, or stop and show the error on the review item (which then "
         "offers a retry).",
-        col=17,
+        col=24,
         row=10,
         grid=(("Write-off failure facts", "Report write-off failure (core)"),),
         kind="failure",
@@ -485,7 +567,8 @@ SECTIONS = [
 
 def build(cred_ids: dict[str, str] | None) -> dict[str, Any]:
     nodes = lay_out(
-        _trigger_nodes() + _sync_nodes() + _matching_nodes() + _payment_nodes() + _write_off_nodes(), SECTIONS
+        _trigger_nodes() + _sync_nodes() + _rate_nodes() + _matching_nodes() + _payment_nodes() + _write_off_nodes(),
+        SECTIONS,
     )
     return workflow("AP – Bank sync & match", nodes, CONNECTIONS, cred_ids)
 
