@@ -9,9 +9,9 @@ Two layers on purpose:
 
 from datetime import date
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, SecretStr
 
 TaxType = Literal["vat", "gst", "sales_tax", "withholding", "other", "none"]
 DocumentType = Literal["invoice", "credit_note"]
@@ -64,6 +64,16 @@ class ExtractedAdjustment(_Strict):
     )
 
 
+class ExtractedBankAccount(_Strict):
+    iban: str | None = Field(description="IBAN exactly as printed")
+    bic: str | None = Field(description="BIC / SWIFT code exactly as printed")
+    account_number: str | None = Field(description="Bank account number exactly as printed (other than the IBAN)")
+    routing_code: str | None = Field(
+        description="Bank or branch code exactly as printed: routing / ABA number, sort code, BSB, IFSC, bank code"
+    )
+    account_holder: str | None = Field(description="Account holder / beneficiary name exactly as printed")
+
+
 class ExtractionResult(_Strict):
     document_kind: Literal["invoice", "credit_note", "not_invoice"] = Field(
         description="invoice for a bill to pay; credit_note for a credit note / avoir / Gutschrift / refund note; "
@@ -108,6 +118,16 @@ class ExtractionResult(_Strict):
     tax_total: str | None = Field(description="Total tax amount, exactly as printed")
     total: str | None = Field(description="Grand total / amount due, exactly as printed")
     language: str | None = Field(description="Main language of the document as a BCP 47 code, e.g. en, fr, ja, de")
+    bank_accounts: list[ExtractedBankAccount] = Field(
+        default=[],
+        description="Bank account(s) the document asks to be paid to (payment details, remittance information). "
+        "Empty if none is printed",
+    )
+    bank_details_change_notice: bool = Field(
+        default=False,
+        description="true if the document announces new or changed bank or payment details, or asks to pay a "
+        "different account than before; otherwise false",
+    )
 
 
 ANNOTATION_PROMPT = (
@@ -150,6 +170,39 @@ class Issue(BaseModel):
     code: str  # e.g. ambiguous_date, unparseable_amount, ambiguous_currency
     field: str | None = None
     message: str
+
+
+def mask_number(value: str) -> str:
+    """A bank number as it may be shown or stored: its last 4 characters only, and only when at least
+    4 more stay hidden (a 6-digit sort code shows nothing)."""
+    return f"•••• {value[-4:]}" if len(value) >= 8 else "••••"
+
+
+def _masked(secret: SecretStr) -> str:
+    return mask_number(secret.get_secret_value())
+
+
+# A bank number: hidden in str/repr, masked when serialized (JSON, model_dump, API answers, logs)
+BankNumber = Annotated[SecretStr, PlainSerializer(_masked, return_type=str)]
+
+
+class BankAccount(BaseModel):
+    """Bank details read from the document: never trusted. Numbers are normalized (uppercase letters and
+    digits only) and kept secret: only the fingerprint (bank_details.py) reads the full value."""
+
+    iban: BankNumber | None = None
+    bic: BankNumber | None = None
+    account_number: BankNumber | None = None
+    routing_code: BankNumber | None = None
+    account_holder: str | None = None
+
+    def label(self) -> str:
+        """How a person recognises the account: 'IBAN •••• 0017', 'account •••• 0017'."""
+        if self.iban:
+            return f"IBAN {_masked(self.iban)}"
+        if self.account_number:
+            return f"account {_masked(self.account_number)}"
+        return "bank details without an account number"
 
 
 class Party(BaseModel):
@@ -231,6 +284,8 @@ class CommonInvoice(BaseModel):
     tax_total: Decimal | None = None
     total: Decimal | None = None
     language: str | None = None  # BCP 47
+    bank_accounts: list[BankAccount] = []  # as printed on the document: never trusted
+    bank_change_notice: bool = False  # the provider read an announcement of new bank details
     ocr_text: str
     normalized: Normalized
     extraction: ExtractionMeta

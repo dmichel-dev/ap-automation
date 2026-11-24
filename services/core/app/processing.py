@@ -18,7 +18,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from . import db, files
+from . import bank_details, db, files
 from .extraction import build_common_invoice
 from .models import CommonInvoice, Issue
 from .providers.base import ExtractionProvider, ProviderError
@@ -43,6 +43,7 @@ class ProcessRequest:
     source_ref: str
     received_at: datetime | None = None
     execution_id: str | None = None
+    email_text: str | None = None  # subject + body: checked for bank-change wording, never stored
 
 
 class ProcessOutcome(BaseModel):
@@ -64,6 +65,7 @@ class Config:
     storage_dir: Path
     retention_days: int
     confidence_threshold: float
+    bank_fingerprint_key: bytes  # keys the bank-account fingerprints (BANK_FINGERPRINT_KEY)
     policy: Policy = field(default_factory=Policy)
 
 
@@ -143,12 +145,14 @@ def process(req: ProcessRequest, provider: ExtractionProvider, cfg: Config) -> P
 
         duplicates = db.find_possible_duplicates(conn, inv)
         supplier = db.supplier_status(conn, inv)
+        bank = bank_details.assess(inv, req.email_text, db.bank_baseline(conn, inv), cfg.bank_fingerprint_key)
         v = validate(
             inv,
             confidence_threshold=cfg.confidence_threshold,
             duplicates=duplicates,
             policy=cfg.policy,
             supplier=supplier,
+            bank=bank,
         )
         v.checks["info"] = [i.model_dump() for i in v.info]
         invoice_id = str(uuid.uuid4())
@@ -172,11 +176,12 @@ def process(req: ProcessRequest, provider: ExtractionProvider, cfg: Config) -> P
                 file_delete_after=received_at + timedelta(days=cfg.retention_days) if file_path else None,
                 inv=inv,
                 validation=v,
-                raw_extraction=result.raw,
+                raw_extraction=bank_details.mask_annotation(result.raw),
                 execution_id=req.execution_id,
                 confidence_threshold=cfg.confidence_threshold,
                 duplicate_of=duplicates[0].invoice_id if duplicates else None,
                 expense_account_id=supplier.default_account_id if v.status == "ready" else None,
+                bank_accounts=bank.accounts,
             )
             review_id = db.open_review(conn, invoice_id, v.reasons) if v.status == "needs_review" else None
             db.log(
@@ -191,6 +196,12 @@ def process(req: ProcessRequest, provider: ExtractionProvider, cfg: Config) -> P
                     "provider": provider.name,
                     "model": result.model,
                     "pages": result.pages,
+                    "bank": {  # counts and sources only, never a number
+                        "accounts": len(bank.accounts),
+                        "notice": bank.notice_sources,
+                        "new": len(bank.new_accounts),
+                        "first_seen": bank.first_seen,
+                    },
                 },
                 **_ctx(req),
             )

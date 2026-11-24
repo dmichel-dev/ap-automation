@@ -318,6 +318,11 @@ def normalize_invoice_number(raw: str | None) -> str | None:
     return _alnum_key(raw)
 
 
+def normalize_bank_number(raw: str | None) -> str | None:
+    """IBAN, BIC, account number, routing code: 'gb00 fake-0000' and 'GB00FAKE0000' are the same."""
+    return _alnum_key(raw)
+
+
 def _label_pattern() -> re.Pattern[str]:
     def alt(words: tuple[str, ...]) -> str:
         # Longest first, so "vat number" wins over "vat"; a Latin ending needs a separator after it

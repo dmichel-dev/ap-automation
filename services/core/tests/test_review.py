@@ -392,3 +392,48 @@ def test_a_possible_fixed_asset_is_never_approved_on_the_default_account(env, cf
     r = act(body["review_id"], "approve", reviewer=AUTOMATION, account_id="40", set_default=False)
     assert r.status_code == 200 and r.json()["decision"]["account_id"] == "40"
     assert r.json()["decision"]["account_source"] == "reviewer"
+
+
+# --- bank-detail change items -------------------------------------------------------------
+NEW_IBAN = {"iban": "GB00 FAKE 9999 9999 9999 17", "bic": None, "account_number": None, "routing_code": None,
+            "account_holder": "Quillmoor Paper Supply LLC"}  # fmt: skip
+
+
+def test_bank_details_are_shown_masked_without_the_fingerprint(env, cfg):  # noqa: F811
+    state, _ = env
+    state["provider"] = FakeProvider(bank_accounts=[NEW_IBAN], bank_details_change_notice=True)
+    detail = item(post().json()["review_id"])
+    assert detail["actions"] == ["verify", "reject"]
+    assert detail["invoice"]["bank_accounts"] == [
+        {"iban": "•••• 9917", "bic": None, "account_number": None, "routing_code": None,
+         "account_holder": "Quillmoor Paper Supply LLC", "label": "IBAN •••• 9917"}
+    ]  # fmt: skip
+
+
+def test_verified_change_is_posted_but_the_bank_details_are_not_saved(env, cfg):  # noqa: F811
+    state, _ = env
+    state["provider"] = FakeProvider(bank_accounts=[NEW_IBAN], bank_details_change_notice=True)
+    review_id = post().json()["review_id"]
+    r = act(review_id, "verify", reviewer=AUTOMATION, note="Called the number on file, change confirmed")
+    assert r.status_code == 200 and r.json()["status"] == "verified"
+    assert q(cfg, "SELECT status FROM ap.invoices")[0]["status"] == "ready"
+    assert r.json()["decision"]["bank_details_saved"] is False
+
+
+def test_verifying_a_bank_change_letter_closes_it_with_nothing_posted(env, cfg):  # noqa: F811
+    state, _ = env
+    state["provider"] = FakeProvider(
+        bank_accounts=[NEW_IBAN],
+        bank_details_change_notice=True,
+        document_kind="not_invoice",
+        invoice_number=None,
+        total=None,
+    )
+    review_id = post().json()["review_id"]
+    assert item(review_id)["actions"] == ["verify", "reject"]
+    r = act(review_id, "verify", reviewer=AUTOMATION, note="Called the number on file: the letter is genuine")
+    assert r.status_code == 200 and r.json()["status"] == "verified"
+    assert r.json()["decision"] == {"action": "verify", "posted": False, "bank_details_saved": False}
+    inv = q(cfg, "SELECT status, file_path FROM ap.invoices")[0]
+    assert inv["status"] == "rejected" and inv["file_path"]  # nothing to post; the letter is kept as evidence
+    assert q(cfg, "SELECT count(*) AS n FROM ap.accounting_postings")[0]["n"] == 0

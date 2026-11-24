@@ -11,6 +11,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from .bank_details import KnownAccount
 from .models import CommonInvoice, Issue
 from .validation import DUPLICATE_DATE_WINDOW_DAYS, Duplicate, SupplierStatus, Validation
 
@@ -121,6 +122,24 @@ def supplier_status(conn: Conn, inv: CommonInvoice) -> SupplierStatus:
     return SupplierStatus(True, "accounting_vendor_name") if name and same_name == 1 else SupplierStatus(False)
 
 
+def bank_baseline(conn: Conn, inv: CommonInvoice) -> list[KnownAccount]:
+    """The accounts on this supplier's earlier invoices, for the bank-details comparison. Not counted:
+    rejected invoices, and invoices that were flagged as a possible change themselves (even if a
+    reviewer later verified them: verified details are not a trusted record)."""
+    key = supplier_key(inv)
+    if not key:
+        return []
+    rows = conn.execute(
+        """SELECT a->>'fingerprint' AS fingerprint, min(a->>'label') AS label
+             FROM invoices i, jsonb_array_elements(i.bank_accounts) a
+            WHERE i.supplier_key = %s AND i.status <> 'rejected' AND a->>'fingerprint' IS NOT NULL
+              AND NOT i.status_reasons @> '[{"code": "possible_bank_detail_change"}]'
+            GROUP BY 1 ORDER BY min(i.created_at)""",
+        (key,),
+    ).fetchall()
+    return [KnownAccount(r["fingerprint"], r["label"]) for r in rows]
+
+
 def _reasons(items: list[Issue]) -> Jsonb:
     return Jsonb([i.model_dump() for i in items])
 
@@ -145,8 +164,10 @@ def insert_invoice(
     confidence_threshold: float,
     duplicate_of: str | None = None,
     expense_account_id: str | None = None,
+    bank_accounts: list[dict[str, Any]] | None = None,
 ) -> None:
-    """expense_account_id: the supplier's default account, recorded on a ready invoice (audit trail)."""
+    """expense_account_id: the supplier's default account, recorded on a ready invoice (audit trail).
+    bank_accounts: the stored form (masked numbers and fingerprints, bank_details.stored_form)."""
     v = validation
     row: dict[str, Any] = {
         "id": invoice_id,
@@ -172,6 +193,7 @@ def insert_invoice(
         "extraction": Jsonb(raw_extraction) if raw_extraction is not None else None,
         "expense_account_id": expense_account_id,
         "expense_account_source": "supplier_default" if expense_account_id else None,
+        "bank_accounts": Jsonb(bank_accounts or []),
     }
     if inv is not None:
         d = inv.dates

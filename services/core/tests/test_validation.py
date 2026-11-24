@@ -5,7 +5,7 @@ from app.extraction import build_common_invoice
 from app.providers.base import ProviderResult
 from app.validation import Duplicate, Policy, validate
 
-from .conftest import OCR_TEXT, base_annotation
+from .conftest import BANK_KEY, OCR_TEXT, base_annotation
 
 
 def check(ocr_avg=0.98, ocr_text=OCR_TEXT, duplicates=None, threshold=0.85, policy=None, **overrides):
@@ -440,3 +440,96 @@ def test_capex_not_checked_on_a_foreign_currency_invoice_yet():
         policy=Policy(capex_threshold=Decimal("1")),
     )
     assert "possible_capex" not in codes(v) and v.checks["capex"]["checked"] is False
+
+
+# --- bank details: a possible change is never posted automatically ---------------------------
+def check_bank(accounts=(), notice=False, email=None, known=(), ocr_text=OCR_TEXT, **overrides):
+    from app.bank_details import KnownAccount, assess, fingerprint
+    from app.models import BankAccount
+
+    key = BANK_KEY
+    annotation = base_annotation(bank_accounts=list(accounts), bank_details_change_notice=notice, **overrides)
+    result = ProviderResult(annotation=annotation, ocr_text=ocr_text, pages=1, ocr_confidence_avg=0.98)
+    inv = build_common_invoice(result, "test")
+    earlier = [BankAccount(iban=i) for i in known]
+    bank = assess(inv, email, [KnownAccount(fingerprint(a, key) or "", a.label()) for a in earlier], key)
+    return validate(inv, confidence_threshold=0.85, bank=bank)
+
+
+def iban(value):
+    return {"iban": value, "bic": None, "account_number": None, "routing_code": None, "account_holder": None}
+
+
+OLD, NEW = "GB00FAKE00000000000021", "GB00FAKE99999999999917"
+
+
+def test_same_bank_details_as_before_stay_ready():
+    v = check_bank([iban(OLD)], known=[OLD])
+    assert v.status == "ready" and v.checks["bank_details"]["passed"] and v.info == []
+
+
+def test_no_bank_details_stay_ready():
+    v = check_bank(known=[OLD])
+    assert v.status == "ready" and v.checks["bank_details"] == {
+        "passed": True,
+        "accounts": 0,
+        "notice": [],
+        "new": [],
+        "known": ["IBAN •••• 0021"],
+        "first_seen": False,
+    }
+
+
+def test_changed_bank_details_go_to_review_with_a_masked_reason():
+    v = check_bank([iban(NEW)], known=[OLD])
+    assert v.status == "needs_review" and codes(v) == ["possible_bank_detail_change"]
+    message = v.reasons[0].message
+    assert "IBAN •••• 9917" in message and "IBAN •••• 0021" in message and "99999999" not in message
+    assert v.reasons[0].field == "bank_accounts"
+
+
+def test_a_change_announced_by_the_document_goes_to_review():
+    v = check_bank(notice=True)
+    assert v.status == "needs_review" and codes(v) == ["possible_bank_detail_change"]
+    assert "document" in v.reasons[0].message and v.checks["bank_details"]["notice"] == ["document"]
+
+
+def test_a_change_announced_only_in_the_email_goes_to_review():
+    v = check_bank(email="Hola, les enviamos nuestros nuevos datos bancarios.")
+    assert v.status == "needs_review" and codes(v) == ["possible_bank_detail_change"]
+    assert "email" in v.reasons[0].message
+
+
+def test_announced_and_changed_make_one_reason():
+    v = check_bank([iban(NEW)], notice=True, known=[OLD])
+    assert codes(v) == ["possible_bank_detail_change"]
+
+
+def test_first_bank_details_of_a_known_supplier_are_information_only():
+    v = check_bank([iban(NEW)])
+    assert v.status == "ready" and codes(v) == []
+    assert [i.code for i in v.info] == ["bank_details_first_seen"] and "IBAN •••• 9917" in v.info[0].message
+    assert v.checks["bank_details"]["first_seen"] is True
+
+
+def test_a_bank_change_letter_is_a_fraud_alert_not_a_rejection():
+    """Letter F: not an invoice, but it asks to pay a new account (and tries a prompt injection)."""
+    v = check_bank([iban(NEW)], notice=True, document_kind="not_invoice", invoice_number=None, total=None)
+    assert v.status == "needs_review" and codes(v) == ["possible_bank_detail_change"]
+    assert [i.code for i in v.info] == ["not_invoice", "bank_details_first_seen"]
+
+
+def test_an_unreadable_file_sent_with_a_bank_change_email_is_reviewed():
+    v = check_bank(ocr_text="  ..  ", email="Please update our bank details, see attached.")
+    assert v.status == "needs_review" and codes(v) == ["possible_bank_detail_change"]
+    assert [i.code for i in v.info] == ["unreadable"]
+
+
+def test_a_plain_letter_without_bank_wording_is_still_rejected():
+    v = check_bank(document_kind="not_invoice", invoice_number=None, total=None)
+    assert v.status == "rejected" and codes(v) == ["not_invoice"]
+
+
+def test_bank_details_are_not_checked_without_a_database():
+    v = check()
+    assert "bank_details" not in v.checks

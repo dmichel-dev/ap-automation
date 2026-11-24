@@ -259,6 +259,23 @@ def test_a_fraud_item_has_no_action_chosen_for_the_reviewer(samples):
     assert panel.index('class="note fraud"') < panel.index("<fieldset>")
 
 
+def test_a_bank_change_item_shows_the_details_masked_with_a_plain_reason(samples):
+    c, _url, ids = samples
+    page = page_of(c, ids["tarnbrook"])
+    block = page[page.index('id="bank-details-title"') :]
+    block = block[: block.index("</section>")]
+    assert "•••• 0017" in block and "Tarnbrook Courier Services LLC" in block
+    assert "never trusted" in block
+    assert "0000FAKE0017" not in page and "0000-FAKE-0017" not in page and "000000000" not in block
+    assert escape("The document announces new or changed bank details.") in page
+    assert "the bank details are not saved" in page
+
+
+def test_an_item_without_bank_details_has_no_bank_block(samples):
+    c, _url, ids = samples
+    assert 'id="bank-details-title"' not in page_of(c, ids["pellingham"])
+
+
 def test_a_fraud_item_posted_without_an_action_is_refused_with_a_clear_error(samples):
     c, url, ids = samples  # what a browser without scripts sends: the button isn't disabled there
     data = {"csrf": csrf(c), "verify.account_id": "20", "verify.note": "phoned them", "reject.note": ""}

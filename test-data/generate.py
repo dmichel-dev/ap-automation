@@ -14,9 +14,11 @@ import io
 import json
 import random
 import zipfile
+from collections.abc import Callable
 from decimal import ROUND_DOWN, ROUND_HALF_UP
 from decimal import Decimal as D
 from pathlib import Path
+from typing import NamedTuple
 
 from fpdf import FPDF
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -668,9 +670,9 @@ def doc_f() -> None:
             "body": "Hello,\n\nplease see the attached letter about our new bank details.\n\nRegards,\n"
             "Thistlecombe Office Supplies (fictional test supplier)",
         },
-        {"status": "rejected", "reasons": ["not_invoice"]},
-        "Classic AP fraud pattern plus a prompt-injection line. It should raise a fraud alert "
-        "(possible_bank_detail_change) instead of a plain rejection.",
+        {"status": "needs_review", "reasons": ["possible_bank_detail_change"]},
+        "Classic AP fraud pattern plus a prompt-injection line: a fraud alert for a person "
+        "(possible_bank_detail_change), not a plain rejection, and never posted.",
     )
 
 
@@ -828,6 +830,89 @@ def review_samples() -> None:
     (FIXTURES / "tarnbrook_new_bank_account.pdf").write_bytes(pdf)
 
 
+class BankChange(NamedTuple):
+    header: tuple[str, str, str]  # name, address, tax ID
+    title: str
+    dates: str
+    columns: list[str]
+    line: str
+    vat: tuple[str, D]  # label, rate
+    totals: tuple[str, str]  # net, gross labels
+    fmt: Callable[[D], str]
+    notice: str
+
+
+BANK_CHANGE = {
+    "fr": BankChange(
+        ("Ateliers Verlibreux SARL", "12 rue des Imaginaires, 69002 Lyon, France",
+         "TVA intracommunautaire : FR00 999 999 999"),
+        "FACTURE N° AV-2026-0162",
+        "Date de facture : 24/11/2026          Date d'échéance : 24/12/2026",
+        ["Désignation", "Qté", "Prix unitaire HT", "Montant HT"],
+        "Reliure artisanale (lot de 10)",
+        ("TVA 20 %", D("20")),
+        ("Total HT", "Total TTC"),
+        fmt_fr,
+        "IMPORTANT : nos coordonnées bancaires ont changé. Merci de régler cette facture et les suivantes "
+        "sur notre nouveau compte :\n    Titulaire : Ateliers Verlibreux SARL\n"
+        "    IBAN : FR00 FAKE 0000 0000 0000 0000 162    BIC : FAKEFRPP",
+    ),
+    "de": BankChange(
+        ("Kranich & Söhne Feinmechanik GmbH", "Erfundene Straße 12, 70173 Stuttgart, Deutschland",
+         "USt-IdNr.: DE000000000"),
+        "RECHNUNG Nr. RE-2026-0377",
+        "Rechnungsdatum: 24.11.2026          Fällig am: 24.12.2026",
+        ["Bezeichnung", "Menge", "Einzelpreis netto", "Betrag netto"],
+        "Präzisionswelle Typ K-7",
+        ("MwSt. 19 %", D("19")),
+        ("Summe netto", "Gesamtbetrag"),
+        fmt_de,
+        "Bitte beachten Sie unsere neue Bankverbindung ab sofort für alle Zahlungen:\n"
+        "    Kontoinhaber: Kranich & Söhne Feinmechanik GmbH\n"
+        "    IBAN: DE00 FAKE 0000 0000 0003 77    BIC: FAKEDEFF",
+    ),
+    "es": BankChange(
+        ("Estudio Nubeazul S.L.", "Calle Inventada 7, 28001 Madrid, España", "NIF: B00000000"),
+        "FACTURA Nº 2026/061",
+        "Fecha: 24/11/2026          Vencimiento: 24/12/2026",
+        ["Concepto", "Cant.", "Precio unitario", "Importe"],
+        "Diseño de identidad visual",
+        ("IVA 21 %", D("21")),
+        ("Base imponible", "Total factura"),
+        fmt_de,  # 1.234,56 as in Spain
+        "Les informamos de nuestros nuevos datos bancarios. Por favor, abonen esta factura en la nueva "
+        "cuenta:\n    Titular: Estudio Nubeazul S.L.\n    IBAN: ES00 FAKE 0000 0000 0000 0061    BIC: FAKEESMM",
+    ),
+}  # fmt: skip
+
+
+def bank_change_samples() -> None:
+    """Invoices that announce new bank details, in French, German and Spanish (live extraction check of
+    the bank fields and the change notice; English: letter F and the Tarnbrook invoice). Invalid IBANs."""
+    for lang, t in BANK_CHANGE.items():
+        (vat_label, rate), fmt = t.vat, t.fmt
+        net = D("500.00")
+        vat = q(net * rate / 100)
+        pdf = Doc()
+        pdf.text_line(t.header[0], 16, bold=True, h=8)
+        for line in t.header[1:]:
+            pdf.text_line(line)
+        pdf.ln(6)
+        pdf.text_line(t.title, 14, bold=True, h=8)
+        pdf.text_line(t.dates)
+        pdf.text_line(f"{BUYER[0]}, {BUYER[1]}")
+        pdf.ln(5)
+        pdf.table(t.columns, [[t.line, "1", f"{fmt(net)} €", f"{fmt(net)} €"]], [94, 20, 30, 30], "LRRR")
+        pdf.totals(
+            [(t.totals[0], f"{fmt(net)} €", False), (vat_label, f"{fmt(vat)} €", False),
+             (t.totals[1], f"{fmt(net + vat)} €", True)]
+        )  # fmt: skip
+        pdf.ln(8)
+        pdf.set_font("main", "", 10)
+        pdf.multi_cell(0, 6, t.notice + "\n(Fictional document for a demo.)")
+        (FIXTURES / f"bank_change_{lang}.pdf").write_bytes(bytes(pdf.output()))
+
+
 if __name__ == "__main__":
     OUT.mkdir(exist_ok=True)
     for old in OUT.glob("*"):
@@ -847,5 +932,6 @@ if __name__ == "__main__":
     doc_n_o()
     if FIXTURES.is_dir():
         review_samples()
+        bank_change_samples()
     for p in sorted(OUT.iterdir()):
         print(f"{p.stat().st_size:>8}  {p.name}")

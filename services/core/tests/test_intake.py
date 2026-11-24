@@ -64,3 +64,45 @@ def test_screen_endpoint_uses_the_configured_alias(monkeypatch):
     get_settings.cache_clear()
     assert r.status_code == 200 and r.json()["route"] == "process"
     assert TestClient(app).post("/intake/email/screen", json=body).status_code == 401
+
+
+# --- bank-detail change requests without an invoice attached -------------------------------
+def test_bank_change_email_without_attachment_is_a_fraud_alert():
+    s = screen_email([ALIAS], "", [], ALIAS, text="URGENT: new bank details\n\nPlease update our bank details.")
+    assert (s.route, s.reason) == ("bank_detail_notice", "possible_bank_detail_change")
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["Bitte beachten Sie unsere neue Bankverbindung.", "Veuillez noter nos nouvelles coordonnées bancaires."],
+)
+def test_bank_change_email_in_other_languages(text):
+    assert screen_email([ALIAS], "", [att(0, "image/png", size="3 kB")], ALIAS, text=text).route == "bank_detail_notice"
+
+
+def test_ordinary_email_without_attachment_is_still_no_valid_attachment():
+    s = screen_email([ALIAS], "", [], ALIAS, text="Hello, the invoice follows tomorrow.")
+    assert s.route == "no_valid_attachment"
+
+
+def test_bank_wording_does_not_stop_an_attachment_from_being_processed():
+    s = screen_email([ALIAS], "", [att(0, "application/pdf")], ALIAS, text="Please update our bank details.")
+    assert s.route == "process"  # the invoice itself is flagged by the processing
+
+
+def test_a_bank_change_email_not_for_the_alias_is_not_processed():
+    s = screen_email(["x@example.test"], "", [], ALIAS, text="Please update our bank details.")
+    assert s.route == "not_for_alias"
+
+
+def test_screen_endpoint_reads_subject_and_text(monkeypatch):
+    monkeypatch.setenv("INTAKE_EMAIL_ALIAS", ALIAS)
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    body = {"recipients": [ALIAS], "attachments": [], "text": "URGENT\n\nPlease update our bank details."}
+    r = TestClient(app).post("/intake/email/screen", headers=AUTH, json=body)
+    get_settings.cache_clear()
+    assert r.status_code == 200 and r.json()["route"] == "bank_detail_notice"
+    too_long = TestClient(app).post("/intake/email/screen", headers=AUTH, json=body | {"text": "x" * 20001})
+    assert too_long.status_code == 422

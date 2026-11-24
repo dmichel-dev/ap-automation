@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
+from .bank_details import BankCheck
 from .models import CommonInvoice, Issue
 from .reference import minor_units
 
@@ -205,8 +206,9 @@ def validate(
     duplicates: list[Duplicate] | None = None,
     policy: Policy | None = None,
     supplier: SupplierStatus | None = None,
+    bank: BankCheck | None = None,
 ) -> Validation:
-    """supplier=None skips the supplier checks (only for callers without a database)."""
+    """supplier=None and bank=None skip the checks that need the database (callers without one)."""
     f = _Findings()
     # Confidence = OCR page-average confidence × required-field completeness (both stored)
     completeness = round(sum(_present(inv, name) for name in REQUIRED_FIELDS) / len(REQUIRED_FIELDS), 4)
@@ -218,10 +220,16 @@ def validate(
 
     # Rejections (nothing a human could do with it) and early stops
     if stop := _readability_and_kind(inv, f):
+        if stop == "rejected" and bank and bank.notice_sources:
+            # A bank-details change request is a fraud alert, never a plain rejection
+            f.info, f.reasons, stop = f.info + f.reasons, [], "needs_review"
+        if stop == "needs_review":
+            _bank_details_check(bank, f)
         return result(stop)
     for i in inv.issues:  # normalization issues (ambiguous date, unreadable amount, currency...)
         (f.info if i.code in INFO_ISSUES else f.reasons).append(i)
     if any(i.code == "extraction_invalid" for i in inv.issues):
+        _bank_details_check(bank, f)
         return result("needs_review")  # readable text: a human can key it in
 
     _required_fields_check(inv, f)
@@ -233,6 +241,7 @@ def validate(
     f.reasons += total_reasons
     _duplicates_check(duplicates or [], f)
     _supplier_check(inv, supplier, f)
+    _bank_details_check(bank, f)
     _confidence_check(confidence, ocr, completeness, confidence_threshold, f)
     return result("needs_review" if f.reasons else "ready", tax_mode)
 
@@ -383,6 +392,48 @@ def _supplier_check(inv: CommonInvoice, supplier: SupplierStatus | None, f: _Fin
         f.fail("new_vendor", "supplier_name", "first invoice from this supplier: check that it is a genuine supplier")
     if supplier.default_account_id is None:
         f.fail("expense_account_missing", "expense_account", "no default account for this supplier: choose one")
+
+
+def _bank_details_check(bank: BankCheck | None, f: _Findings) -> None:
+    """A possible change of bank details is never posted automatically: an announcement (document or
+    email) or an account not on the supplier's earlier invoices sends it to review. Messages are masked."""
+    if bank is None:
+        return
+    f.checks["bank_details"] = {
+        "passed": not bank.notice_sources and not bank.new_accounts,
+        "accounts": len(bank.accounts),
+        "notice": bank.notice_sources,
+        "new": bank.new_accounts,
+        "known": bank.known_accounts,
+        "first_seen": bank.first_seen,
+    }
+    messages = []
+    if where := _notice_places(bank.notice_sources):
+        messages.append(f"The {where} new or changed bank details.")
+    if bank.new_accounts:
+        messages.append(
+            f"{', '.join(bank.new_accounts)} is not on this supplier's earlier invoices "
+            f"({', '.join(bank.known_accounts)})."
+        )
+    if messages:
+        f.fail("possible_bank_detail_change", "bank_accounts", " ".join(messages))
+    if bank.first_seen:
+        labels = ", ".join(a["label"] for a in bank.accounts)
+        f.info.append(
+            _issue(
+                "bank_details_first_seen",
+                "bank_accounts",
+                f"First bank details seen for this supplier ({labels}): read from the document, not verified.",
+            )
+        )
+
+
+def _notice_places(sources: list[str]) -> str | None:
+    """'document announces', 'email announces', 'document and the email announce'."""
+    places = list(dict.fromkeys(s.split("_")[0].split(":")[0] for s in sources))
+    if not places:
+        return None
+    return f"{places[0]} announces" if len(places) == 1 else f"{places[0]} and the {places[1]} announce"
 
 
 def _confidence_check(

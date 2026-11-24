@@ -4,7 +4,7 @@ Defined in [`db/migrations/`](../db/migrations). Migrations run as the `ap_app` 
 
 | Table | Purpose |
 |---|---|
-| `invoices` | One row per received document (invoice or credit note): source, file, parties, amounts, extraction, status |
+| `invoices` | One row per received document (invoice or credit note): source, file, parties, amounts, extraction, status. `bank_accounts`: the accounts printed on it, **masked** (last 4 characters) with a keyed fingerprint to compare them, never the full numbers (see [security](security.md#bank-details)) |
 | `invoice_lines` | Line items |
 | `invoice_tax_lines` | Generic tax breakdown: `vat`, `gst`, `sales_tax`, `withholding`, `other`, `none` |
 | `review_queue` | Human review items (at most one open item per invoice), with the decision, the reviewer and every correction (before/after; see [review](review.md)); `stage` = `validation` (extraction/checks) `posting` (e.g. `vendor_currency_conflict`, `vendor_inactive`, `duplicate_in_accounting`) or `matching` (`ambiguous_match`: one bank transaction fits several bills, or one bill several transactions; the candidate transactions are named. `payment_difference`: the bank paid less than the bill). A decision that needs QuickBooks keeps the item open with `waiting_for` (`posting`, `payment`, `write_off`) until QuickBooks confirms it; `effect_error` holds the last QuickBooks failure |

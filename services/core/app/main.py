@@ -108,11 +108,15 @@ def health() -> JSONResponse:
 
 def get_processing_config() -> processing.Config:
     s = get_settings()
+    bank_key = s.bank_fingerprint_key.get_secret_value()
+    if not bank_key:
+        raise RuntimeError("BANK_FINGERPRINT_KEY is not set: see .env.example")
     return processing.Config(
         database_url=s.ap_database_url.get_secret_value(),
         storage_dir=Path(s.file_storage_dir),
         retention_days=s.file_retention_days,
         confidence_threshold=s.confidence_threshold,
+        bank_fingerprint_key=bank_key.encode(),
         policy=Policy(
             home_currency=s.home_currency,
             cutoff_materiality=Decimal(s.cutoff_materiality),
@@ -130,6 +134,9 @@ def process_invoice(
     cfg: Annotated[processing.Config, Depends(get_processing_config)],
     received_at: Annotated[datetime | None, Form()] = None,
     n8n_execution_id: Annotated[str | None, Form(max_length=100)] = None,
+    email_text: Annotated[
+        str | None, Form(max_length=intake.EMAIL_TEXT_MAX, description="subject + body; checked, never stored")
+    ] = None,
 ) -> processing.ProcessOutcome:
     """The shared core for every channel: extract → normalize → check → store. Idempotent per source_ref."""
     content = file.file.read(files.MAX_FILE_BYTES + 1)
@@ -140,6 +147,7 @@ def process_invoice(
         source_ref=source_ref,
         received_at=received_at,
         execution_id=n8n_execution_id,
+        email_text=email_text,
     )
     return processing.process(req, provider, cfg)
 
@@ -310,16 +318,18 @@ class EmailToScreen(BaseModel):
     recipients: list[str] = Field(default=[], max_length=500)
     delivered_to: str = Field(default="", max_length=2000)
     attachments: list[EmailAttachment] = Field(default=[], max_length=100)
+    text: str = Field(default="", max_length=intake.EMAIL_TEXT_MAX)  # subject + body: checked, never stored
 
 
 @app.post("/intake/email/screen", dependencies=Auth)
 def screen_email(body: EmailToScreen) -> JsonDict:
-    """Which attachments of an email go to processing (metadata only; nothing is stored)."""
+    """Which attachments of an email go to processing (metadata and text; nothing is stored)."""
     screening = intake.screen_email(
         body.recipients,
         body.delivered_to,
         [intake.Attachment(a.key, a.mime_type, a.file_name, a.size) for a in body.attachments],
         get_settings().intake_email_alias,
+        text=body.text,
     )
     return asdict(screening)
 

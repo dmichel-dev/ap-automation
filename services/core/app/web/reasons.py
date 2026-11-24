@@ -90,6 +90,10 @@ REASONS: dict[str, Reason] = {
         "Possible fraud: the supplier's bank details may have changed. Confirm with the supplier through a "
         "contact you already had, not one given in this document.",
     ),
+    "bank_details_first_seen": Reason(
+        "First bank details",
+        "These are the first bank details seen for this supplier, so there is nothing to compare them with.",
+    ),
     # Posting to QuickBooks
     "vendor_currency_conflict": Reason(
         "Supplier currency clash",

@@ -9,8 +9,10 @@ from pydantic import ValidationError
 
 from . import normalize as n
 from .models import (
+    BankAccount,
     CommonInvoice,
     DateInfo,
+    ExtractedBankAccount,
     ExtractionMeta,
     ExtractionResult,
     InvoiceLine,
@@ -146,6 +148,8 @@ def build_common_invoice(result: ProviderResult, provider_name: str) -> CommonIn
         tax_total=tax_total,
         total=total,
         language=n.normalize_language(data.language),
+        bank_accounts=_bank_accounts(data.bank_accounts),
+        bank_change_notice=data.bank_details_change_notice,
         ocr_text=result.ocr_text,
         normalized=Normalized(
             invoice_number=n.normalize_invoice_number(data.invoice_number),
@@ -155,6 +159,19 @@ def build_common_invoice(result: ProviderResult, provider_name: str) -> CommonIn
         extraction=meta,
         issues=issues,
     )
+
+
+def _bank_accounts(extracted: list[ExtractedBankAccount]) -> list[BankAccount]:
+    """Normalized bank numbers; an entry without any number (a name alone) is dropped."""
+    accounts = []
+    for a in extracted:
+        numbers = {
+            name: n.normalize_bank_number(getattr(a, name))
+            for name in ("iban", "bic", "account_number", "routing_code")
+        }
+        if any(numbers.values()):
+            accounts.append(BankAccount.model_validate(numbers | {"account_holder": n.clean_text(a.account_holder)}))
+    return accounts
 
 
 def _printed_totals(data: ExtractionResult) -> list[tuple[str, str | None]]:

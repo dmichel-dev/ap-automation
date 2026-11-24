@@ -15,7 +15,7 @@ All checks are deterministic Python ([`validation.py`](../services/core/app/vali
 | Check | Reason code(s) | Result |
 |---|---|---|
 | Readable text (≥ 20 characters) | `unreadable` | rejected |
-| Document type | `not_invoice` | rejected |
+| Document type | `not_invoice` | rejected (review if it asks to change bank details, see below) |
 | … but it has an invoice number and a total | `classification_conflict` | review (guards against misclassification or a document that says "this is not an invoice") |
 | Exact same file already received | `duplicate_file` | rejected (before any OCR cost) |
 | Provider output invalid, but text is readable | `extraction_invalid` | review |
@@ -28,6 +28,8 @@ All checks are deterministic Python ([`validation.py`](../services/core/app/vali
 | Same supplier + document type + number, different file | `possible_duplicate` | review |
 | Same supplier + document type + total + currency, invoice dates within 7 days, **another number** | `possible_duplicate` | review (the same bill resent with a new number, or a misread number) |
 | Supplier not known yet (first invoice) | `new_vendor` | review: is it a genuine supplier? (supplier onboarding control) |
+| The document or the email announces new bank details, or an account differs from the supplier's earlier invoices | `possible_bank_detail_change` | review as **possible fraud**: never posted automatically (see below) |
+| Bank details on the invoice, none on the supplier's earlier invoices | `bank_details_first_seen` | information only |
 | Supplier has no default account | `expense_account_missing` | review: the reviewer chooses the account, saved as the supplier's default |
 | Confidence below the threshold | `low_confidence`, `no_ocr_confidence` | review |
 | Service period ends before it starts | `service_period_inverted` | review |
@@ -89,9 +91,44 @@ confidence = OCR page-average confidence × required-field completeness
 - The OCR *minimum* page score is stored but not used. It was 0.13–0.41 even on clean documents.
 - **The threshold (0.85, `CONFIDENCE_THRESHOLD`) is provisional.** It will be calibrated on the test set on Day 3.
 
+## Possible bank-detail change (fraud alert)
+
+Payment diversion is the classic AP fraud: a letter or an invoice asks to pay "our new account". Bank details read from a document are **never trusted**, and a possible change is **never posted automatically**. Code in [`bank_details.py`](../services/core/app/bank_details.py), deterministic.
+
+**Fields read** (any country, all optional): IBAN, BIC/SWIFT, account number, routing code (routing/ABA, sort code, BSB, IFSC, bank code), account holder.
+
+**Two signals; either one gives `possible_bank_detail_change`:**
+
+1. **Announcement.** Any of these three is enough:
+   - the provider reports that the document announces new or changed bank details (any language);
+   - the document's text uses change wording;
+   - the email's subject or body uses change wording.
+
+   The change wording comes from a phrase list in English, French, German, Spanish, Italian, Dutch and Portuguese, with accents and case ignored. The provider can only *raise* the flag: a document telling the AI to ignore the change still hits the phrase list and the comparison.
+2. **Comparison.** An account on the invoice is not among the accounts on this supplier's earlier invoices. An account is identified by its IBAN, otherwise by routing code + account number. A BIC alone names a bank, not an account.
+
+**What the invoice is compared with (the baseline):** accounts on earlier invoices of the same supplier (same supplier key: tax ID, else normalized name) that were **not rejected** and **never flagged** themselves. A flagged invoice stays out of the baseline even after a reviewer verified it: "verified with the supplier" does not save the details, because a record of verified details from a trusted source is on the roadmap. So after a genuine change, the supplier's next invoices are flagged again until then. The check runs under the supplier lock, so two invoices arriving together see each other.
+
+**First-time bank details:**
+
+| Case | Result |
+|---|---|
+| New supplier | Review anyway (`new_vendor`). The page shows the details as first seen and unverified. Once a person approves the invoice, its details become the baseline. |
+| Known supplier whose earlier invoices showed no bank details | `bank_details_first_seen`, information only (stored in `checks.info` for the daily summary). |
+| No bank details on the invoice | Nothing to compare; announcements still count. |
+
+**A letter that is not an invoice** but asks to change bank details is a fraud alert (`needs_review`, `not_invoice` kept as information), not a plain rejection. The same applies to an unreadable file sent with a change-request email. An email with **no invoice attached** that asks for a change is labelled **AP/Fraud alert** and logged by the email workflow. It has no review item yet.
+
+**Known limits:**
+- Email text is checked only with the phrase list (seven languages). Documents in any language are also covered by the provider's flag.
+- An OCR misread of one digit gives a false alert. That fails safe: a person looks at it.
+- Changing `BANK_FINGERPRINT_KEY` resets the comparison: every supplier's next bank details are "first seen".
+- At go-live the baseline is empty, because invoices processed before this check have no stored bank details.
+- **An auto-posted invoice from a known supplier showing bank details for the first time becomes part of the baseline without a person seeing them** (`bank_details_first_seen` is information only, listed in the daily summary). Making it a review reason would send every known supplier's next invoice to review.
+
 ## Safety properties
 
 - **Idempotent:** the same `(channel, source_ref)` returns the stored result, so n8n can retry safely.
 - **No race conditions:** advisory locks on the source, the file hash and the duplicate key serialize concurrent copies. This is tested with two simultaneous submissions.
 - **No long transactions:** OCR runs outside any transaction. Storing the invoice, lines, taxes, review item and log is one transaction, and the stored file is removed if it fails.
-- **Privacy:** `processing_log` stores codes and IDs only, never document content (tested). Rejected files are not kept.
+- **Privacy:** `processing_log` stores codes and IDs only, never document content (tested). Rejected files are not kept. Bank numbers are stored and logged masked only (see [security.md](security.md#bank-details)).

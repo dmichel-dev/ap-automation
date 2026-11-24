@@ -2,7 +2,9 @@
 
 The core decides which actions an item allows; the review page only offers those.
   approve  the reviewer accepts the invoice (after corrections, if any) and chooses its account
-  verify   fraud items only: the reviewer confirmed with the supplier, a note says how
+  verify   fraud items only: the reviewer confirmed with the supplier, a note says how. The bank
+           details are NOT saved (no trusted record yet). A bank-change letter has nothing to post:
+           verifying it closes the item
   correct  fix fields printed or read wrongly; the item stays open until approved or rejected
   reject   with a reason; the invoice is not posted and its file is deleted
 
@@ -38,6 +40,8 @@ FRAUD_CODES = frozenset({"possible_bank_detail_change"})
 # Reasons whose approval must name the account (never the supplier's default by fallback): an item
 # that may be a fixed asset needs an explicit expense-or-asset choice
 ACCOUNT_CHOICE_CODES = frozenset({"possible_capex"})
+# Kept for review only because of a bank-change request: there is no bill to post
+NOT_A_BILL_CODES = frozenset({"not_invoice", "unreadable"})
 MIN_VERIFY_NOTE = 10  # "how was it verified" must say something
 MIN_REJECT_NOTE = 3
 
@@ -56,6 +60,11 @@ class AccountRequired(Conflict):
 
 def account_choice_required(item: db.Row) -> bool:
     return bool({r["code"] for r in item["reasons"]} & ACCOUNT_CHOICE_CODES)
+
+
+def nothing_to_post(inv: db.Row) -> bool:
+    """A bank-change letter, or an unreadable file sent with a bank-change email."""
+    return bool({i["code"] for i in (inv["checks"] or {}).get("info", [])} & NOT_A_BILL_CODES)
 
 
 class Decision(BaseModel):
@@ -215,7 +224,7 @@ INVOICE_FIELDS = (
     "invoice_date_raw", "due_date_raw", "dates_ambiguous", "date_order_suggested", "invoice_date_suggested",
     "due_date_suggested", "date_suggestion_basis", "currency", "subtotal", "tax_total", "total", "tax_mode",
     "confidence", "ocr_confidence_avg", "confidence_completeness", "language", "file_path", "received_at",
-    "channel", "expense_account_id", "expense_account_source", "checks",
+    "channel", "expense_account_id", "expense_account_source", "checks", "bank_accounts",
 )  # fmt: skip
 
 
@@ -224,7 +233,8 @@ def detail(conn: db.Conn, review_id: int, scope: Scope | None = None) -> dict[st
     item = _item(conn, review_id, scope=scope)
     inv = _invoice(conn, item["invoice_id"])
     lines, taxes = _lines(conn, inv["id"])
-    blockers, _ = posting_blockers(stored_invoice(conn, inv))
+    letter = nothing_to_post(inv)
+    blockers = [] if letter else posting_blockers(stored_invoice(conn, inv))[0]
     result = {
         **{k: item[k] for k in ("id", "stage", "status", "scope", "reasons", "corrections", "decision", "reviewer")},
         **{k: item[k] for k in ("waiting_for", "effect_error")},
@@ -237,8 +247,13 @@ def detail(conn: db.Conn, review_id: int, scope: Scope | None = None) -> dict[st
         "supplier_default_account": _supplier_default(conn, inv["supplier_key"]),
         "blockers": [b.model_dump() for b in blockers],  # what approving would refuse now
         "payment": _payment(conn, inv["id"]),
+        "nothing_to_post": letter,
     }
     result["invoice"].pop("file_path")
+    # Masked numbers and labels only: the fingerprint is for comparisons, not for people
+    result["invoice"]["bank_accounts"] = [
+        {k: v for k, v in a.items() if k != "fingerprint"} for a in inv["bank_accounts"]
+    ]
     out: dict[str, Any] = db.jsonable(result)
     return out
 
@@ -425,6 +440,8 @@ def approve(
     if action == "verify" and len(note) < MIN_VERIFY_NOTE:
         raise Conflict("say how the change was verified with the supplier (e.g. phone call to a known number)")
     inv = _invoice(conn, item["invoice_id"], lock=True)
+    if action == "verify" and nothing_to_post(inv):
+        return _close_letter(conn, item, inv, d.reviewer, note)
     if d.accept_suggested_dates:
         inv = _accept_suggested_dates(conn, item, inv, d.reviewer)
     blockers, tax_mode = posting_blockers(stored_invoice(conn, inv))
@@ -448,7 +465,7 @@ def approve(
         "account_source": source,
         "supplier_default": default,
         "suggested_dates_accepted": d.accept_suggested_dates,
-    }
+    } | ({"bank_details_saved": False} if action == "verify" else {})
     conn.execute(
         """UPDATE review_queue SET status = %s, reviewer = %s, decision_note = %s, decision = %s, resolved_at = now()
             WHERE id = %s""",
@@ -456,6 +473,20 @@ def approve(
     )
     _log(conn, item, f"review {status}", {k: v for k, v in decision.items() if k != "account_name"})
     return _item(conn, review_id)
+
+
+def _close_letter(conn: db.Conn, item: db.Row, inv: db.Row, reviewer: str, note: str) -> db.Row:
+    """A verified bank-change letter: nothing is posted and the bank details are not saved. The
+    document stays 'rejected' as an invoice (there is no bill); its file is kept until it expires."""
+    conn.execute("UPDATE invoices SET status = 'rejected' WHERE id = %s", (inv["id"],))
+    decision = {"action": "verify", "posted": False, "bank_details_saved": False}
+    conn.execute(
+        """UPDATE review_queue SET status = 'verified', reviewer = %s, decision_note = %s, decision = %s,
+                  resolved_at = now() WHERE id = %s""",
+        (reviewer, note, Jsonb(decision), item["id"]),
+    )
+    _log(conn, item, "review verified", decision)
+    return _item(conn, item["id"])
 
 
 def reject(conn: db.Conn, review_id: int, r: Rejection, scope: Scope | None = None) -> tuple[db.Row, str | None]:

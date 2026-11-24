@@ -22,6 +22,7 @@ AUTH = {"Authorization": "Bearer test-token"}
 AUTOMATION = "e2e-test (automated test)"  # how the bearer-token API records who acted (actors.py)
 OCR_TEXT = "Quillmoor Paper Supply LLC ... Total due: USD 641.24 (all amounts in $)"
 FIXTURES = Path(__file__).parent / "fixtures"
+BANK_KEY = b"test-bank-fingerprint-key"  # keys the bank-account fingerprints on the test database
 
 
 def query(url: str, sql: str, *args: Any) -> list[dict[str, Any]]:

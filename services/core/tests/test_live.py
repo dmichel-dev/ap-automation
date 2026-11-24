@@ -6,6 +6,7 @@ import io
 import os
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from app.extraction import build_common_invoice
@@ -13,7 +14,7 @@ from app.files import prepare
 from app.providers.mistral import MistralOcrProvider
 from PIL import Image, ImageDraw, ImageFont
 
-from .conftest import FIXTURES
+from .conftest import BANK_KEY, FIXTURES
 
 pytestmark = [
     pytest.mark.live,
@@ -77,7 +78,13 @@ def test_live_full_pipeline_against_test_db(clean_db, tmp_path):
     """Real Mistral + real Postgres (ap_test): process, re-send same source, re-send same file."""
     from app.processing import Config, ProcessRequest, process
 
-    cfg = Config(database_url=clean_db, storage_dir=tmp_path, retention_days=30, confidence_threshold=0.85)
+    cfg = Config(
+        database_url=clean_db,
+        storage_dir=tmp_path,
+        retention_days=30,
+        confidence_threshold=0.85,
+        bank_fingerprint_key=BANK_KEY,
+    )
     provider = MistralOcrProvider(os.environ["MISTRAL_API_KEY"])
     pdf = (FIXTURES / "us_invoice_quillmoor.pdf").read_bytes()
 
@@ -92,3 +99,28 @@ def test_live_full_pipeline_against_test_db(clean_db, tmp_path):
 
     dup = process(ProcessRequest(pdf, "qm.pdf", "email", "gmail:live:2"), provider, cfg)
     assert dup.status == "rejected" and dup.reasons[0]["code"] == "duplicate_file"
+
+
+@pytest.mark.parametrize(
+    ("file", "last4", "language"),
+    [
+        (Path("/test-data/invoices/F-en-bank-details-letter.pdf"), "0000", "en"),
+        (FIXTURES / "tarnbrook_new_bank_account.pdf", "0017", "en"),
+        (FIXTURES / "bank_change_fr.pdf", "0162", "fr"),
+        (FIXTURES / "bank_change_de.pdf", "0377", "de"),
+        (FIXTURES / "bank_change_es.pdf", "0061", "es"),
+    ],
+)
+def test_live_bank_change_is_read_and_flagged(file, last4, language):
+    """The bank fields and the change notice are read from real documents in four languages, and the
+    deterministic check sends each one to review (nothing to compare with: the announcement alone)."""
+    from app.bank_details import assess
+    from app.validation import validate
+
+    inv = run(file.read_bytes())
+    bank = assess(inv, None, [], BANK_KEY)
+    print(file.name, bank.notice_sources, [a["label"] for a in bank.accounts])
+    assert [a["label"].endswith(last4) for a in bank.accounts] == [True]
+    assert bank.notice_sources and inv.language == language
+    v = validate(inv, confidence_threshold=0.85, bank=bank)
+    assert v.status == "needs_review" and "possible_bank_detail_change" in [r.code for r in v.reasons]

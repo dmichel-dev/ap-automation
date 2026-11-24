@@ -1,11 +1,14 @@
 """Email intake screening (pure): which emails and which attachments go to processing.
 
-The n8n workflow sends the email's metadata (recipients, attachment types, names and sizes,
-never the content) and splits the email according to the answer. Deterministic code only.
+The n8n workflow sends the email's metadata (recipients, attachment types, names and sizes, never the
+files) and its text (subject + body, checked for bank-change wording, never stored), and splits the
+email according to the answer. Deterministic code only.
 """
 
 import re
 from dataclasses import dataclass, field
+
+from .bank_details import change_wording
 
 SUPPORTED_MIME = frozenset({"application/pdf", "image/png", "image/jpeg", "image/webp", "image/tiff"})
 MIME_BY_EXTENSION = {
@@ -18,6 +21,7 @@ MIME_BY_EXTENSION = {
     "tiff": "image/tiff",
 }
 MIN_IMAGE_BYTES = 15000  # smaller images are almost always signature logos
+EMAIL_TEXT_MAX = 20000  # characters of subject + body that n8n sends
 _SIZE_UNITS = {"b": 1, "kb": 1000, "mb": 1000**2, "gb": 1000**3}
 
 
@@ -31,7 +35,7 @@ class Attachment:
 
 @dataclass
 class Screening:
-    route: str  # process | no_valid_attachment | not_for_alias
+    route: str  # process | no_valid_attachment | bank_detail_notice | not_for_alias
     reason: str | None = None
     accepted: list[dict[str, str | int]] = field(default_factory=list)  # key, index, mime, size
     skipped: list[dict[str, str | int]] = field(default_factory=list)  # type, size, why
@@ -58,9 +62,13 @@ def _mime(a: Attachment) -> str | None:
     return MIME_BY_EXTENSION.get(ext)
 
 
-def screen_email(recipients: list[str], delivered_to: str, attachments: list[Attachment], alias: str) -> Screening:
+def screen_email(
+    recipients: list[str], delivered_to: str, attachments: list[Attachment], alias: str, text: str = ""
+) -> Screening:
     """Second guard after the Gmail search (the alias must be a recipient), then the attachments
-    worth processing. An email without one is never silently ignored: it gets a route and a reason."""
+    worth processing. An email without one is never silently ignored: it gets a route and a reason.
+    Without one, an email asking to change bank details is a fraud alert (with one, the processing
+    flags each invoice)."""
     alias = alias.lower()
     if alias not in [r.lower() for r in recipients] and alias not in delivered_to.lower():
         return Screening("not_for_alias", "not_addressed_to_alias")
@@ -74,6 +82,8 @@ def screen_email(recipients: list[str], delivered_to: str, attachments: list[Att
             screening.skipped.append({"type": mime, "size": size, "why": "small_image"})
         else:
             screening.accepted.append({"key": a.key, "index": _index(a.key), "mime": mime, "size": size})
-    if not screening.accepted:
+    if not screening.accepted and change_wording(text):
+        screening.route, screening.reason = "bank_detail_notice", "possible_bank_detail_change"
+    elif not screening.accepted:
         screening.route, screening.reason = "no_valid_attachment", "no_valid_attachment"
     return screening

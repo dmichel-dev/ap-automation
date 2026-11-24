@@ -145,6 +145,23 @@
   </div>
 </section>
 
+{% if inv.bank_accounts %}
+{% set bank_check = (inv.checks or {}).get("bank_details") or {} %}
+<section class="bank-details" aria-labelledby="bank-details-title">
+  <h2 id="bank-details-title">Bank details on this document</h2>
+  <p class="note{% if tone == 'fraud' %} fraud{% endif %}">Read from the document and not verified: bank details on an invoice are never trusted. Only the last 4 characters are shown.</p>
+  {% if bank_check.get("first_seen") %}<p class="hint">{{ ("bank_details_first_seen" | explain).sentence }}</p>{% endif %}
+  {% for a in inv.bank_accounts %}
+  <dl class="facts compact">
+    <div><dt>Account holder</dt><dd>{{ a.account_holder or "–" }}</dd></div>
+    {% for name, label in (("iban", "IBAN"), ("account_number", "Account number"), ("routing_code", "Routing / sort code"), ("bic", "BIC / SWIFT")) if a[name] %}
+    <div><dt>{{ label }}</dt><dd class="num">{{ a[name] }}</dd></div>
+    {% endfor %}
+  </dl>
+  {% endfor %}
+</section>
+{% endif %}
+
 {% set pay = item.payment %}
 {% if pay and item.stage != "validation" %}
 <section class="bank" aria-labelledby="bank-title">
@@ -181,7 +198,7 @@
       {% for a in item.actions %}<input type="radio" class="act" name="action" value="{{ a }}" id="act-{{ a }}" {% if a == picked %}checked{% endif %}>{% endfor %}
       <div class="choices">
         {% if decide in item.actions %}
-        <label for="act-{{ decide }}" class="choice main">{{ "Verified with the supplier" if decide == "verify" else "Approve" }}<span>{{ "Post it once the bank details are confirmed" if decide == "verify" else "Post the bill to QuickBooks" }}</span></label>
+        <label for="act-{{ decide }}" class="choice main">{{ "Verified with the supplier" if decide == "verify" else "Approve" }}<span>{% if decide != "verify" %}Post the bill to QuickBooks{% elif item.nothing_to_post %}Close it: there is no bill to post; the bank details are not saved{% else %}Post it once the bank details are confirmed; the bank details are not saved{% endif %}</span></label>
         {% endif %}
         {% if "correct" in item.actions %}<label for="act-correct" class="choice">Correct the data<span>Fix what was read wrongly; the item stays open</span></label>{% endif %}
         {% if "reject" in item.actions %}<label for="act-reject" class="choice">Reject<span>Don't post it; the stored file is deleted</span></label>{% endif %}
@@ -203,6 +220,7 @@
         {% if date_blockers %}
         <p class="note" id="dates-needed">The invoice date reads two ways. Tick “Accept the suggested reading of the dates” below, or use Correct the data.</p>
         {% endif %}
+        {% if not item.nothing_to_post %}
         <label for="account_id">Expense account</label>
         <select name="{{ decide }}.account_id" id="account_id" data-combobox aria-describedby="account-hint"{% if choose_account %} data-required-for="{{ decide }}"{% endif %}>
           {% set chosen_account = "" if choose_account else (inv.expense_account_id or (item.supplier_default_account.id if item.supplier_default_account else "")) %}
@@ -224,6 +242,7 @@
           <label class="opt"><input type="radio" name="{{ decide }}.default" value="dont"> Use it for this invoice only</label>
           {% endif %}
         </fieldset>
+        {% endif %}
         {% if inv.dates_ambiguous and inv.invoice_date_suggested %}
         <label class="opt"><input type="checkbox" name="{{ decide }}.accept_suggested_dates" value="1"{% if date_blockers %} data-required-for="{{ decide }}" aria-describedby="dates-needed"{% endif %}> Accept the suggested reading of the dates ({{ inv.invoice_date_suggested }})</label>
         {% endif %}

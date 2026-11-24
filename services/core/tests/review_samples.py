@@ -3,9 +3,8 @@ that matches it (name, number, amount, currency), so every item shows a believab
 
 Used by the review-page tests and by scripts/review_screenshots.sh (test database only). The files
 come from test-data/generate.py; the provider below plays the OCR's part, and the real pipeline
-(POST /invoices/process) decides the status and the reasons, except for the fraud reason: no check
-produces it yet, so the Tarnbrook item (sent to review because it has no default account) gets that
-reason instead, as the bank-details check will set it.
+(POST /invoices/process) decides the status and the reasons, the Tarnbrook item's possible bank-detail
+change included.
 """
 
 import json
@@ -23,7 +22,7 @@ from app.processing import Config
 from app.providers.base import ProviderResult
 from fastapi.testclient import TestClient
 
-from .conftest import AUTH, FIXTURES, base_annotation, known_supplier, query, rebuild_schema, seed_accounts
+from .conftest import AUTH, BANK_KEY, FIXTURES, base_annotation, known_supplier, query, rebuild_schema, seed_accounts
 
 TEST_DATA = Path("/test-data/invoices")  # mounted read-only in the test container and in CI
 
@@ -116,7 +115,7 @@ class Sample(NamedTuple):
     total: str  # as the page shows it
     ocr_average: float = 0.97
     known: bool = True  # the supplier already has a default expense account
-    reasons: tuple[tuple[str, str], ...] = ()  # set on the review item (only for a reason no check makes yet)
+    ocr_extra: str = ""  # more of the document's text, as the OCR reads it
 
 
 SAMPLES = (
@@ -135,15 +134,22 @@ SAMPLES = (
             "TB-5547",
             ("11/21/2026", "12/21/2026"),
             [("Same-day courier, flat monthly route", "1", "80.00"), ("Saturday deliveries", "4", "22.50")],
-        ),
+        )
+        | {
+            "bank_accounts": [
+                {
+                    "iban": None,
+                    "bic": None,
+                    "account_number": "0000-FAKE-0017",
+                    "routing_code": "000000000",
+                    "account_holder": "Tarnbrook Courier Services LLC",
+                }
+            ],
+            "bank_details_change_notice": True,
+        },
         "184.45 USD",
-        known=False,
-        reasons=(
-            (
-                "possible_bank_detail_change",
-                "The invoice asks to pay a new account (Fictional Savings Bank, account 0000-FAKE-0017).",
-            ),
-        ),
+        ocr_extra="PAYMENT DETAILS HAVE CHANGED. We have moved banks: please pay this and all future invoices "
+        "to our new account. Routing number: 000000000  Account number: 0000-FAKE-0017",
     ),
     Sample(
         "pellingham",
@@ -186,7 +192,8 @@ class SampleProvider:
     def extract(self, content: bytes, mime_type: str) -> ProviderResult:
         return ProviderResult(
             annotation=self.sample.annotation,
-            ocr_text=f"{self.sample.annotation['supplier_name']} ... {self.sample.annotation['total']}",
+            ocr_text=f"{self.sample.annotation['supplier_name']} ... {self.sample.annotation['total']} "
+            + self.sample.ocr_extra,
             pages=1,
             model="sample-1",
             ocr_confidence_avg=self.sample.ocr_average,
@@ -202,7 +209,13 @@ def supplier_key(sample: Sample) -> str:
 @contextmanager
 def _pipeline(url: str, storage: Path) -> Iterator[dict[str, Any]]:
     state: dict[str, Any] = {}
-    cfg = Config(database_url=url, storage_dir=storage, retention_days=30, confidence_threshold=0.85)
+    cfg = Config(
+        database_url=url,
+        storage_dir=storage,
+        retention_days=30,
+        confidence_threshold=0.85,
+        bank_fingerprint_key=BANK_KEY,
+    )
     app.dependency_overrides[get_processing_config] = lambda: cfg
     app.dependency_overrides[get_provider] = lambda: state["provider"]
     try:
@@ -232,11 +245,6 @@ def seed(url: str, storage: Path) -> dict[str, int]:
             r.raise_for_status()
             assert r.json()["status"] == "needs_review", (s.key, r.json())
             ids[s.key] = r.json()["review_id"]
-            if s.reasons:
-                reasons = [{"code": c, "field": None, "message": m} for c, m in s.reasons]
-                query(
-                    url, "UPDATE ap.review_queue SET reasons = %s::jsonb WHERE id = %s", json.dumps(reasons), ids[s.key]
-                )
     return ids
 
 

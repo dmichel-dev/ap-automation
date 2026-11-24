@@ -109,6 +109,27 @@ The original file can be **downloaded** (`Content-Disposition: attachment`, a cl
 - **Decisions:** each decision and correction records the reviewer **from the session**, as "Name (review user N)". It is never a name typed into a form; a `reviewer` field sent with a form is ignored. The machine API (bearer token, held by automation only) keeps an explicit `reviewer` field, but it accepts only an **automation label**: `claude-code` or `e2e-test`, optionally followed by a context in brackets (e.g. "claude-code (test run, authorised by …)"). Anything else, such as a person's name or a "Name (review user N)" label, is refused with `422 not_automation` before anything is written, so an automated action can never appear under a person's name. A person's display name can't start with an automation name either (`actors.py`, tested in `test_actors.py`).
 - **Sign-ins:** sign-in outcomes are in `login_attempts`, and decisions are in `processing_log` (step `review`).
 
+## Bank details
+
+Bank details read from a document are never trusted (see [validation](validation.md#possible-bank-detail-change-fraud-alert)), and full numbers are kept out of everything this system writes.
+
+| Where | What is kept |
+|---|---|
+| The original file (core storage, deleted after the retention period or on rejection) and `invoices.ocr_text` | The document as received: **the only full copies**. A reviewer needs them. |
+| `invoices.bank_accounts` | Masked numbers (last 4 characters), holder, label, keyed fingerprint (HMAC-SHA256 with `BANK_FINGERPRINT_KEY`, so a short account number can't be guessed from it) |
+| `invoices.extraction` (the provider's raw answer) | Bank numbers masked before storing. An answer that isn't valid JSON is kept as received: nothing was read from it, and it is a copy of the document's text. |
+| `processing_log`, review reasons, error messages, API answers (to n8n), review item JSON | Masked labels, counts and sources only. Tested by searching every stored row for the full test numbers. |
+| The email's subject and body | Checked in memory for change wording, **never stored or logged**. Only the result is kept, e.g. `email:en`. |
+| Review page | Masked numbers and the holder, marked "not verified". The fingerprint is not shown. |
+
+**Who can read the full copies:**
+- the core and the review page, through the shared `ap_app` database role (see the limit below);
+- the n8n Postgres credential, which writes the email log: only `ap_app` (and the superuser) has grants on the `ap` schema, so it can read the same tables;
+- reviewers, who see the page images of the documents in their scope;
+- database backups.
+
+**n8n's own execution data** holds the email and its attachments as received, because the Gmail trigger's output is the email. That can't be masked. Executions are pruned after 14 days.
+
 ## Known limits and next steps
 
 - **No two-factor sign-in yet.** TOTP for reviewer and admin accounts is on the roadmap. Until then, these accounts can't sign in from the internet at all (see the listeners above).

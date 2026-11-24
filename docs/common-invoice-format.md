@@ -22,6 +22,8 @@ So the model never decides what a number, a date or a currency *means*: that is 
 | `currency` | ISO 4217 |
 | `lines[]`, `taxes[]` | taxes are generic: `vat`, `gst`, `sales_tax`, `withholding`, `other`, `none` |
 | `subtotal`, `tax_total`, `total` | **decimal strings** (exact precision); **credit notes are negative** |
+| `bank_accounts[]` | bank details printed on the document, **never trusted**: `iban`, `bic`, `account_number`, `routing_code` (normalized: letters and digits, upper case) and `account_holder`. The numbers are secret values: they serialize **masked** (`•••• 0017`, last 4 characters only, and nothing when 7 characters or fewer), in JSON, logs and API answers alike |
+| `bank_change_notice` | the provider read that the document announces new or changed bank details (it can only raise the fraud check, see [validation](validation.md#possible-bank-detail-change-fraud-alert)) |
 | `language`, `ocr_text` | BCP 47 code; the full original-language text |
 | `normalized` | keys for the duplicate check: invoice number, supplier name (legal form removed), tax ID |
 | `extraction` | provider, model, pages, OCR confidence (page average and minimum) |
