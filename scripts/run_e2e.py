@@ -13,29 +13,19 @@ sending and the receiving mailbox. 'occurrence' picks the n-th row with the same
 """
 
 import argparse
-import hashlib
 import json
 import os
 import sys
 import time
 from datetime import UTC, datetime
-from decimal import Decimal
 from pathlib import Path
 
 import psycopg
+from expectations import DATE_KEYS, TEXT_KEYS, compare, load
 from psycopg.rows import dict_row
 
 TEST_DIR = Path(os.environ.get("TEST_DATA_DIR", "/test-data/invoices"))
 WORKFLOW_ID = "apEmailIntake001"
-
-
-def load_expectations() -> list[dict]:
-    items = []
-    for f in sorted(TEST_DIR.glob("*.expected.json")):
-        e = json.loads(f.read_text())
-        e["sha256"] = hashlib.sha256((TEST_DIR / e["file"]).read_bytes()).hexdigest()
-        items.append(e)
-    return items
 
 
 def fetch_row(conn, e: dict, since: datetime) -> dict | None:
@@ -54,10 +44,6 @@ def fetch_log(conn, message: str, since: datetime) -> int:
     return conn.execute(
         "SELECT count(*) AS n FROM ap.processing_log WHERE message = %s AND logged_at >= %s", (message, since)
     ).fetchone()["n"]
-
-
-TEXT_KEYS = ("document_type", "invoice_number", "currency", "supplier_country", "related_invoice_number")
-DATE_KEYS = ("invoice_date", "due_date", "service_period_start", "service_period_end")
 
 
 def _iso(value):
@@ -79,31 +65,6 @@ def actual_values(row: dict) -> dict:
     return out
 
 
-def expected_values(exp: dict) -> dict:
-    out = {k: v for k, v in exp.items() if k in (*TEXT_KEYS, *DATE_KEYS, "status")}
-    out["reasons"] = sorted(exp["reasons"])
-    if "info" in exp:
-        out["info"] = sorted(exp["info"])
-    if "total" in exp:
-        out["total"] = Decimal(exp["total"]) if exp["total"] is not None else None
-    if "suggested_dates" in exp:
-        out["suggested order"] = exp["suggested_dates"]["order"]
-        out["suggested invoice date"] = exp["suggested_dates"]["invoice_date"]
-    return out
-
-
-def compare(e: dict, row: dict) -> list[str]:
-    exp, actual = e["expect"], actual_values(row)
-    diffs = [
-        f"{name}: expected {expected!r}, got {actual[name]!r}"
-        for name, expected in expected_values(exp).items()
-        if actual[name] != expected
-    ]
-    if "min_lines" in exp and row["line_count"] < exp["min_lines"]:
-        diffs.append(f"lines: expected at least {exp['min_lines']}, got {row['line_count']}")
-    return diffs
-
-
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--since", required=True, help="ISO timestamp of the start of the run")
@@ -114,7 +75,7 @@ def main() -> int:
     if since.tzinfo is None:
         since = since.replace(tzinfo=UTC)
 
-    expectations = load_expectations()
+    expectations = [e for e in load(TEST_DIR) if not e.get("calibration_only")]  # degraded copies
     deadline = time.monotonic() + args.timeout
     with psycopg.connect(os.environ["AP_E2E_DATABASE_URL"], row_factory=dict_row, autocommit=True) as ap_conn:
         # Wait until every expected result is there (or the timeout)
@@ -146,7 +107,7 @@ def main() -> int:
             if row is None:
                 results.append({"id": e["id"], "passed": False, "diffs": ["no result (timeout)"], "actual": None})
                 continue
-            diffs = compare(e, row)
+            diffs = compare(e["expect"], actual_values(row), row["line_count"])
             results.append(
                 {
                     "id": e["id"],
