@@ -108,6 +108,8 @@ services:
       MATCH_DAYS_BEFORE_INVOICE: ${MATCH_DAYS_BEFORE_INVOICE:-3}
       MATCH_DAYS_AFTER_DUE: ${MATCH_DAYS_AFTER_DUE:-30}
       MATCH_NAME_MIN_SIMILARITY: ${MATCH_NAME_MIN_SIMILARITY:-0.6}
+      MATCH_FX_PCT_TOLERANCE: ${MATCH_FX_PCT_TOLERANCE:-0.03}
+      MATCH_FX_MAX_RATE_AGE_DAYS: ${MATCH_FX_MAX_RATE_AGE_DAYS:-4}
     volumes:
       - ap_files:/data/files     # original invoice files, core service only
     # Internal only: reachable from n8n at http://core:8000

@@ -121,6 +121,16 @@ REASONS: dict[str, Reason] = {
         "Paid less than billed",
         "The bank paid less than the bill. Write the difference off, or leave it open on the bill.",
     ),
+    "fx_amount_difference": Reason(
+        "Exchange rate gap",
+        "The bank amount differs from the bill converted at the reference rate by more than the tolerance. "
+        "Compare the expected and actual amounts, then confirm the payment or not.",
+    ),
+    "fx_rate_unavailable": Reason(
+        "No exchange rate",
+        "No usable reference rate exists for this currency on the payment date, so the amount can't be checked "
+        "automatically. Compare the amounts, then confirm the payment or not.",
+    ),
 }
 FALLBACK = Reason("Needs a check", "Something on this invoice needs a person's check.")
 

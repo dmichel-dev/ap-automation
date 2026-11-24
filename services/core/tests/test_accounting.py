@@ -199,7 +199,7 @@ def test_foreign_currency_needs_the_rate_used(cfg):
     assert result(cfg, inv, outcome="posted", external_id="7", vendor_external_id="8").status_code == 409
     p = post_ok(cfg, inv, exchange_rate="1.096876", exchange_rate_date="2026-11-20")
     assert D(p["exchange_rate"]) == D("1.096876") and p["exchange_rate_source"] == "qbo"
-    assert p["payment_reason"] == "fx_match_pending"  # bank account is USD
+    assert p["payment_reason"] == "no_match_yet"  # matched through a reference rate (test_fx_matching.py)
 
 
 def test_repeated_posted_result_is_idempotent_and_a_different_id_conflicts(cfg):
@@ -389,17 +389,6 @@ def test_ambiguous_match_opens_one_matching_review(cfg):
     assert run(cfg)["payments_due"] == []
 
 
-def test_foreign_currency_bill_waits_for_fx(cfg):
-    register_bank(cfg)
-    inv = make_invoice(cfg, number="AV-1", currency="EUR", supplier="Quillmoor", key_name="quillmoor paper supply")
-    claim(cfg)
-    post_ok(cfg, inv, exchange_rate="1.1", exchange_rate_date="2026-11-18")
-    bank_page(cfg, plaid_tx("t1", 641.24))
-    out = run(cfg)
-    assert out["fx_match_pending"] == 1 and out["accepted"] == 0
-    assert posting(cfg, inv)["payment_reason"] == "fx_match_pending"
-
-
 def test_a_used_transaction_is_not_matched_again(cfg):
     register_bank(cfg)
     first = posted_bill(cfg)
@@ -418,8 +407,9 @@ def test_database_allows_one_invoice_per_transaction(cfg):
     a, b = posted_bill(cfg), posted_bill(cfg, number="QM-1043")
     bank_page(cfg, plaid_tx("t1", 641.24), plaid_tx("t2", 641.24))
     insert = """INSERT INTO ap.matches (invoice_id, bank_transaction_id, status, invoice_amount, bank_amount,
-                  difference, currency, days_from_invoice, name_similarity, invoice_number_found, rule_version)
-                VALUES (%s, %s, 'accepted', 641.24, 641.24, 0, 'USD', 9, 1, false, 'm1')"""
+                  difference, currency, bank_currency, days_from_invoice, name_similarity, invoice_number_found,
+                  rule_version)
+                VALUES (%s, %s, 'accepted', 641.24, 641.24, 0, 'USD', 'USD', 9, 1, false, 'm1')"""
     sql(cfg, insert, a, "t1")
     with pytest.raises(psycopg.errors.UniqueViolation):
         sql(cfg, insert, b, "t1")  # same transaction, second invoice
@@ -564,8 +554,8 @@ def test_duplicate_in_accounting_opens_a_review_on_the_invoice_number(cfg):
     assert review["stage"] == "posting" and review["reasons"][0]["field"] == "invoice_number"
 
 
-def test_foreign_bill_posted_before_any_bank_account_waits_for_fx(cfg):
-    """KS-2026-088 (JPY) was posted before a bank account was registered and got no_match_yet."""
+def test_foreign_bill_posted_before_any_bank_account_waits_for_a_match(cfg):
+    """Bills in any currency are matched (foreign ones through a reference rate: test_fx_matching.py)."""
     inv = make_invoice(
         cfg,
         number="KS-1",
@@ -578,7 +568,7 @@ def test_foreign_bill_posted_before_any_bank_account_waits_for_fx(cfg):
     )
     claim(cfg)
     p = post_ok(cfg, inv, exchange_rate="0.006306", exchange_rate_date="2026-11-20")
-    assert p["payment_reason"] == "fx_match_pending"  # home currency USD assumed for payments
+    assert p["payment_reason"] == "no_match_yet"
 
 
 def test_home_currency_bill_posted_before_any_bank_account_waits_for_a_match(cfg):

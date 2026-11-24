@@ -4,6 +4,7 @@ n8n makes every external call (QuickBooks, Plaid). The core keeps the state and 
   claim_postings   → which invoices to post now, with the exact document to send (leased, retried)
   record_result    → what happened; deletes the stored file once it's attached
   store_sync_page  → Plaid transactions, cursor saved only after the last page
+  fx_needs         → exchange-rate series the open foreign-currency bills need (fetched by n8n)
   run_matching     → deterministic matching; returns the bill payments to record
   record_payment   → the payment recorded in QuickBooks; paid vs paid_with_difference
 """
@@ -19,7 +20,7 @@ from typing import Any, Literal, TypedDict
 
 from psycopg.types.json import Jsonb
 
-from . import db, matching, postings
+from . import db, fx, matching, postings
 from .db import Conn, Row
 from .tax_treatment import TaxTreatment
 
@@ -130,11 +131,6 @@ def _build_document(conn: Conn, inv: Row, cfg: AccountingConfig) -> Row:
     if inv["due_date"] and inv["document_type"] != "credit_note":
         body["DueDate"] = inv["due_date"].isoformat()
     return body
-
-
-def _account_currency(conn: Conn) -> str | None:
-    row = conn.execute("SELECT account_currency FROM bank_sync_state ORDER BY created_at LIMIT 1").fetchone()
-    return row["account_currency"] if row else None
 
 
 def _create_missing_postings(conn: Conn, cfg: AccountingConfig, limit: int) -> None:
@@ -300,12 +296,7 @@ def _exchange_rate(cfg: AccountingConfig, p: Row, inv: Row, r: Row) -> tuple[Dec
 
 def _record_posted(conn: Conn, cfg: AccountingConfig, p: Row, inv: Row, r: Row, ctx: LogContext) -> str | None:
     rate, rate_date, source = _exchange_rate(cfg, p, inv, r)
-    reason = None
-    if p["object_type"] == "bill":
-        # Until FX matching exists, only bills in the bank account's currency can be matched. Before any
-        # bank account is registered, the payments account is assumed to be in the home currency.
-        account_ccy = _account_currency(conn) or cfg.home_currency
-        reason = "fx_match_pending" if p["currency"] != account_ccy else "no_match_yet"
+    reason = "no_match_yet" if p["object_type"] == "bill" else None  # bills in any currency are matched
     conn.execute(
         """UPDATE accounting_postings SET status = 'posted', posted_at = now(), claimed_until = NULL,
                   last_error = NULL, external_id = %s, vendor_external_id = %s, exchange_rate = %s,
@@ -428,6 +419,14 @@ MATCHING_REVIEWS = {
     "payment_difference": (
         "payment",
         "The bank paid less than the bill: write the open difference off, or leave it open.",
+    ),
+    "fx_amount_difference": (
+        "payment",
+        "The bank amount is too far from the bill converted at the reference rate; confirm the payment or not.",
+    ),
+    "fx_rate_unavailable": (
+        "payment",
+        "No usable reference rate for this currency on the payment date; compare the amounts and confirm or not.",
     ),
 }
 _STAGE_STEP = {"posting": "post", "matching": "match"}
@@ -742,38 +741,42 @@ def store_sync_page(
 # =====================================================================================
 # Matching
 # =====================================================================================
+OPEN_BILLS = """
+      FROM accounting_postings p JOIN invoices i ON i.id = p.invoice_id
+     WHERE p.status = 'posted' AND p.object_type = 'bill' AND p.payment_status = 'unpaid'
+       AND p.payment_reason <> 'payment_pending' AND i.posting_excluded_reason IS NULL
+       AND i.scope = 'live'"""  # the bank account is live: test and demo bills are never paid
+
+
+def fx_needs(conn: Conn, item_key: str, rules: matching.Rules, today: date) -> Row:
+    """Exchange-rate series to fetch before matching: one per currency of the open bills that differs
+    from the bank account's."""
+    state = sync_state(conn, item_key)
+    rows = conn.execute(
+        "SELECT p.currency, min(i.invoice_date) AS first_day " + OPEN_BILLS + " AND p.currency <> %s "
+        "GROUP BY p.currency",
+        (state["account_currency"],),
+    ).fetchall()
+    first_days = {r["currency"]: r["first_day"] for r in rows}
+    return {"provider": fx.PROVIDER, "series": fx.series_needed(first_days, state["account_currency"], rules, today)}
+
+
 def run_matching(conn: Conn, cfg: AccountingConfig, item_key: str, rules: matching.Rules) -> Row:
     db.lock(conn, f"matching:{item_key}")  # one run at a time per account
     state = sync_state(conn, item_key)
+    account_ccy = state["account_currency"]
     rows = conn.execute(
         """SELECT p.id AS posting_id, p.invoice_id, p.currency, p.amount, p.payment_reason,
-                  i.invoice_date, i.due_date, i.supplier_name_norm, i.invoice_number_norm
-             FROM accounting_postings p JOIN invoices i ON i.id = p.invoice_id
-            WHERE p.status = 'posted' AND p.object_type = 'bill' AND p.payment_status = 'unpaid'
-              AND p.payment_reason <> 'payment_pending' AND i.posting_excluded_reason IS NULL
-              AND i.scope = 'live'"""  # the bank account is live: test and demo bills are never paid
+                  i.invoice_date, i.due_date, i.supplier_name_norm, i.invoice_number_norm"""
+        + OPEN_BILLS
     ).fetchall()
-
-    def set_reason(posting_ids: list[int], reason: str) -> None:
-        if posting_ids:
-            conn.execute(
-                "UPDATE accounting_postings SET payment_reason = %s WHERE id = ANY(%s) "
-                "AND payment_reason IS DISTINCT FROM %s",
-                (reason, posting_ids, reason),
-            )
-
-    # Constraint until FX matching exists: only bills in the bank account's currency
-    foreign = [r for r in rows if r["currency"] != state["account_currency"]]
-    set_reason([r["posting_id"] for r in foreign], "fx_match_pending")
-    same = [r for r in rows if r["currency"] == state["account_currency"]]
-
     txs = conn.execute(
         """SELECT t.* FROM bank_transactions t
             WHERE t.item_key = %s AND t.account_id = %s AND t.amount > 0 AND NOT t.pending
               AND t.removed_at IS NULL AND t.iso_currency_code = %s
               AND NOT EXISTS (SELECT 1 FROM matches m WHERE m.bank_transaction_id = t.transaction_id
                                                          AND m.status = 'accepted')""",
-        (item_key, state["account_id"], state["account_currency"]),
+        (item_key, state["account_id"], account_ccy),
     ).fetchall()
     bills = [
         matching.OpenBill(
@@ -785,7 +788,7 @@ def run_matching(conn: Conn, cfg: AccountingConfig, item_key: str, rules: matchi
             r["supplier_name_norm"],
             r["invoice_number_norm"],
         )
-        for r in same
+        for r in rows
     ]
     bank = [
         matching.BankTx(
@@ -799,61 +802,114 @@ def run_matching(conn: Conn, cfg: AccountingConfig, item_key: str, rules: matchi
         )
         for t in txs
     ]
+    foreign = {b.currency for b in bills if b.currency != account_ccy}
     dismissed = conn.execute("SELECT invoice_id, bank_transaction_id FROM matches WHERE status = 'dismissed'")
     excluded = frozenset((str(r["invoice_id"]), r["bank_transaction_id"]) for r in dismissed.fetchall())
-    decision = matching.decide(bills, bank, rules, excluded)
-    by_invoice = {str(r["invoice_id"]): r for r in same}
-
-    for bill, tx, ev in decision.accepted:
-        _save_match(conn, bill, tx, ev, "accepted")
-        conn.execute(
-            "UPDATE matches SET status = 'dismissed' WHERE invoice_id = %s AND status = 'candidate'", (bill.invoice_id,)
-        )
-        set_reason([by_invoice[bill.invoice_id]["posting_id"]], "payment_pending")
-        db.log(
-            conn,
-            step="match",
-            level="info",
-            message="bank transaction matched",
-            invoice_id=bill.invoice_id,
-            channel="system",
-            details={
-                "difference": str(ev.difference),
-                "days": ev.days_from_invoice,
-                "name_similarity": ev.name_similarity,
-                "rule_version": matching.RULE_VERSION,
-            },
-        )
-    for invoice_id, found in decision.ambiguous.items():
-        bill = next(b for b in bills if b.invoice_id == invoice_id)
-        for tx, ev in found:
-            _save_match(conn, bill, tx, ev, "candidate")
-        set_reason([by_invoice[invoice_id]["posting_id"]], "ambiguous_match")
-        db.log(
-            conn,
-            step="match",
-            level="warning",
-            message="several possible bank transactions",
-            invoice_id=invoice_id,
-            channel="system",
-            details={"candidates": len(found)},
-        )
-        candidates = ", ".join(tx.transaction_id for tx, _ in found)
-        _open_review(conn, invoice_id, "matching", "ambiguous_match", f"candidate bank transactions: {candidates}")
-    set_reason([by_invoice[i]["posting_id"] for i in decision.unmatched], "no_match_yet")
-
+    decision = matching.decide(bills, bank, rules, excluded, fx.lookup(conn, account_ccy, foreign))
+    by_invoice = {b.invoice_id: (b, r["posting_id"]) for b, r in zip(bills, rows, strict=True)}
+    _apply_decision(conn, decision, by_invoice, fx.not_quoted(conn, account_ccy, foreign))
     return {
-        "account_currency": state["account_currency"],
+        "account_currency": account_ccy,
         "open_bills": len(rows),
-        "fx_match_pending": len(foreign),
+        "foreign_currency_bills": sum(1 for b in bills if b.currency != account_ccy),
         "accepted": len(decision.accepted),
         "ambiguous": len(decision.ambiguous),
+        "fx_review": len(decision.fx_review),
         "unmatched": len(decision.unmatched),
         "payments_due": payments_due(conn, cfg),
     }
 
 
+def _set_reason(conn: Conn, posting_ids: list[int], reason: str) -> None:
+    if posting_ids:
+        conn.execute(
+            "UPDATE accounting_postings SET payment_reason = %s WHERE id = ANY(%s) "
+            "AND payment_reason IS DISTINCT FROM %s",
+            (reason, posting_ids, reason),
+        )
+
+
+def _apply_decision(
+    conn: Conn, decision: matching.Decision, by_invoice: dict[str, tuple[matching.OpenBill, int]], not_quoted: set[str]
+) -> None:
+    for bill, tx, ev in decision.accepted:
+        _accept(conn, bill, tx, ev, by_invoice[bill.invoice_id][1])
+    for invoice_id, found in decision.ambiguous.items():
+        _for_person(conn, by_invoice[invoice_id], "ambiguous_match", found)
+    for invoice_id, (code, found) in decision.fx_review.items():
+        _for_person(conn, by_invoice[invoice_id], code, found)
+    for invoice_id in decision.unmatched:
+        bill, posting_id = by_invoice[invoice_id]
+        # A currency the rate provider doesn't quote can never be matched by rule: said so on the bill
+        _set_reason(conn, [posting_id], "fx_rate_unavailable" if bill.currency in not_quoted else "no_match_yet")
+
+
+def _accept(conn: Conn, bill: matching.OpenBill, tx: matching.BankTx, ev: matching.Evaluation, posting_id: int) -> None:
+    _save_match(conn, bill, tx, ev, "accepted")
+    conn.execute(
+        "UPDATE matches SET status = 'dismissed' WHERE invoice_id = %s AND status = 'candidate'", (bill.invoice_id,)
+    )
+    _set_reason(conn, [posting_id], "payment_pending")
+    details: dict[str, Any] = {
+        "difference": str(ev.difference),
+        "days": ev.days_from_invoice,
+        "name_similarity": ev.name_similarity,
+        "rule_version": matching.RULE_VERSION,
+    }
+    if ev.fx_rate:
+        details |= {"fx_rate": str(ev.fx_rate.rate), "fx_rate_date": ev.fx_rate.rate_date.isoformat()}
+    db.log(
+        conn,
+        step="match",
+        level="info",
+        message="bank transaction matched",
+        invoice_id=bill.invoice_id,
+        channel="system",
+        details=details,
+    )
+
+
+def _for_person(
+    conn: Conn, bill_posting: tuple[matching.OpenBill, int], code: str, found: list[tuple[matching.BankTx, Any]]
+) -> None:
+    """Candidates kept, nothing paid: a person confirms one transaction or none (review stage matching)."""
+    bill, posting_id = bill_posting
+    for tx, ev in found:
+        _save_match(conn, bill, tx, ev, "candidate")
+    _set_reason(conn, [posting_id], code)
+    if code == "ambiguous_match":
+        db.log(
+            conn,
+            step="match",
+            level="warning",
+            message="several possible bank transactions",
+            invoice_id=bill.invoice_id,
+            channel="system",
+            details={"candidates": len(found)},
+        )
+        detail = "candidate bank transactions: " + ", ".join(tx.transaction_id for tx, _ in found)
+    else:
+        detail = "; ".join(fx_detail(bill.amount, bill.currency, tx, ev) for tx, ev in found)
+    _open_review(conn, bill.invoice_id, "matching", code, detail)
+
+
+def fx_detail(amount: Decimal, currency: str, tx: matching.BankTx, ev: matching.Evaluation) -> str:
+    """Expected vs actual for a person, e.g. "2026-11-24 bank 1760.00 USD, expected 1748.72 USD
+    (1598.61 EUR × 1.0939, ECB 2026-11-23), +0.65 %"."""
+    bank = f"{tx.date.isoformat()} bank {ev.bank_amount} {ev.bank_currency}"
+    if ev.fx_rate is None or ev.expected_bank_amount is None or ev.difference is None:
+        why = "rate older than allowed" if ev.fx_status == "stale_rate" else f"no {fx.PROVIDER.upper()} rate"
+        return f"{bank}, {why} for {currency}"
+    pct = (ev.difference / ev.expected_bank_amount * 100).quantize(Decimal("0.01"))
+    return (
+        f"{bank}, expected {ev.expected_bank_amount} {ev.bank_currency} ({amount.normalize():f} {currency} × "
+        f"{ev.fx_rate.rate.normalize():f}, {fx.PROVIDER.upper()} {ev.fx_rate.rate_date.isoformat()}), "
+        f"{'+' if pct > 0 else ''}{pct} %"
+    )
+
+
 def _save_match(conn: Conn, bill: matching.OpenBill, tx: matching.BankTx, ev: matching.Evaluation, status: str) -> None:
+    rate = ev.fx_rate
     values = (
         bill.invoice_id,
         tx.transaction_id,
@@ -862,6 +918,10 @@ def _save_match(conn: Conn, bill: matching.OpenBill, tx: matching.BankTx, ev: ma
         ev.bank_amount,
         ev.difference,
         bill.currency,
+        ev.bank_currency or bill.currency,
+        rate.rate if rate else None,
+        rate.rate_date if rate else None,
+        ev.expected_bank_amount,
         ev.days_from_invoice,
         ev.name_similarity,
         ev.invoice_number_found,
@@ -871,8 +931,9 @@ def _save_match(conn: Conn, bill: matching.OpenBill, tx: matching.BankTx, ev: ma
     on_conflict = "DO UPDATE SET status = 'accepted'" if status == "accepted" else "DO NOTHING"
     conn.execute(
         f"""INSERT INTO matches (invoice_id, bank_transaction_id, status, invoice_amount, bank_amount, difference,
-                                 currency, days_from_invoice, name_similarity, invoice_number_found, rule_version)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                 currency, bank_currency, fx_rate, fx_rate_date, expected_bank_amount,
+                                 days_from_invoice, name_similarity, invoice_number_found, rule_version)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (invoice_id, bank_transaction_id) {on_conflict}""",
         values,
     )
@@ -895,35 +956,55 @@ def payments_due(conn: Conn, cfg: AccountingConfig) -> list[Row]:
         {"max": cfg.max_attempts, "lease": cfg.lease_minutes},
     ).fetchall()
     rows.sort(key=lambda r: r["id"])
-    out = []
-    for m in rows:
-        applied = min(m["bank_amount"], m["bill_amount"])  # never apply more than the bill amount
-        out.append(
-            {
-                "match_id": m["id"],
-                "invoice_id": str(m["invoice_id"]),
-                "request_id": f"ap-billpay-{m['id']}",
-                "doc_number": payment_doc_number(m["id"]),
-                "doc_number_q": postings.qbo_quote(payment_doc_number(m["id"])),
-                "vendor_external_id": m["vendor_external_id"],
-                "bank_amount": str(m["bank_amount"]),
-                "bill_amount": str(m["bill_amount"]),
-                "difference": str(m["difference"]),
-                "document": {
-                    "VendorRef": {"value": m["vendor_external_id"]},
-                    "DocNumber": payment_doc_number(m["id"]),  # found again after a crash (see lookup)
-                    "PayType": "Check",
-                    "CheckPayment": {"BankAccountRef": {"value": cfg.bank_account_id}, "PrintStatus": "NotSet"},
-                    "CurrencyRef": {"value": m["currency"]},
-                    "TotalAmt": float(applied),
-                    "TxnDate": m["tx_date"].isoformat(),
-                    "PrivateNote": f"AP Automation · bank transaction {m['bank_transaction_id']} · "
-                    f"bank amount {m['bank_amount']} {m['currency']}",
-                    "Line": [{"Amount": float(applied), "LinkedTxn": [{"TxnId": m["bill_id"], "TxnType": "Bill"}]}],
-                },
-            }
-        )
-    return out
+    return [_payment_work(cfg, m) for m in rows]
+
+
+def _is_fx(m: Row) -> bool:
+    return bool(m["bank_currency"] != m["currency"])
+
+
+def _applied(m: Row) -> Decimal:
+    """Amount of the bill the payment settles, in the bill's currency. Same currency: the bank amount,
+    never more than the bill. Another currency: the whole bill; the rate carries the difference, which
+    is an exchange gain or loss (posted by QuickBooks), never a payment difference."""
+    bill: Decimal = m["invoice_amount"]
+    return bill if _is_fx(m) else min(m["bank_amount"], bill)
+
+
+def _payment_work(cfg: AccountingConfig, m: Row) -> dict[str, Any]:
+    applied = _applied(m)
+    number = payment_doc_number(m["id"])
+    bank_amount = matching.round_to_currency(m["bank_amount"], m["bank_currency"])
+    note = f"AP Automation · bank transaction {m['bank_transaction_id']} · bank amount {bank_amount} "
+    document: dict[str, Any] = {
+        "VendorRef": {"value": m["vendor_external_id"]},
+        "DocNumber": number,  # found again after a crash (see lookup)
+        "PayType": "Check",
+        "CheckPayment": {"BankAccountRef": {"value": cfg.bank_account_id}, "PrintStatus": "NotSet"},
+        "CurrencyRef": {"value": m["currency"]},
+        "TotalAmt": float(applied),
+        "TxnDate": m["tx_date"].isoformat(),
+        "PrivateNote": note + m["bank_currency"],
+        "Line": [{"Amount": float(applied), "LinkedTxn": [{"TxnId": m["bill_id"], "TxnType": "Bill"}]}],
+    }
+    work: dict[str, Any] = {
+        "match_id": m["id"],
+        "invoice_id": str(m["invoice_id"]),
+        "request_id": f"ap-billpay-{m['id']}",
+        "doc_number": number,
+        "doc_number_q": postings.qbo_quote(number),
+        "vendor_external_id": m["vendor_external_id"],
+        "bank_amount": str(m["bank_amount"]),
+        "bill_amount": str(m["bill_amount"]),
+        "difference": None if m["difference"] is None else str(m["difference"]),
+        "document": document,
+    }
+    if _is_fx(m):
+        pr = fx.payment_rate(applied, m["bank_amount"], m["bank_currency"])
+        document["ExchangeRate"] = float(pr.rate)
+        document["PrivateNote"] += f" at {pr.rate:f} {m['currency']}/{m['bank_currency']}"
+        work |= {"exchange_rate": f"{pr.rate:f}", "booked_bank_amount": str(pr.booked)}
+    return work
 
 
 def payment_doc_number(match_id: int) -> str:
@@ -984,8 +1065,8 @@ def record_payment(conn: Conn, match_id: int, external_payment_id: str, executio
         "payment_claimed_until = NULL, payment_last_error = NULL WHERE id = %s",
         (external_payment_id, match_id),
     )
-    applied = min(m["bank_amount"], m["invoice_amount"])
-    exact = m["difference"] == 0
+    applied = _applied(m)
+    exact = _is_fx(m) or m["difference"] == 0  # an FX difference is an exchange gain or loss
     conn.execute(
         """UPDATE accounting_postings SET payment_status = %s, payment_reason = %s, amount_paid = %s
             WHERE invoice_id = %s""",
@@ -1008,8 +1089,37 @@ def record_payment(conn: Conn, match_id: int, external_payment_id: str, executio
     )
     invoice_id = str(m["invoice_id"])
     effect_recorded(conn, invoice_id, "payment")  # a confirmed match waited for this payment
-    _settle_difference(conn, m, invoice_id, execution_id)
+    if _is_fx(m):
+        _check_booked_amount(conn, m, invoice_id, execution_id)
+    else:
+        _settle_difference(conn, m, invoice_id, execution_id)
     return _posting_of(conn, m["invoice_id"])
+
+
+def _check_booked_amount(conn: Conn, m: Row, invoice_id: str, execution_id: str | None) -> None:
+    """QuickBooks keeps 7 decimals of the rate: on a large bill the bank account can be credited a few
+    cents more or less than the bank amount. Reported, never adjusted silently."""
+    pr = fx.payment_rate(m["invoice_amount"], m["bank_amount"], m["bank_currency"])
+    if pr.gap == 0:
+        return
+    db.log(
+        conn,
+        step="match",
+        level="warning",
+        message="bank amount not booked to the cent",
+        invoice_id=invoice_id,
+        channel="system",
+        execution_id=execution_id,
+        details={
+            "bank_amount": str(m["bank_amount"]),
+            "booked": str(pr.booked),
+            "gap": str(pr.gap),
+            "currency": m["bank_currency"],
+            "exchange_rate": f"{pr.rate:f}",
+            "match_id": m["id"],
+            "note": "QuickBooks keeps 7 decimals of an exchange rate; adjust the bank account by hand",
+        },
+    )
 
 
 def _settle_difference(conn: Conn, m: Row, invoice_id: str, execution_id: str | None) -> None:

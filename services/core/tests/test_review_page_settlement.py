@@ -92,3 +92,20 @@ def test_a_quickbooks_failure_shows_the_error_and_only_a_retry(page):
     r = c.post(f"/items/{rid}", data={"csrf": csrf(c), "action": "retry", "retry.note": "vendor renamed"})
     assert r.status_code == 303
     assert "Waiting for QuickBooks: bill posting" in c.get(f"/items/{rid}").text
+
+
+def test_an_fx_amount_difference_shows_expected_and_actual(page):
+    from .test_fx_matching import ECB_EUR, answer, eur_bill, eur_payment
+
+    c, cfg = page
+    register_bank(cfg)
+    inv = eur_bill(cfg)
+    answer("EUR", 200, ECB_EUR)
+    bank_page(cfg, eur_payment(1900.00))
+    run(cfg)
+    html = c.get(f"/items/{review(cfg, inv)['id']}").text
+    assert radios(html) == [("confirm_match", "checked"), ("reject_match", "")]
+    text = text_of(html)
+    assert "differs from the bill converted at the reference rate" in text
+    assert "1,900.00 USD (expected 1,748.72 USD at 1.0939 (ECB 2026-11-23), difference 151.28)" in text
+    assert "The whole bill is paid in QuickBooks at the rate of the bank amount" in text

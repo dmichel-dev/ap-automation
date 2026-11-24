@@ -24,7 +24,7 @@ from typing import Any, Literal
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import db, postings, review
+from . import db, matching, postings, review
 from .accounting import AccountingConfig, Conflict, NotFound, Waiting, effect_recorded, quickbooks_failed
 
 Closes = Literal["approved", "rejected", "written_off"]
@@ -137,7 +137,7 @@ def _confirm_match(conn: db.Conn, item: db.Row, choice: MatchChoice) -> None:
         "match_id": m["id"],
         "bank_transaction_id": choice.bank_transaction_id,
         "bank_amount": str(m["bank_amount"]),
-        "difference": str(m["difference"]),
+        "difference": None if m["difference"] is None else str(m["difference"]),
     }
     _record(conn, item, choice, decision, "approved", waiting_for="payment")
     for other in {o["invoice_id"] for o in others}:
@@ -154,8 +154,8 @@ def _close_if_no_candidate_left(conn: db.Conn, invoice_id: Any, decided: db.Row,
         return
     conn.execute(
         """UPDATE accounting_postings SET payment_reason = 'no_match_yet'
-            WHERE invoice_id = %s AND payment_reason = 'ambiguous_match'""",
-        (invoice_id,),
+            WHERE invoice_id = %s AND payment_reason = ANY(%s)""",
+        (invoice_id, list(matching.CANDIDATE_REVIEW_CODES)),
     )
     other = conn.execute(
         """SELECT * FROM review_queue WHERE invoice_id = %s AND status = 'open' AND stage = 'matching'

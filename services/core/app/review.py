@@ -25,7 +25,7 @@ from typing import Any, Literal
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import db, qbo_reference
+from . import db, matching, qbo_reference
 from .accounting import Conflict, NotFound
 from .models import CommonInvoice, DateInfo, ExtractionMeta, InvoiceLine, Issue, Normalized, Party, TaxLine
 from .normalize import normalize_invoice_number, normalize_supplier_name, normalize_tax_id
@@ -135,7 +135,7 @@ def actions(item: db.Row) -> list[Action]:
         return ["approve", "correct", "reject"]
     if item.get("effect_error") or item["stage"] == "posting":
         return ["retry"]
-    if "ambiguous_match" in codes:
+    if codes & set(matching.CANDIDATE_REVIEW_CODES):
         return ["confirm_match", "reject_match"]
     if "payment_difference" in codes:
         return ["write_off", "keep_open"]
@@ -270,7 +270,8 @@ def _payment(conn: db.Conn, invoice_id: Any) -> dict[str, Any] | None:
         return None
     matches = conn.execute(
         """SELECT m.id, m.status, m.bank_transaction_id, m.invoice_amount, m.bank_amount, m.difference,
-                  m.currency, m.days_from_invoice, m.name_similarity, m.invoice_number_found,
+                  m.currency, m.bank_currency, m.fx_rate, m.fx_rate_date, m.expected_bank_amount,
+                  m.days_from_invoice, m.name_similarity, m.invoice_number_found,
                   m.external_payment_id, m.payment_last_error, t.date, t.name AS bank_text, t.merchant_name
              FROM matches m JOIN bank_transactions t ON t.transaction_id = m.bank_transaction_id
             WHERE m.invoice_id = %s AND m.status IN ('candidate', 'accepted')
@@ -282,7 +283,8 @@ def _payment(conn: db.Conn, invoice_id: Any) -> dict[str, Any] | None:
     ).fetchone()
     under_paid = posting["payment_status"] == "paid_with_difference" and posting["amount_paid"] < posting["amount"]
     open_amount = posting["amount"] - posting["amount_paid"] if under_paid else None
-    return {"posting": posting, "matches": matches, "write_off": write_off, "open_amount": open_amount}
+    fx = any(m["bank_currency"] != m["currency"] for m in matches)  # the bank pays in another currency
+    return {"posting": posting, "matches": matches, "write_off": write_off, "open_amount": open_amount, "fx": fx}
 
 
 def list_items(conn: db.Conn, scope: Scope, status: str = "open", limit: int = 100) -> list[dict[str, Any]]:

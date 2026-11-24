@@ -174,7 +174,7 @@
     {% if pay.posting.amount_written_off %}<div><dt>Written off</dt><dd class="num">{{ pay.posting.amount_written_off | money(pay.posting.currency) }}</dd></div>{% endif %}
   </dl>
   {% set accepted = pay.matches | selectattr("status", "equalto", "accepted") | list %}
-  {% for m in accepted %}<p class="hint">Paid by bank transaction of {{ m.date }} “{{ m.bank_text }}”, {{ m.bank_amount | money(m.currency) }}{% if m.external_payment_id %}, bill payment {{ m.external_payment_id }} in QuickBooks{% endif %}.</p>{% endfor %}
+  {% for m in accepted %}<p class="hint">Paid by bank transaction of {{ m.date }} “{{ m.bank_text }}”, {{ m.bank_amount | money(m.bank_currency) }}{% if m.external_payment_id %}, bill payment {{ m.external_payment_id }} in QuickBooks{% endif %}.</p>{% endfor %}
 </section>
 {% endif %}
 {% if is_open and item.waiting_for %}
@@ -285,12 +285,12 @@
         <fieldset class="sub">
           <legend>Which bank transaction pays this bill?</legend>
           {% for m in pay.matches if m.status == "candidate" %}
-          <label class="opt"><input type="radio" name="confirm_match.bank_transaction_id" value="{{ m.bank_transaction_id }}" data-required-for="confirm_match"> {{ m.date }} · “{{ m.bank_text }}” · <span class="num">{{ m.bank_amount | money(m.currency) }}</span>{% if m.difference | float %} <span class="muted">(difference {{ m.difference | money }})</span>{% endif %}</label>
+          <label class="opt"><input type="radio" name="confirm_match.bank_transaction_id" value="{{ m.bank_transaction_id }}" data-required-for="confirm_match"> {{ m.date }} · “{{ m.bank_text }}” · <span class="num">{{ m.bank_amount | money(m.bank_currency) }}</span>{% if m.bank_currency != m.currency %} <span class="muted">({% if m.expected_bank_amount %}expected {{ m.expected_bank_amount | money(m.bank_currency) }} at {{ m.fx_rate | number }} (ECB {{ m.fx_rate_date }}), difference {{ m.difference | money }}{% else %}no exchange rate to compare{% endif %})</span>{% elif m.difference | float %} <span class="muted">(difference {{ m.difference | money }})</span>{% endif %}</label>
           {% endfor %}
         </fieldset>
         <label for="confirm_match-note">Note, optional</label>
         <textarea name="confirm_match.note" id="confirm_match-note" maxlength="1000" rows="2"></textarea>
-        <p class="hint">The bill payment is recorded in QuickBooks for the bank amount, never more than the bill. No money is sent.</p>
+        <p class="hint">{% if pay.fx %}The whole bill is paid in QuickBooks at the rate of the bank amount; QuickBooks posts the exchange gain or loss.{% else %}The bill payment is recorded in QuickBooks for the bank amount, never more than the bill.{% endif %} No money is sent.</p>
       </div>
       {% endif %}
       {% if "reject_match" in item.actions %}

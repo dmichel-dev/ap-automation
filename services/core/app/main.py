@@ -31,6 +31,8 @@ Accounting and bank (n8n does the QuickBooks/Plaid calls; the core keeps state a
   PUT  /bank/accounts/{item_key}         the bank account used for matching
   GET  /bank/sync-state/{item_key}       cursor for Plaid /transactions/sync
   POST /bank/sync-page/{item_key}        one page of /transactions/sync
+  GET  /fx/needs/{item_key}              exchange-rate series to fetch before matching (Frankfurter, ECB)
+  POST /fx/rates                         Frankfurter answers → rates stored, "not quoted", or retried
   POST /matching/run/{item_key}          deterministic matching → payments to record (leased)
   POST /matches/{id}/payment             payment recorded in the accounting system
   POST /matches/{id}/lookup              QuickBooks BillPayment search → reuse / create
@@ -59,6 +61,7 @@ from . import (
     db,
     e2e_test,
     files,
+    fx,
     intake,
     intake_failures,
     matching,
@@ -213,6 +216,8 @@ def get_rules() -> matching.Rules:
         days_after_due=s.match_days_after_due,
         default_terms_days=s.match_default_terms_days,
         min_name_similarity=s.match_name_min_similarity,
+        fx_pct_tolerance=Decimal(s.match_fx_pct_tolerance),
+        fx_max_rate_age_days=s.match_fx_max_rate_age_days,
     )
 
 
@@ -501,6 +506,29 @@ def bank_sync_page(item_key: str, body: SyncPage, cfg: AcctCfg) -> JsonDict:
         return accounting.store_sync_page(
             conn, item_key, body.added, body.modified, body.removed, body.next_cursor, body.has_more
         )
+
+
+@app.get("/fx/needs/{item_key}", dependencies=Auth)
+def fx_needs(item_key: str, cfg: AcctCfg, rules: Annotated[matching.Rules, Depends(get_rules)]) -> JsonDict:
+    with db.connect(cfg.database_url) as conn:
+        return accounting.fx_needs(conn, item_key, rules, date.today())
+
+
+class FxAnswer(BaseModel):
+    base: str = Field(pattern=r"^[A-Z]{3}$")
+    quote: str = Field(pattern=r"^[A-Z]{3}$")
+    status_code: int = 0  # 0: no answer (network failure)
+    body: Any = None
+
+
+class FxAnswers(BaseModel):
+    answers: list[FxAnswer] = Field(max_length=50)
+
+
+@app.post("/fx/rates", dependencies=Auth)
+def fx_rates(body: FxAnswers, cfg: AcctCfg) -> JsonDict:
+    with db.connect(cfg.database_url) as conn:
+        return fx.store_answers(conn, [a.model_dump() for a in body.answers])
 
 
 @app.post("/matching/run/{item_key}", dependencies=Auth)

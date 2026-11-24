@@ -1,0 +1,7 @@
+{
+  "note": "Custom Plaid sandbox transaction for foreign-currency matching (scripts/plaid_sandbox.py transactions FILE). Positive amount = money out of the USD account. Created after bill AV-2026-0147 (1,598.61 EUR) is posted.",
+  "transactions": [
+    {"amount": 1760.00, "date": "2026-11-24", "description": "ATELIERS VERLIBREUX SEPA",
+     "expect": "accepted: 1,598.61 EUR × ECB rate of 2026-11-23 or 24 is about 1,749 USD, within 3 % → bill payment of 1,598.61 EUR at 1.1009565, Checking credited exactly 1,760.00 USD, exchange loss posted by QuickBooks"}
+  ]
+}

@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     match_days_after_due: int = 30
     match_default_terms_days: int = 30  # when the invoice has no due date
     match_name_min_similarity: float = 0.6
+    match_fx_pct_tolerance: str = "0.03"  # 3 % of the bill converted at the reference rate
+    match_fx_max_rate_age_days: int = 4  # a rate older than this before the transaction can't be used
 
 
 @lru_cache
