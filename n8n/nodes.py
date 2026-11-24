@@ -199,6 +199,19 @@ def qbo_send(node: Node, body: str) -> Node:
     return node
 
 
+def gmail(name: str, parameters: dict[str, Any], **extra: Any) -> Node:
+    """A Gmail node on the AP mailbox's OAuth credential."""
+    return {
+        "name": name,
+        "type": "n8n-nodes-base.gmail",
+        "typeVersion": 2.1,
+        "position": AUTO,
+        **extra,
+        "parameters": parameters,
+        "credentials": {"gmailOAuth2": "GMAIL"},
+    }
+
+
 def postgres_query(name: str, pos: list[int], sql: str, replacements: list[str]) -> Node:
     """A parameterized statement on the AP database ($1, $2… filled from the expressions, never inlined)."""
     return {

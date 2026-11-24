@@ -20,6 +20,7 @@ BUILDERS = (
     "build_sync_reference",
     "build_run_now",
     "build_error_log",
+    "build_daily_summary",
 )
 Box = tuple[int, int, int, int]  # x, y, width, height
 GAP = 20  # minimum free space between two nodes

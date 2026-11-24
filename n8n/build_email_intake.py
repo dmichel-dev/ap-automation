@@ -24,6 +24,7 @@ from nodes import (
     code_node,
     condition,
     core_call,
+    gmail,
     if_node,
     lay_out,
     main,
@@ -148,18 +149,6 @@ def switch(name: str, position: list[int], rules: list[dict[str, Any]], options:
         "typeVersion": 3.2,
         "position": position,
         "parameters": {"rules": {"values": rules}, "options": options},
-    }
-
-
-def gmail(name: str, parameters: dict[str, Any], **extra: Any) -> Node:
-    return {
-        "name": name,
-        "type": "n8n-nodes-base.gmail",
-        "typeVersion": 2.1,
-        "position": AUTO,
-        **extra,
-        "parameters": parameters,
-        "credentials": {"gmailOAuth2": "GMAIL"},
     }
 
 
