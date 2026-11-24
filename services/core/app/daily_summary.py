@@ -97,7 +97,8 @@ def _posted(conn: db.Conn, period: dict[str, datetime]) -> dict[str, int]:
         db.one(
             conn,
             """SELECT count(*) FILTER (WHERE p.object_type = 'bill') AS bills,
-                      count(*) FILTER (WHERE p.object_type = 'vendor_credit') AS credits
+                      count(*) FILTER (WHERE p.object_type = 'vendor_credit') AS credits,
+                      count(*) FILTER (WHERE i.received_at <= %(start)s) AS received_earlier
                  FROM accounting_postings p JOIN invoices i ON i.id = p.invoice_id
                 WHERE i.scope = 'live' AND p.status = 'posted'
                   AND p.posted_at > %(start)s AND p.posted_at <= %(end)s""",
@@ -202,14 +203,18 @@ def invoices_section(f: dict[str, Any]) -> Section | None:
         )
     if posted["bills"] or posted["credits"]:
         kinds = [(posted["bills"], "bill"), (posted["credits"], "credit note")]
-        lines.append("Posted to QuickBooks: " + ", ".join(_plural(n, word) for n, word in kinds if n))
+        earlier = f", incl. {posted['received_earlier']} received earlier" if posted["received_earlier"] else ""
+        lines.append("Posted to QuickBooks: " + ", ".join(_plural(n, word) for n, word in kinds if n) + earlier)
     if f["payments"]:
         lines.append(f"Payments matched and recorded: {f['payments']}")
     for w in f["write_offs"]:
         lines.append(f"Written off: {w['currency']} {_money(w['amount'])} ({_plural(w['count'], 'bill')})")
     if inv["touchless_base"]:
         rate = round(100 * inv["touchless"] / inv["touchless_base"])
-        lines.append(f"Touchless: {rate}% ({inv['touchless']} of {inv['touchless_base']} posted with no review)")
+        lines.append(
+            f"Touchless: {rate}% ({inv['touchless']} of {_plural(inv['touchless_base'], 'invoice')} received"
+            " went to QuickBooks with no review)"
+        )
     return Section("Invoices", lines) if lines else None
 
 

@@ -99,7 +99,7 @@ def test_touchless_rate_counts_unreadable_but_not_non_invoices_or_resent_files(m
     # base: T-1, T-2, R-1, D-1, P-1, U-1 (N-1 not an invoice, F-1 the same file twice: left out)
     # touchless: T-1, T-2 (R-1 was reviewed, D-1 waits for review, P-1 not posted, U-1 unreadable)
     assert (inv["touchless"], inv["touchless_base"]) == (2, 6)
-    assert "Touchless: 33% (2 of 6 posted with no review)" in email(mixed_day)["text"]
+    assert "Touchless: 33% (2 of 6 invoices received went to QuickBooks with no review)" in email(mixed_day)["text"]
 
 
 def test_a_matching_review_does_not_count_against_touchless(acfg):
@@ -130,8 +130,17 @@ def test_the_period_is_the_last_24_hours(acfg):
 def test_posted_counts_bills_and_credit_notes_posted_in_the_period(mixed_day):
     posted_bill(mixed_day, number="CN-1", document_type="credit_note", lines=("-10.00",), taxes=(), total="-10.00")
     # T-1, T-2, R-1 and the credit note; OLD-1 was posted two days ago, E2E-1 is test data
-    assert figures(mixed_day)["posted"] == {"bills": 3, "credits": 1}
+    assert figures(mixed_day)["posted"] == {"bills": 3, "credits": 1, "received_earlier": 0}
     assert "Posted to QuickBooks: 3 bills, 1 credit note" in email(mixed_day)["text"]
+
+
+def test_posted_says_how_many_were_received_before_the_period(acfg):
+    today = posted_bill(acfg, number="B-1")
+    earlier = posted_bill(acfg, number="B-2")
+    sql(acfg, "UPDATE ap.invoices SET received_at = now() - interval '3 days' WHERE id = %s", earlier)
+    text = email(acfg)["text"]
+    assert today and "Posted to QuickBooks: 2 bills, incl. 1 received earlier\n" in text
+    assert "Touchless: 100% (1 of 1 invoice received went to QuickBooks with no review)" in text
 
 
 def test_a_kind_with_nothing_posted_is_not_mentioned(acfg):
