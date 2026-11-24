@@ -7,7 +7,7 @@ All checks are deterministic Python ([`validation.py`](../services/core/app/vali
 | Status | When | What happens next |
 |---|---|---|
 | `rejected` | **Only when a human could do nothing with it:** not an invoice, unreadable (no text), exact duplicate file (same SHA-256) | Logged with the reason; the file isn't kept |
-| `needs_review` | Anything a human can check or fix | Review item opened (Day 3: approve / correct / reject) |
+| `needs_review` | Anything a human can check or fix | Review item opened: approve, correct or reject on the [review page](review.md) |
 | `ready` | Every check passed | Posted to QuickBooks automatically (bill + original file) |
 
 ## Checks
@@ -89,7 +89,7 @@ confidence = OCR page-average confidence × required-field completeness
 - Both parts are stored separately (`ocr_confidence_avg`, `confidence_completeness`) so reviewers can see why a score is low. The threshold in force at the time is stored too (`confidence_threshold`).
 - An ambiguous but printed date counts as present for completeness, since it's reported separately as `ambiguous_date`.
 - The OCR *minimum* page score is stored but not used. It was 0.13–0.41 even on clean documents.
-- **The threshold (0.85, `CONFIDENCE_THRESHOLD`) is provisional.** It will be calibrated on the test set on Day 3.
+- **Threshold: 0.85** (`CONFIDENCE_THRESHOLD`), kept after a first calibration on the invoices processed so far; the full calibration comes with the larger test set. The score measures how well the page was read, not whether the data is right: see [calibration](calibration.md).
 
 ## Possible bank-detail change (fraud alert)
 
