@@ -15,6 +15,7 @@ Defined in [`db/migrations/`](../db/migrations). Migrations run as the `ap_app` 
 | `bank_transactions` | Plaid transactions as received; **positive amount = money out** |
 | `matches` | Invoice ↔ bank transaction: `accepted` (used for a payment), `candidate` (ambiguous, for review), `dismissed` (never proposed again for that bill) |
 | `write_offs` | The open part of an under-paid bill, written off by a reviewer: amount, who decided, the vendor credit and the bill payment applying it in QuickBooks (`AP-WO-<id>`), attempts and the last error. `recorded` only with both QuickBooks IDs |
+| `intake_failures` | One per email that could not be processed: `waiting` (the re-check retries it, with backoff), `given_up` (a person looks) or `resolved`; attempts, next attempt, last error code and stage, whether it is permanent. See [operations](operations.md#errors-and-retries) |
 | `run_requests` | Every "Run now" request, allowed or refused: target, outcome, time and, for a request that ran, the SHA-256 of its signature (a signature is accepted once). Never the token |
 | `qbo_accounts`, `qbo_vendors` | Copy of the QuickBooks chart of accounts and vendor list, refreshed hourly by the sync workflow; a row missing from the latest sync is kept as inactive |
 | `supplier_defaults` | Supplier → default account, set by a reviewer on the supplier's first confirmed invoice (`source` = `reviewer`, or `test_setup` for the e2e test suppliers) |

@@ -118,6 +118,55 @@ Roles: `reviewer` and `admin` work on `live` (or `e2e`) data and sign in only on
 
 Used once on 2026-11-22 for invoice `f6a94cb0-…` (BW-1042, Step 5 test of Day 1): its fictional supplier name was too close to a real company and was renamed in the test set, and it has the same amount as the renamed invoice, so posting it would also confuse bank matching.
 
+## Errors and retries
+
+Every failure is either **temporary** (tried again on its own) or **permanent** (a person looks at once). The core decides, from what the workflow saw; n8n only reports it.
+
+| Where | Temporary: retried | Permanent: a person looks |
+|---|---|---|
+| Email intake | OCR service timeout, rate limit (429) or server error (5xx), after its own 3 tries; core unreachable, restarting or 5xx (e.g. its database restarting); n8n timed out waiting; Gmail download failed | The OCR service refuses the file (damaged, password-protected, too large) or its answer can't be read; the OCR API key is rejected; the core refuses n8n's token |
+| QuickBooks (bill, vendor credit, payment, write-off) | Network error, 401 (token refresh), 425, 429, 5xx | Validation errors (other 4xx), duplicate in QuickBooks, vendor in another currency, closed period, attempts used up → review item with QuickBooks' error and **Try again** |
+
+### Failed emails: the AP/Error re-check
+
+- A failed email is labelled **AP/Error** (not AP/Processed), logged by n8n (step `core_call`) and reported to the core (`POST /intake/failures`), which records it in `intake_failures` (one row per email) and answers `waiting` or `given_up`.
+- **Every 15 minutes** the email workflow lists AP/Error emails from the last 14 days and asks the core which are due (`POST /intake/failures/due`). Due ones go down the same path as new mail. The core counts each try as an attempt, at most 10 emails per run.
+- **5 attempts over about 17 hours:** the first, then after 15 min, 1 h, 4 h and 12 h. After the fifth, or at once for a permanent failure, the email is **given up**: AP/Processed is added (AP/Error stays) and the log has an `error` entry with the reason in plain language.
+- **An AP/Error email the core never heard of is due at once.** If the core was unreachable when the email failed, n8n could label and log it, but not report it. The re-check finds it by its label and processes it as attempt 1 (code `not_recorded`).
+- **A lost label doesn't lose the email.** The core also hands out due emails that no longer carry AP/Error.
+- **Done:** once an email gets an answer (ready, needs review, rejected, nothing to process), AP/Error is removed and the row is `resolved`. If another attachment of the same email failed in the same run, the failure wins and the email stays for the re-check.
+- **Never a second invoice:** each attachment's `(channel, source_ref)` is unique. Processing an email again returns the stored result (`already_processed`), even when the first run finished in the core but n8n gave up waiting for the answer.
+
+After fixing the cause of a given-up email (e.g. a new `MISTRAL_API_KEY`), give it fresh attempts. The next re-check picks it up:
+
+```bash
+curl -X POST http://core:8000/intake/failures/retry -H "Authorization: Bearer $CORE_API_TOKEN" \
+  -H 'Content-Type: application/json' -d '{"error_code": "provider_auth", "note": "new API key"}'   # or {"message_id": "…"}
+```
+
+### Never twice in QuickBooks
+
+A retry of a QuickBooks call can't create a second document:
+
+| Document | Guard |
+|---|---|
+| Bill / vendor credit | The `accounting_postings` row is created before any call (one per invoice); claims are leased (`SKIP LOCKED`); fixed request ID `ap-bill-<invoice>` / `ap-vc-<invoice>`; searched by its number first, and an existing one is reused; a repeated "posted" answer changes nothing, a different QuickBooks ID is refused |
+| Vendor | Linked vendor reused; otherwise searched by name first; request ID `ap-vendor-<posting>` |
+| Bill payment | At most one accepted match per bill and per bank transaction; number `AP-PAY-<match>` searched first; fixed request ID |
+| Write-off | One per match; number `AP-WO-<id>` searched first (vendor credit and the bill payment applying it); fixed request IDs |
+
+The crash tests (`services/core/tests/test_crash.py`) replay the dangerous cases: QuickBooks created the bill or the payment, then the answer was lost. The retry finds it by its number, and the database still holds one posting.
+
+### Where a person sees failures
+
+- **Gmail:** AP/Error = being retried; AP/Error + AP/Processed = given up.
+- **Review page:** QuickBooks failures with no retry left (`quickbooks_refused`), with **Try again**.
+- **Log** (`processing_log`): step `intake_retry` (each failed attempt, warning; given up, error; recovered, info), `core_call` (what n8n saw), `workflow_error` (a workflow run that failed, see below).
+- **Daily summary:** `GET /intake/failures/summary` lists the given-up emails with their reason, and counts the emails still being retried, the ones recovered and the failed workflow runs in the last 24 hours.
+- **Workflow crashes:** every AP workflow names **AP – Error log** as its error workflow. A run that fails (Gmail or the database unreachable, a missing Gmail label) is written to the log with the workflow, the last node and a short error message. The details stay in n8n's executions list.
+
+Live check (2026-11-24, n8n runs 187 and 188): with the core stopped for under 2 minutes, an email to the alias got AP/Error, n8n's log entry, and no `intake_failures` row (the report to the core failed). After the core started again, the next re-check processed it as attempt 1 (`not_recorded`). It was an exact duplicate of a test file already processed, so it got AP/Rejected + AP/Processed, AP/Error was removed and the row was resolved. Nothing was sent to the OCR service or QuickBooks.
+
 ## Retrying a failed posting
 
 A posting that failed permanently (validation error in QuickBooks, attempts used up) opens a review item, `quickbooks_refused`, that shows QuickBooks' error. After fixing the cause, the reviewer chooses **Try again in QuickBooks** on the review page. Operators can do the same with `POST /postings/{invoice_id}/retry` (`{"note": "…"}`): attempts go back to 0, the item waits for the posting, and the request is logged. The operator retry is refused while a review item for another reason (e.g. `vendor_currency_conflict`) is open: a reviewer decides those.
@@ -148,4 +197,4 @@ python3 n8n/build_bank_sync.py --credentials cred_ids.json \
 docker compose restart n8n
 ```
 
-Workflow IDs: `apEmailIntake001`, `apPostQbo0000001`, `apBankSync000001`, `apSyncQboRef0001`, `apRunNow00000001`. An import leaves the workflow unpublished, so publish it again. Wait until the log says "Finished building workflow dependency index" before calling a webhook (until then it answers 404). `scripts/export_workflow.sh` brings editor changes back for comparison.
+Workflow IDs: `apEmailIntake001`, `apPostQbo0000001`, `apBankSync000001`, `apSyncQboRef0001`, `apRunNow00000001`, `apErrorLog000001` (import it before the others: they name it as their error workflow). An import leaves the workflow unpublished, so publish it again. Wait until the log says "Finished building workflow dependency index" before calling a webhook (until then it answers 404). `scripts/export_workflow.sh` brings editor changes back for comparison.
