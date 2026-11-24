@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Literal
 
-from .. import db
+from .. import actors, db
 from ..review import Scope
 from .security import (
     ATTEMPTS_KEPT,
@@ -65,7 +65,7 @@ class Viewer:
     @property
     def reviewer(self) -> str:
         """How decisions are recorded in the audit trail: the name, and the account that acted."""
-        return f"{self.display_name} (review user {self.user_id})"
+        return actors.person_label(self.display_name, self.user_id)
 
 
 @dataclass(frozen=True)
@@ -227,6 +227,10 @@ def add_user(conn: db.Conn, email: str, display_name: str, role: Role, scope: Sc
         raise UserError(f"a {role} account works on {' or '.join(SCOPES_BY_ROLE[role])} data, not {scope}")
     if not 1 <= len(display_name.strip()) <= 100:
         raise UserError("the display name must have 1 to 100 characters")
+    if actors.takes_automation_name(display_name):
+        raise UserError(
+            "a person's display name can't start with an automation name (" + ", ".join(actors.AUTOMATION_NAMES) + ")"
+        )
     check_password_policy(password, address)
     if conn.execute("SELECT 1 FROM review_users WHERE email = %s", (address,)).fetchone():
         raise UserError(f"{address} already has an account")

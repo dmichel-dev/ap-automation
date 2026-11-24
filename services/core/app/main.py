@@ -38,7 +38,20 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
-from . import accounting, db, files, intake, matching, postings, processing, qbo_reference, review, run_now, settlement
+from . import (
+    accounting,
+    actors,
+    db,
+    files,
+    intake,
+    matching,
+    postings,
+    processing,
+    qbo_reference,
+    review,
+    run_now,
+    settlement,
+)
 from .config import get_settings
 from .extraction import build_common_invoice
 from .models import CommonInvoice
@@ -496,8 +509,16 @@ def review_item(review_id: int, cfg: AcctCfg) -> JsonDict:
         return review.detail(conn, review_id)
 
 
+@app.exception_handler(actors.NotAutomation)
+def _not_automation(_: Request, exc: actors.NotAutomation) -> JSONResponse:
+    return JSONResponse({"error": "not_automation", "message": str(exc)}, status_code=422)
+
+
+# The bearer token is held by automation only (people decide on the review page): every decision sent here
+# is recorded under an automation label, never a person's name (actors.py).
 @app.post("/review/items/{review_id}/approve", dependencies=Auth)
 def review_approve(review_id: int, body: review.Decision, cfg: AcctCfg) -> JsonDict:
+    actors.require_automation(body.reviewer)
     with db.connect(cfg.database_url) as conn:
         review.approve(conn, review_id, body)
         conn.commit()
@@ -507,6 +528,7 @@ def review_approve(review_id: int, body: review.Decision, cfg: AcctCfg) -> JsonD
 @app.post("/review/items/{review_id}/verify", dependencies=Auth)
 def review_verify(review_id: int, body: review.Decision, cfg: AcctCfg) -> JsonDict:
     """Fraud items: confirmed with the supplier through a known contact; the note says how."""
+    actors.require_automation(body.reviewer)
     with db.connect(cfg.database_url) as conn:
         review.approve(conn, review_id, body, action="verify")
         conn.commit()
@@ -515,6 +537,7 @@ def review_verify(review_id: int, body: review.Decision, cfg: AcctCfg) -> JsonDi
 
 @app.post("/review/items/{review_id}/correct", dependencies=Auth)
 def review_correct(review_id: int, body: review.Correction, cfg: AcctCfg) -> JsonDict:
+    actors.require_automation(body.reviewer)
     with db.connect(cfg.database_url) as conn:
         result = review.correct(conn, review_id, body)
         conn.commit()
@@ -523,6 +546,7 @@ def review_correct(review_id: int, body: review.Correction, cfg: AcctCfg) -> Jso
 
 @app.post("/review/items/{review_id}/reject", dependencies=Auth)
 def review_reject(review_id: int, body: review.Rejection, cfg: AcctCfg) -> JsonDict:
+    actors.require_automation(body.reviewer)
     with db.connect(cfg.database_url) as conn:
         _, file_path = review.reject(conn, review_id, body)
         conn.commit()
@@ -533,6 +557,7 @@ def review_reject(review_id: int, body: review.Rejection, cfg: AcctCfg) -> JsonD
 
 # Posting and matching items: decisions that take effect in QuickBooks (settlement.py)
 def _settle(review_id: int, action: str, body: settlement.Settlement, cfg: accounting.AccountingConfig) -> JsonDict:
+    actors.require_automation(body.reviewer)
     with db.connect(cfg.database_url) as conn:
         settlement.decide(conn, review_id, action, body)
         conn.commit()

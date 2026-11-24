@@ -19,6 +19,7 @@ TABLES = (
 
 # --- shared by several test files -------------------------------------------------------
 AUTH = {"Authorization": "Bearer test-token"}
+AUTOMATION = "e2e-test (automated test)"  # how the bearer-token API records who acted (actors.py)
 OCR_TEXT = "Quillmoor Paper Supply LLC ... Total due: USD 641.24 (all amounts in $)"
 FIXTURES = Path(__file__).parent / "fixtures"
 

@@ -106,7 +106,7 @@ The original file can be **downloaded** (`Content-Disposition: attachment`, a cl
 
 ## Audit trail
 
-- **Decisions:** each decision and correction records the reviewer **from the session**, as "Name (review user N)". It is never a name typed into a form; a `reviewer` field sent with a form is ignored. The machine API keeps an explicit reviewer field for automated runs, which name themselves (e.g. "claude-code (test run, authorised by …)").
+- **Decisions:** each decision and correction records the reviewer **from the session**, as "Name (review user N)". It is never a name typed into a form; a `reviewer` field sent with a form is ignored. The machine API (bearer token, held by automation only) keeps an explicit `reviewer` field, but it accepts only an **automation label**: `claude-code` or `e2e-test`, optionally followed by a context in brackets (e.g. "claude-code (test run, authorised by …)"). Anything else, such as a person's name or a "Name (review user N)" label, is refused with `422 not_automation` before anything is written, so an automated action can never appear under a person's name. A person's display name can't start with an automation name either (`actors.py`, tested in `test_actors.py`).
 - **Sign-ins:** sign-in outcomes are in `login_attempts`, and decisions are in `processing_log` (step `review`).
 
 ## Known limits and next steps

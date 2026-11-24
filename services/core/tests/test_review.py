@@ -9,7 +9,7 @@ from app import accounting, db, postings, qbo_reference
 from app.main import app
 from fastapi.testclient import TestClient
 
-from .conftest import AUTH, QUILLMOOR_KEY, known_supplier, query, seed_accounts
+from .conftest import AUTH, AUTOMATION, QUILLMOOR_KEY, known_supplier, query, seed_accounts
 from .review_samples import SAMPLES, supplier_key
 from .test_processing import FakeProvider, env, post  # noqa: F401  (env is a fixture)
 
@@ -211,22 +211,22 @@ def test_vendor_names_are_normalized_without_our_currency_suffix():
 def test_approve_requires_an_account_for_a_new_supplier(new):
     review_id = post().json()["review_id"]
     assert item(review_id)["actions"] == ["approve", "correct", "reject"]
-    r = act(review_id, "approve", reviewer="david")
+    r = act(review_id, "approve", reviewer=AUTOMATION)
     assert r.status_code == 409 and "choose an account" in r.json()["message"]
-    r = act(review_id, "approve", reviewer="david", account_id="1")  # an income account
+    r = act(review_id, "approve", reviewer=AUTOMATION, account_id="1")  # an income account
     assert r.status_code == 409 and "can't be used" in r.json()["message"]
 
 
 def test_first_approval_sets_the_default_and_the_next_invoice_is_ready(new):
     state, cfg = new
     first = post().json()
-    r = act(first["review_id"], "approve", reviewer="david", account_id="7")
+    r = act(first["review_id"], "approve", reviewer=AUTOMATION, account_id="7")
     assert r.status_code == 200 and r.json()["status"] == "approved"
     assert r.json()["decision"]["supplier_default"] == "created" and r.json()["actions"] == []
     inv = q(cfg, "SELECT status, expense_account_id, expense_account_source FROM ap.invoices")[0]
     assert inv == {"status": "ready", "expense_account_id": "7", "expense_account_source": "reviewer"}
     default = q(cfg, "SELECT expense_account_id, source, set_by FROM ap.supplier_defaults")[0]
-    assert default == {"expense_account_id": "7", "source": "reviewer", "set_by": "david"}
+    assert default == {"expense_account_id": "7", "source": "reviewer", "set_by": AUTOMATION}
     # the supplier is now known, with a default: its next invoice goes straight through
     second = resend(state, "QM-2001", "12/20/2026", b"%PDF-1.4 next")
     assert second["status"] == "ready"
@@ -240,7 +240,7 @@ def test_first_approval_sets_the_default_and_the_next_invoice_is_ready(new):
 def test_one_off_account_does_not_become_the_default(new):
     _state, cfg = new
     review_id = post().json()["review_id"]
-    act(review_id, "approve", reviewer="david", account_id="40", set_default=False)  # capitalised
+    act(review_id, "approve", reviewer=AUTOMATION, account_id="40", set_default=False)  # capitalised
     assert q(cfg, "SELECT * FROM ap.supplier_defaults") == []
 
 
@@ -248,8 +248,8 @@ def test_default_is_replaced_only_when_asked(env, cfg):  # noqa: F811
     state, _ = env
     state["provider"] = FakeProvider(total="USD 999.00")  # totals mismatch: a review, supplier known
     review_id = post().json()["review_id"]
-    act(review_id, "correct", reviewer="david", changes={"total": "641.24"})
-    r = act(review_id, "approve", reviewer="david", account_id="7")
+    act(review_id, "correct", reviewer=AUTOMATION, changes={"total": "641.24"})
+    r = act(review_id, "approve", reviewer=AUTOMATION, account_id="7")
     assert r.json()["status"] == "corrected" and r.json()["decision"]["supplier_default"] is None
     assert q(cfg, "SELECT expense_account_id FROM ap.supplier_defaults")[0]["expense_account_id"] == "20"
 
@@ -258,8 +258,8 @@ def test_approve_with_the_supplier_default(env, cfg):  # noqa: F811
     state, _ = env
     state["provider"] = FakeProvider(total="USD 999.00")
     review_id = post().json()["review_id"]
-    act(review_id, "correct", reviewer="david", changes={"total": "641.24"})
-    r = act(review_id, "approve", reviewer="david", set_default=True)
+    act(review_id, "correct", reviewer=AUTOMATION, changes={"total": "641.24"})
+    r = act(review_id, "approve", reviewer=AUTOMATION, set_default=True)
     assert r.json()["decision"]["account_source"] == "supplier_default" and r.json()["decision"]["account_id"] == "20"
 
 
@@ -268,7 +268,7 @@ def test_totals_that_do_not_add_up_block_the_approval(env, cfg):  # noqa: F811
     state["provider"] = FakeProvider(total="USD 999.00")
     review_id = post().json()["review_id"]
     assert [b["code"] for b in item(review_id)["blockers"]] == ["total_mismatch"]
-    r = act(review_id, "approve", reviewer="david")
+    r = act(review_id, "approve", reviewer=AUTOMATION)
     assert r.status_code == 409 and r.json()["error"] == "blocked"
     assert [p["code"] for p in r.json()["problems"]] == ["total_mismatch"]
     assert q(cfg, "SELECT status FROM ap.invoices")[0]["status"] == "needs_review"
@@ -278,10 +278,12 @@ def test_correction_keeps_before_and_after(env, cfg):  # noqa: F811
     state, _ = env
     state["provider"] = FakeProvider(total="USD 999.00")
     review_id = post().json()["review_id"]
-    body = act(review_id, "correct", reviewer="david", changes={"total": "641.24"}).json()
+    body = act(review_id, "correct", reviewer=AUTOMATION, changes={"total": "641.24"}).json()
     assert body["blockers"] == [] and body["status"] == "open"
     [entry] = body["corrections"]
-    assert entry["by"] == "david" and entry["before"] == {"total": "999.0000"} and entry["after"] == {"total": "641.24"}
+    assert (
+        entry["by"] == AUTOMATION and entry["before"] == {"total": "999.0000"} and entry["after"] == {"total": "641.24"}
+    )
 
 
 def test_corrected_number_is_checked_for_duplicates_again(env, cfg):  # noqa: F811
@@ -289,7 +291,7 @@ def test_corrected_number_is_checked_for_duplicates_again(env, cfg):  # noqa: F8
     post(content=b"%PDF-1.4 one", source_ref="gmail:1:a")  # QM-1042, ready
     state["provider"] = FakeProvider(invoice_number="QM-9999", total="USD 999.00", invoice_date="10/01/2026")
     review_id = post(content=b"%PDF-1.4 two", source_ref="gmail:2:a").json()["review_id"]
-    body = act(review_id, "correct", reviewer="david", changes={"invoice_number": "QM-1042"}).json()
+    body = act(review_id, "correct", reviewer=AUTOMATION, changes={"invoice_number": "QM-1042"}).json()
     assert codes(body)[-1] == "possible_duplicate"
     assert q(cfg, "SELECT invoice_number_norm FROM ap.invoices WHERE id = %s", body["invoice"]["id"])[0] == {
         "invoice_number_norm": "QM1042"
@@ -300,7 +302,7 @@ def test_required_fields_cannot_be_emptied(env, cfg):  # noqa: F811
     state, _ = env
     state["provider"] = FakeProvider(total="USD 999.00")
     review_id = post().json()["review_id"]
-    r = act(review_id, "correct", reviewer="david", changes={"invoice_number": None})
+    r = act(review_id, "correct", reviewer=AUTOMATION, changes={"invoice_number": None})
     assert r.status_code == 409 and "not emptied" in r.json()["message"]
 
 
@@ -309,7 +311,7 @@ def test_suggested_dates_can_be_accepted(env, cfg):  # noqa: F811
     state["provider"] = FakeProvider(invoice_date="03/04/2026", due_date="05/04/2026")
     review_id = post().json()["review_id"]
     assert [b["code"] for b in item(review_id)["blockers"]] == ["missing_field"]  # no invoice date yet
-    r = act(review_id, "approve", reviewer="david", accept_suggested_dates=True)
+    r = act(review_id, "approve", reviewer=AUTOMATION, accept_suggested_dates=True)
     assert r.json()["status"] == "corrected" and r.json()["decision"]["suggested_dates_accepted"]
     inv = q(cfg, "SELECT invoice_date, due_date FROM ap.invoices")[0]
     assert inv == {"invoice_date": date(2026, 3, 4), "due_date": date(2026, 5, 4)}
@@ -319,14 +321,14 @@ def test_fraud_item_has_no_plain_approve(env, cfg):  # noqa: F811
     state, _ = env
     state["provider"] = FakeProvider(total="USD 999.00")
     review_id = post().json()["review_id"]
-    act(review_id, "correct", reviewer="david", changes={"total": "641.24"})
+    act(review_id, "correct", reviewer=AUTOMATION, changes={"total": "641.24"})
     fraud = [{"code": "possible_bank_detail_change", "field": None, "message": "new bank details"}]
     q(cfg, "UPDATE ap.review_queue SET reasons = reasons || %s::jsonb", json.dumps(fraud))
     assert item(review_id)["actions"] == ["verify", "reject"]
-    assert act(review_id, "approve", reviewer="david").status_code == 409
-    r = act(review_id, "verify", reviewer="david", note="ok")
+    assert act(review_id, "approve", reviewer=AUTOMATION).status_code == 409
+    r = act(review_id, "verify", reviewer=AUTOMATION, note="ok")
     assert r.status_code == 409 and "how the change was verified" in r.json()["message"]
-    r = act(review_id, "verify", reviewer="david", note="Called the number on file (not the one in the letter)")
+    r = act(review_id, "verify", reviewer=AUTOMATION, note="Called the number on file (not the one in the letter)")
     assert r.status_code == 200 and r.json()["status"] == "verified"
     assert q(cfg, "SELECT decision_note FROM ap.review_queue")[0]["decision_note"].startswith("Called the number")
 
@@ -336,8 +338,8 @@ def test_reject_needs_a_reason_and_deletes_the_file(new):
     review_id = post().json()["review_id"]
     path = q(cfg, "SELECT file_path FROM ap.invoices")[0]["file_path"]
     assert (cfg.storage_dir / path).exists()
-    assert act(review_id, "reject", reviewer="david", note="").status_code == 422
-    r = act(review_id, "reject", reviewer="david", note="Not our supplier")
+    assert act(review_id, "reject", reviewer=AUTOMATION, note="").status_code == 422
+    r = act(review_id, "reject", reviewer=AUTOMATION, note="Not our supplier")
     assert r.status_code == 200 and r.json()["status"] == "rejected"
     inv = q(cfg, "SELECT status, file_path, file_deletion_reason FROM ap.invoices")[0]
     assert inv == {"status": "rejected", "file_path": None, "file_deletion_reason": "rejected"}
@@ -346,8 +348,8 @@ def test_reject_needs_a_reason_and_deletes_the_file(new):
 
 def test_a_decided_item_cannot_be_decided_again(new):
     review_id = post().json()["review_id"]
-    act(review_id, "approve", reviewer="david", account_id="7")
-    r = act(review_id, "reject", reviewer="eve", note="changed my mind")
+    act(review_id, "approve", reviewer=AUTOMATION, account_id="7")
+    r = act(review_id, "reject", reviewer="claude-code (second run)", note="changed my mind")
     assert r.status_code == 409 and "approved" in r.json()["message"]
 
 
@@ -356,7 +358,7 @@ def test_posting_reviews_offer_only_a_retry(new):
     review_id = post().json()["review_id"]
     q(cfg, "UPDATE ap.review_queue SET stage = 'posting'")
     assert item(review_id)["actions"] == ["retry"]
-    r = act(review_id, "retry", reviewer="david")  # nothing failed in QuickBooks for this invoice
+    r = act(review_id, "retry", reviewer=AUTOMATION)  # nothing failed in QuickBooks for this invoice
     assert r.status_code == 409 and "nothing to retry" in r.json()["message"]
     assert item(review_id)["status"] == "open"
 
@@ -379,7 +381,7 @@ def test_a_possible_fixed_asset_is_never_approved_on_the_default_account(env, cf
     env[0]["provider"] = FakeProvider(**pellingham.annotation)
     body = post().json()
     assert codes(body) == ["possible_capex"]
-    r = act(body["review_id"], "approve", reviewer="david")
+    r = act(body["review_id"], "approve", reviewer=AUTOMATION)
     assert r.status_code == 409 and "may be a fixed asset" in r.json()["message"]
     assert item(body["review_id"])["status"] == "open"
     assert q(cfg, "SELECT status, expense_account_id FROM ap.invoices")[0] == {
@@ -387,6 +389,6 @@ def test_a_possible_fixed_asset_is_never_approved_on_the_default_account(env, cf
         "expense_account_id": None,
     }
     assert q(cfg, "SELECT 1 FROM ap.processing_log WHERE step = 'review'") == []
-    r = act(body["review_id"], "approve", reviewer="david", account_id="40", set_default=False)
+    r = act(body["review_id"], "approve", reviewer=AUTOMATION, account_id="40", set_default=False)
     assert r.status_code == 200 and r.json()["decision"]["account_id"] == "40"
     assert r.json()["decision"]["account_source"] == "reviewer"

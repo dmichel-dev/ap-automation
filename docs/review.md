@@ -26,7 +26,7 @@ Confirm, write off and retry need QuickBooks. The decision (reviewer, action, no
 - **A failure with no retry left** (QuickBooks refused the request, attempts used up) stops the wait. The item shows QuickBooks' error (e.g. `qbo_6000: …`) and offers only **Try again**.
 - **Nothing is recorded twice.** Every QuickBooks document carries a fixed number (`AP-PAY-<match>` for a payment, `AP-WO-<write-off>` for the vendor credit and the bill payment applying it), searched before it is created and sent with a fixed request ID. A retry after a run that stopped half-way finds what was already created.
 
-Machine API (same rules as the page): `POST /review/items/{id}/confirm-match` (`{"reviewer", "bank_transaction_id", "note"?}`), `/reject-match` (note required), `/write-off`, `/keep-open`, `/retry` (`{"reviewer", "note"?}`).
+Machine API (same rules as the page; `reviewer` must be an automation label, see [security](security.md)): `POST /review/items/{id}/confirm-match` (`{"reviewer", "bank_transaction_id", "note"?}`), `/reject-match` (note required), `/write-off`, `/keep-open`, `/retry` (`{"reviewer", "note"?}`).
 
 ## What approving still checks
 

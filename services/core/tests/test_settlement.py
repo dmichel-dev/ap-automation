@@ -12,7 +12,7 @@ from app import db, run_now, settlement
 from app.main import app, get_accounting_config
 from fastapi.testclient import TestClient
 
-from .conftest import AUTH
+from .conftest import AUTH, AUTOMATION
 from .test_accounting import bank_page, plaid_tx, posted_bill, posting, register_bank, run, sql
 
 c = TestClient(app)
@@ -37,7 +37,7 @@ def item(review_id):
 
 
 def act(review_id, action, **body):
-    return c.post(f"/review/items/{review_id}/{action}", headers=AUTH, json={"reviewer": "Rita Reviewer", **body})
+    return c.post(f"/review/items/{review_id}/{action}", headers=AUTH, json={"reviewer": AUTOMATION, **body})
 
 
 def pay(match_id, external_id="P1"):
@@ -83,7 +83,7 @@ def test_confirming_a_match_waits_for_the_payment_then_closes(ambiguous):
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["status"] == "open" and data["waiting_for"] == "payment" and data["actions"] == []
-    assert data["reviewer"] == "Rita Reviewer" and data["decision"]["action"] == "confirm_match"
+    assert data["reviewer"] == AUTOMATION and data["decision"]["action"] == "confirm_match"
     assert posting(cfg, first)["payment_reason"] == "payment_pending"
     # the other bill's item waited on the same transaction: settled by this decision, its bill stays unpaid
     other = review(cfg, second)
@@ -168,7 +168,7 @@ def test_a_write_off_waits_for_quickbooks_then_closes(underpaid):
     cfg, inv = underpaid
     _, data, due = write_off_flow(cfg, inv)
     assert data["status"] == "open" and data["waiting_for"] == "write_off" and data["actions"] == []
-    assert data["decision"]["amount"] == "0.4000" and data["reviewer"] == "Rita Reviewer"
+    assert data["decision"]["amount"] == "0.4000" and data["reviewer"] == AUTOMATION
     # the vendor credit: on the payment-differences account, numbered for the lookup
     (wo,) = due
     assert wo["doc_number"] == f"AP-WO-{wo['write_off_id']}" and wo["credit"]["DocNumber"] == wo["doc_number"]
