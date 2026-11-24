@@ -90,7 +90,7 @@ P and Q are shaped with HarfBuzz (Arabic joined right to left, Devanagari conjun
 | A: French, EUR, discount | PDF | 0.983 | 0.9829 × 1.0 | 0.28 | ready | yes | |
 | B: Japanese, JPY, two rates | PDF | 0.977 | 0.9772 × 1.0 | 0.29 | ready | yes | |
 | C: German, printed total wrong | PDF | 0.982 | 0.9824 × 1.0 | 0.30 | needs_review (`total_mismatch`) | yes | the invoice itself is wrong |
-| D: Spanish, IRPF withholding | PDF | 0.982 | 0.9815 × 1.0 | 0.43 | needs_review (`ambiguous_date`) | yes | withholding now counted once (first calibration's fix) |
+| D: Spanish, IRPF withholding | PDF | 0.982 | 0.9815 × 1.0 | 0.43 | needs_review (`ambiguous_date`) | yes | withholding returned once by the OCR this time (2) |
 | E: UK credit note | PNG scan | 0.973 | 0.9730 × 1.0 | 0.30 | ready | yes | stored negative |
 | F: bank-details letter | PDF | 0.389 | 0.9724 × 0.4 | 0.31 | needs_review (`possible_bank_detail_change`) | yes | fraud alert, not an invoice |
 | I: US, exact payment | PDF | 0.977 | 0.9770 × 1.0 | 0.33 | ready | yes | |
@@ -107,6 +107,8 @@ P and Q are shaped with HarfBuzz (Arabic joined right to left, Devanagari conjun
 | **R: B as a 90 dpi fax-like copy** | JPEG | 0.974 | 0.9743 × 1.0 | 0.20 | ready | yes | same values as B |
 | **S: A as a crooked scan** | JPEG | 0.979 | 0.9787 × 1.0 | 0.21 | ready | yes | same values as A |
 | **T: I as a phone photo** | JPEG | 0.974 | 0.9736 × 1.0 | 0.24 | ready | yes | same values as I |
+
+(2) The normalization rule added after the first calibration (`adjustment_repeats_tax`) did not fire: the OCR did not repeat the withholding in this run. The rule still covers it if it does, and the totals check would catch any other double count.
 
 (1) CGST and SGST were read as two 9 % tax lines of the right amount, but typed `vat` instead of `gst`: a small **interpretation error**. It changes nothing today: both types are non-recoverable in the demo company's tax policy (`app/tax_treatment.json`), and the totals balance. It would matter for a company that reclaims Indian GST and sets a `gst` rule for it.
 
