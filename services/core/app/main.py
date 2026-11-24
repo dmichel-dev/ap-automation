@@ -3,6 +3,10 @@
 Endpoints:
   GET  /health            liveness + database check (no auth)
   POST /intake/email/screen  email metadata → which attachments to process (the alias guard)
+  POST /intake/failures      a failed email → retried later or given up (core decides)
+  POST /intake/failures/due  emails under AP/Error → the ones the re-check processes now
+  POST /intake/failures/retry  operator: fresh attempts for given-up emails (logged)
+  GET  /intake/failures/summary  given up / retrying / recovered, for the daily summary
   POST /invoices/process  file + source → extract, check, store; returns the status for n8n routing
   POST /extract           file → common invoice format (no persistence; tests and debugging)
 
@@ -44,6 +48,7 @@ from . import (
     db,
     files,
     intake,
+    intake_failures,
     matching,
     postings,
     processing,
@@ -137,6 +142,7 @@ def process_invoice(
     email_text: Annotated[
         str | None, Form(max_length=intake.EMAIL_TEXT_MAX, description="subject + body; checked, never stored")
     ] = None,
+    message_id: Annotated[str | None, Form(max_length=200, description="the email, for the re-check")] = None,
 ) -> processing.ProcessOutcome:
     """The shared core for every channel: extract → normalize → check → store. Idempotent per source_ref."""
     content = file.file.read(files.MAX_FILE_BYTES + 1)
@@ -148,6 +154,7 @@ def process_invoice(
         received_at=received_at,
         execution_id=n8n_execution_id,
         email_text=email_text,
+        message_id=message_id or None,
     )
     return processing.process(req, provider, cfg)
 
@@ -319,11 +326,14 @@ class EmailToScreen(BaseModel):
     delivered_to: str = Field(default="", max_length=2000)
     attachments: list[EmailAttachment] = Field(default=[], max_length=100)
     text: str = Field(default="", max_length=intake.EMAIL_TEXT_MAX)  # subject + body: checked, never stored
+    message_id: str | None = Field(default=None, max_length=200)  # for the re-check
+    execution_id: str | None = Field(default=None, max_length=100)
 
 
 @app.post("/intake/email/screen", dependencies=Auth)
-def screen_email(body: EmailToScreen) -> JsonDict:
-    """Which attachments of an email go to processing (metadata and text; nothing is stored)."""
+def screen_email(body: EmailToScreen, cfg: AcctCfg) -> JsonDict:
+    """Which attachments of an email go to processing (metadata and text; nothing is stored).
+    An email with nothing to process is done: its re-check, if any, ends here."""
     screening = intake.screen_email(
         body.recipients,
         body.delivered_to,
@@ -331,7 +341,67 @@ def screen_email(body: EmailToScreen) -> JsonDict:
         get_settings().intake_email_alias,
         text=body.text,
     )
+    if body.message_id and screening.route != "process":
+        with db.connect(cfg.database_url) as conn:
+            intake_failures.resolve(conn, "email", body.message_id, body.execution_id)
     return asdict(screening)
+
+
+Channel = Literal["email", "drive", "upload"]
+
+
+class IntakeFailure(BaseModel):
+    """What the workflow saw when an email failed: the core decides what it means."""
+
+    channel: Channel = "email"
+    message_id: str = Field(min_length=1, max_length=200)
+    stage: Literal["fetch", "screen", "process"]
+    status_code: int | None = Field(default=None, ge=0, le=599)  # None or 0 = no answer
+    error: str | None = Field(default=None, max_length=100)  # the core's error code, if it answered
+    execution_id: str | None = Field(default=None, max_length=100)
+
+
+@app.post("/intake/failures", dependencies=Auth)
+def intake_failure(body: IntakeFailure, cfg: AcctCfg) -> JsonDict:
+    with db.connect(cfg.database_url) as conn:
+        return intake_failures.record(
+            conn, body.channel, body.message_id, body.stage, body.status_code, body.error, body.execution_id
+        )
+
+
+class FoundFailures(BaseModel):
+    channel: Channel = "email"
+    found: list[Annotated[str, Field(min_length=1, max_length=200)]] = Field(default=[], max_length=500)
+    execution_id: str | None = Field(default=None, max_length=100)
+
+
+@app.post("/intake/failures/due", dependencies=Auth)
+def intake_failures_due(body: FoundFailures, cfg: AcctCfg) -> JsonDict:
+    with db.connect(cfg.database_url) as conn:
+        due = intake_failures.claim_due(conn, body.channel, body.found, body.execution_id)
+    return {"count": len(due), "due": due}
+
+
+class IntakeRetry(BaseModel):
+    channel: Channel = "email"
+    message_id: str | None = Field(default=None, max_length=200)
+    error_code: str | None = Field(default=None, max_length=100)
+    note: str | None = Field(default=None, max_length=200)
+
+
+@app.post("/intake/failures/retry", dependencies=Auth)
+def intake_failures_retry(body: IntakeRetry, cfg: AcctCfg) -> JsonDict:
+    if not (body.message_id or body.error_code):
+        raise HTTPException(422, "name an email (message_id) or an error code (error_code)")
+    with db.connect(cfg.database_url) as conn:
+        ids = intake_failures.retry(conn, body.channel, body.message_id, body.error_code, body.note)
+    return {"count": len(ids), "retried": ids}
+
+
+@app.get("/intake/failures/summary", dependencies=Auth)
+def intake_failures_summary(cfg: AcctCfg, hours: int = 24) -> JsonDict:
+    with db.connect(cfg.database_url) as conn:
+        return intake_failures.summary(conn, max(1, min(hours, 24 * 31)))
 
 
 @app.post("/postings/{invoice_id}/lookup/{kind}", dependencies=Auth)

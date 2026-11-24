@@ -18,7 +18,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from . import bank_details, db, files
+from . import bank_details, db, files, intake_failures
 from .extraction import build_common_invoice
 from .models import CommonInvoice, Issue
 from .providers.base import ExtractionProvider, ProviderError
@@ -44,6 +44,7 @@ class ProcessRequest:
     received_at: datetime | None = None
     execution_id: str | None = None
     email_text: str | None = None  # subject + body: checked for bank-change wording, never stored
+    message_id: str | None = None  # the email (or other message) this file came from, for the re-check
 
 
 class ProcessOutcome(BaseModel):
@@ -84,6 +85,24 @@ def _existing(row: dict[str, Any]) -> ProcessOutcome:
 
 
 def process(req: ProcessRequest, provider: ExtractionProvider, cfg: Config) -> ProcessOutcome:
+    """Any answer (a status, or a file refused as unsupported) ends the email's re-check; a
+    failure (provider or core error) leaves it to the re-check."""
+    try:
+        outcome = _process(req, provider, cfg)
+    except files.UnsupportedFile:
+        _resolve_failure(req, cfg)
+        raise
+    _resolve_failure(req, cfg)
+    return outcome
+
+
+def _resolve_failure(req: ProcessRequest, cfg: Config) -> None:
+    if req.message_id:
+        with db.connect(cfg.database_url) as conn:
+            intake_failures.resolve(conn, req.channel, req.message_id, req.execution_id)
+
+
+def _process(req: ProcessRequest, provider: ExtractionProvider, cfg: Config) -> ProcessOutcome:
     try:
         prepared = files.prepare(req.content)
     except files.UnsupportedFile as exc:

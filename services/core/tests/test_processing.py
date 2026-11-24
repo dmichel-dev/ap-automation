@@ -51,7 +51,8 @@ def env(clean_db, tmp_path):
     app.dependency_overrides.clear()
 
 
-def post(content=b"%PDF-1.4 invoice A", source_ref="gmail:m1:a1", name="invoice.pdf"):
+def post(content=b"%PDF-1.4 invoice A", source_ref="gmail:m1:a1", name="invoice.pdf", **form):
+    """`form`: more fields, or other values (e.g. message_id, n8n_execution_id)."""
     return TestClient(app).post(
         "/invoices/process",
         headers=AUTH,
@@ -61,6 +62,7 @@ def post(content=b"%PDF-1.4 invoice A", source_ref="gmail:m1:a1", name="invoice.
             "source_ref": source_ref,
             "n8n_execution_id": "42",
             "received_at": "2026-11-22T10:00:00Z",
+            **form,
         },
     )
 
