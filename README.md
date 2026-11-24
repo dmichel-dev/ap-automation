@@ -86,7 +86,7 @@ Every commit runs [pre-commit](https://pre-commit.com) (`.pre-commit-config.yaml
 
 ## Updating the n8n workflow
 
-The workflows are generated from code (`n8n/build_email_intake.py`, `n8n/build_post_qbo.py`, `n8n/build_bank_sync.py`, `n8n/build_sync_reference.py`, `n8n/build_run_now.py`, `n8n/build_error_log.py`) and committed without credentials. Each canvas is laid out by the builders too: nodes on a grid, grouped in sections with a note explaining each one (`Section` and `lay_out` in `n8n/nodes.py`), and `n8n/check_layout.py` fails the commit and CI if a node sits outside a section or anything overlaps. After a change made in the n8n editor, `scripts/export_workflow.sh` exports the live workflows, strips credential IDs and instance data, refuses to write a file if a secret scan matches, and shows the diff.
+The workflows are generated from code (`n8n/build_email_intake.py`, `n8n/build_post_qbo.py`, `n8n/build_bank_sync.py`, `n8n/build_sync_reference.py`, `n8n/build_run_now.py`, `n8n/build_error_log.py`, `n8n/build_daily_summary.py`) and committed without credentials. Each canvas is laid out by the builders too: nodes on a grid, grouped in sections with a note explaining each one (`Section` and `lay_out` in `n8n/nodes.py`), and `n8n/check_layout.py` fails the commit and CI if a node sits outside a section or anything overlaps. After a change made in the n8n editor, `scripts/export_workflow.sh` exports the live workflows, strips credential IDs and instance data, refuses to write a file if a secret scan matches, and shows the diff.
 
 ## Repository layout
 

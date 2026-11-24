@@ -162,7 +162,7 @@ The crash tests (`services/core/tests/test_crash.py`) replay the dangerous cases
 - **Gmail:** AP/Error = being retried; AP/Error + AP/Processed = given up.
 - **Review page:** QuickBooks failures with no retry left (`quickbooks_refused`), with **Try again**.
 - **Log** (`processing_log`): step `intake_retry` (each failed attempt, warning; given up, error; recovered, info), `core_call` (what n8n saw), `workflow_error` (a workflow run that failed, see below).
-- **Daily summary:** `GET /intake/failures/summary` lists the given-up emails with their reason, and counts the emails still being retried, the ones recovered and the failed workflow runs in the last 24 hours.
+- **[Daily summary](#daily-summary):** `GET /intake/failures/summary` lists the given-up emails with their reason, and counts the emails still being retried, the ones recovered and the failed workflow runs in the last 24 hours.
 - **Workflow crashes:** every AP workflow names **AP – Error log** as its error workflow. A run that fails (Gmail or the database unreachable, a missing Gmail label) is written to the log with the workflow, the last node and a short error message. The details stay in n8n's executions list.
 
 Live check (2026-11-24, n8n runs 187 and 188): with the core stopped for under 2 minutes, an email to the alias got AP/Error, n8n's log entry, and no `intake_failures` row (the report to the core failed). After the core started again, the next re-check processed it as attempt 1 (`not_recorded`). It was an exact duplicate of a test file already processed, so it got AP/Rejected + AP/Processed, AP/Error was removed and the row was resolved. Nothing was sent to the OCR service or QuickBooks.
@@ -186,6 +186,32 @@ python3 scripts/run_now.py posting   # or: bank
 - Every request is recorded in `run_requests` and `processing_log` (step `run_now`), without the token.
 - **Rotating the token:** change `RUN_NOW_TOKEN` in `.env`, then `docker compose up -d core`.
 
+## Daily summary
+
+The workflow **AP – Daily summary** sends one email every day at 08:00 (Paris time) to `DAILY_SUMMARY_TO` (comma-separated list, default `david@davidmichel.dev`). It covers the **24 hours before the run**. The core computes every figure and writes the email (`GET /summary/daily`, code in `services/core/app/daily_summary.py`). n8n only starts it, sends it with Gmail and logs it (step `daily_summary`). Live data only: test and demo data never appear in it.
+
+Sections, in this order. A section with nothing to say is left out. A day with nothing at all says "Nothing to report in the last 24 hours."
+
+| Section | Content |
+|---|---|
+| Fraud alerts | Invoices with `possible_bank_detail_change` (supplier, number, **masked** account labels), and emails labelled AP/Fraud alert |
+| Invoices | Received (straight through / sent to review / rejected, by what intake decided), bills and credit notes posted to QuickBooks, payments recorded, write-offs **per currency** (never added across currencies), touchless rate |
+| Waiting for review | Every open item, oldest first, with its age and reasons in plain language. Only the first 10 are listed; the rest are counted |
+| Bank details seen for the first time | `bank_details_first_seen`: supplier and masked label, "not verified" |
+| Email intake problems | From `GET /intake/failures/summary`: emails given up (with the reason), still retrying, recovered, failed workflow runs |
+
+Bank details only ever appear as the stored masked labels (last 4 characters). A new section is one more function in `daily_summary.SECTIONS`.
+
+### Touchless rate
+
+**Touchless rate = documents posted to QuickBooks with no review ÷ documents to process**, both counted over the documents **received** in the period:
+
+- **Documents to process (denominator):** every invoice and credit note received, **including unreadable ones** (a real invoice the system couldn't read is not touchless). Left out: **not an invoice** (`not_invoice`), **the same file sent twice** (`duplicate_file`), and invoices kept out of accounting (`posting_excluded_reason`).
+- **Touchless (numerator):** documents to process that are **posted** to QuickBooks and never had a review item at the `validation` or `posting` stage. A **possible duplicate** (same supplier and number, different file) needs a person, so it is not touchless.
+- **Matching reviews don't count** (ambiguous match, payment difference). Payments arrive days later, so counting them would change a day's rate after it was reported. They appear under payments and write-offs.
+- A document received but **not yet posted** counts as not touchless. The posting workflow runs every few minutes, so this only lowers the rate for documents received just before the summary.
+- No documents to process: the rate is not shown.
+
 ## Updating the workflows in n8n
 
 The builders in `n8n/build_*.py` are the source of truth. To load a changed workflow into the running n8n (credential IDs from a local file, never committed):
@@ -197,4 +223,4 @@ python3 n8n/build_bank_sync.py --credentials cred_ids.json \
 docker compose restart n8n
 ```
 
-Workflow IDs: `apEmailIntake001`, `apPostQbo0000001`, `apBankSync000001`, `apSyncQboRef0001`, `apRunNow00000001`, `apErrorLog000001` (import it before the others: they name it as their error workflow). An import leaves the workflow unpublished, so publish it again. Wait until the log says "Finished building workflow dependency index" before calling a webhook (until then it answers 404). `scripts/export_workflow.sh` brings editor changes back for comparison.
+Workflow IDs: `apEmailIntake001`, `apPostQbo0000001`, `apBankSync000001`, `apSyncQboRef0001`, `apRunNow00000001`, `apDailySummary01`, `apErrorLog000001` (import it before the others: they name it as their error workflow). An import leaves the workflow unpublished, so publish it again. Wait until the log says "Finished building workflow dependency index" before calling a webhook (until then it answers 404). `scripts/export_workflow.sh` brings editor changes back for comparison.
