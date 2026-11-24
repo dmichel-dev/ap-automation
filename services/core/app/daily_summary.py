@@ -8,6 +8,11 @@ were real invoices or credit notes (not "not an invoice", not the same file sent
 from posting), the share posted to QuickBooks without any validation or posting review item.
 Unreadable documents count, as not touchless. Matching reviews don't count: payments come later.
 
+Bank amounts not booked to the cent: a bill payment in another currency carries a rate QuickBooks
+keeps to 7 decimals; on a large bill the bank account can be credited a few cents off the bank amount
+(logged by accounting.py, docs/matching.md#known-limit-cents-on-large-foreign-currency-bills). Each one
+is listed until someone fixes it by hand.
+
 Bank details appear only as their stored masked labels (last 4 characters), as everywhere else.
 
 End-to-end test: the result of the morning's run (e2e_test.py). A run that failed, never finished or
@@ -22,6 +27,8 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from . import db, e2e_test, intake_failures
+from .accounting import FX_GAP_MESSAGE
+from .reference import minor_units
 from .web.display import age
 from .web.reasons import explain
 
@@ -62,6 +69,7 @@ def figures(conn: db.Conn, hours: int = 24) -> dict[str, Any]:
         "posted": _posted(conn, period),
         "payments": _payments(conn, period),
         "write_offs": _write_offs(conn, period),
+        "fx_gaps": _fx_gaps(conn, period),
         "open_reviews": _open_reviews(conn),
         "fraud_invoices": _invoices_with(conn, period, "status_reasons", "possible_bank_detail_change"),
         "fraud_emails": _fraud_emails(conn, period),
@@ -135,6 +143,22 @@ def _write_offs(conn: db.Conn, period: dict[str, datetime]) -> list[dict[str, An
               AND w.recorded_at > %(start)s AND w.recorded_at <= %(end)s
             GROUP BY w.currency ORDER BY w.currency""",
         period,
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _fx_gaps(conn: db.Conn, period: dict[str, datetime]) -> list[dict[str, Any]]:
+    """Foreign-currency payments recorded in the period whose bank amount QuickBooks couldn't book exactly."""
+    rows = conn.execute(
+        """SELECT i.supplier_name, i.invoice_number, p.amount AS bill_amount, p.currency AS bill_currency,
+                  l.details->>'bank_amount' AS bank_amount, l.details->>'booked' AS booked,
+                  l.details->>'gap' AS gap, l.details->>'currency' AS currency
+             FROM processing_log l JOIN invoices i ON i.id = l.invoice_id
+             JOIN accounting_postings p ON p.invoice_id = i.id
+            WHERE i.scope = 'live' AND l.step = 'match' AND l.message = %(message)s
+              AND l.logged_at > %(start)s AND l.logged_at <= %(end)s
+            ORDER BY l.logged_at, l.id""",
+        {**period, "message": FX_GAP_MESSAGE},
     ).fetchall()
     return [dict(r) for r in rows]
 
@@ -226,6 +250,22 @@ def invoices_section(f: dict[str, Any]) -> Section | None:
     return Section("Invoices", lines) if lines else None
 
 
+def fx_gap_section(f: dict[str, Any]) -> Section | None:
+    lines = [
+        f"{g['supplier_name'] or 'Unknown supplier'} {g['invoice_number'] or ''}".strip()
+        + f" ({_money_in(g['bill_amount'], g['bill_currency'])}): bank {_money(Decimal(g['bank_amount']))}"
+        f" {g['currency']}, booked {_money(Decimal(g['booked']))} {g['currency']},"
+        f" gap {_money(Decimal(g['gap']))} {g['currency']}"
+        for g in f["fx_gaps"]
+    ]
+    if lines:
+        lines.append(
+            "QuickBooks keeps 7 decimals of an exchange rate. Fix each gap with a journal entry between the bank"
+            " account and Exchange Gain or Loss."
+        )
+    return Section("Bank amounts not booked to the cent", lines) if lines else None
+
+
 def review_section(f: dict[str, Any]) -> Section | None:
     items = f["open_reviews"]
     if not items:
@@ -278,11 +318,24 @@ def _e2e_failed(f: dict[str, Any]) -> bool:
 
 
 # In reading order. A new part of the summary is one more function here.
-SECTIONS = (fraud_section, invoices_section, review_section, first_seen_section, intake_section, e2e_section)
+SECTIONS = (
+    fraud_section,
+    invoices_section,
+    fx_gap_section,
+    review_section,
+    first_seen_section,
+    intake_section,
+    e2e_section,
+)
 
 
 def _money(amount: Decimal) -> str:
     return f"{amount:,.2f}"
+
+
+def _money_in(amount: Decimal, currency: str) -> str:
+    """With the currency's own decimals: 2,345,678 JPY, 1,598.61 EUR."""
+    return f"{amount:,.{minor_units(currency)}f} {currency}"
 
 
 # =====================================================================================

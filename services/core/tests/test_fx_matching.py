@@ -136,7 +136,8 @@ def test_failed_rate_fetch_stores_nothing_and_is_retried(cfg):
     assert sql(cfg, "SELECT message FROM ap.processing_log WHERE message = 'exchange rates not fetched'")
 
 
-def test_gap_left_by_quickbooks_rate_precision_is_logged(cfg):
+def jpy_payment_with_a_gap(cfg):
+    """2,345,678 JPY paid with 14,801.00 USD: QuickBooks can only book 14,800.99 (7-decimal rate)."""
     register_bank(cfg)
     inv = make_invoice(
         cfg,
@@ -156,5 +157,10 @@ def test_gap_left_by_quickbooks_rate_precision_is_logged(cfg):
     work = run(cfg)["payments_due"][0]
     assert work["booked_bank_amount"] == "14800.99"
     assert pay(work["match_id"])["payment_status"] == "paid"
+    return inv
+
+
+def test_gap_left_by_quickbooks_rate_precision_is_logged(cfg):
+    jpy_payment_with_a_gap(cfg)
     log = sql(cfg, "SELECT details FROM ap.processing_log WHERE message = 'bank amount not booked to the cent'")
     assert log[0]["details"]["gap"] == "-0.01"

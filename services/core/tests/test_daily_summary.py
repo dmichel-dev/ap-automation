@@ -182,6 +182,27 @@ def test_payments_and_write_offs_per_currency(acfg):
     assert review(acfg, a)["status"] == "written_off"
 
 
+def test_bank_amount_not_booked_to_the_cent_is_listed(acfg):
+    from .test_fx_matching import jpy_payment_with_a_gap
+
+    jpy_payment_with_a_gap(acfg)
+    text = email(acfg)["text"]
+    assert "Bank amounts not booked to the cent" in text
+    assert "架空商事 KS-9 (2,345,678 JPY): bank 14,801.00 USD, booked 14,800.99 USD, gap -0.01 USD" in text
+    assert "journal entry between the bank account and Exchange Gain or Loss" in text
+
+
+def test_exact_foreign_currency_payment_is_not_listed(acfg):
+    from .test_fx_matching import ECB_EUR, answer, eur_bill, eur_payment
+
+    register_bank(acfg)
+    eur_bill(acfg)
+    answer("EUR", 200, ECB_EUR)
+    bank_page(acfg, eur_payment(1760.00))
+    pay(run(acfg)["payments_due"][0]["match_id"])
+    assert figures(acfg)["fx_gaps"] == [] and "not booked to the cent" not in email(acfg)["text"]
+
+
 # =====================================================================================
 # Review items, fraud alerts, first-seen bank details, intake problems
 # =====================================================================================

@@ -1096,6 +1096,9 @@ def record_payment(conn: Conn, match_id: int, external_payment_id: str, executio
     return _posting_of(conn, m["invoice_id"])
 
 
+FX_GAP_MESSAGE = "bank amount not booked to the cent"  # read back by the daily summary
+
+
 def _check_booked_amount(conn: Conn, m: Row, invoice_id: str, execution_id: str | None) -> None:
     """QuickBooks keeps 7 decimals of the rate: on a large bill the bank account can be credited a few
     cents more or less than the bank amount. Reported, never adjusted silently."""
@@ -1106,7 +1109,7 @@ def _check_booked_amount(conn: Conn, m: Row, invoice_id: str, execution_id: str 
         conn,
         step="match",
         level="warning",
-        message="bank amount not booked to the cent",
+        message=FX_GAP_MESSAGE,
         invoice_id=invoice_id,
         channel="system",
         execution_id=execution_id,
