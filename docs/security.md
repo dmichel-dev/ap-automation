@@ -97,6 +97,14 @@ The original file can be **downloaded** (`Content-Disposition: attachment`, a cl
   - HSTS is added by the reverse proxy.
 - **Small surface:** no API documentation, and none of the machine API that n8n uses. The page runs in its own container (read-only file system, no Linux capabilities, `no-new-privileges`), without the API token or the OCR key.
 
+## Test data and its deletes
+
+The [daily end-to-end test](operations.md#daily-end-to-end-test) deletes data, so its deletes are narrow and decided in the core:
+
+- **Database rows:** only invoices with scope `e2e`. A request that names any live or demo row is refused whole, and nothing is deleted. The log is never deleted.
+- **QuickBooks:** only a bill or attachment that the core recorded for a test posting and that, read back, carries the test vendor, an `E2E-` number equal to the posting's, and the test invoice's ID in its note. Anything else is kept and logged.
+- **Test scope from email:** only for mail to `invoices+e2e@` whose subject names a run in progress. A real invoice sent to that address is processed as live, never hidden among test data.
+
 ## Access by scope
 
 - **One user, one scope.** Each account works on one scope: `live`, `e2e` or `demo`. A `demo` account always has the `demo` scope, and a database constraint enforces it.

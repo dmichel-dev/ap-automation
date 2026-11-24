@@ -199,6 +199,7 @@ Sections, in this order. A section with nothing to say is left out. A day with n
 | Waiting for review | Every open item, oldest first, with its age and reasons in plain language. Only the first 10 are listed; the rest are counted |
 | Bank details seen for the first time | `bank_details_first_seen`: supplier and masked label, "not verified" |
 | Email intake problems | From `GET /intake/failures/summary`: emails given up (with the reason), still retrying, recovered, failed workflow runs |
+| End-to-end test | The latest [end-to-end test](#daily-end-to-end-test) of the period, its time in Paris time: passed (with the number of checks), or each failed check in plain words. A run that failed, never finished or didn't happen at all puts "end-to-end test FAILED" in the subject. Shown once the test has run at least once |
 
 Bank details only ever appear as the stored masked labels (last 4 characters). A new section is one more function in `daily_summary.SECTIONS`.
 
@@ -212,6 +213,50 @@ Bank details only ever appear as the stored masked labels (last 4 characters). A
 - A document received but **not yet posted** counts as not touchless. The posting workflow runs every few minutes, so this only lowers the rate for documents received just before the summary.
 - No documents to process: the rate is not shown.
 
+## Daily end-to-end test
+
+The workflow **AP – Daily e2e test** runs every day at 07:30 (Paris time), before the summary, or by hand. Four test emails go through the whole pipeline, then the core checks every result. The core decides everything (`services/core/app/e2e_test.py`): the messages, what each must produce, what may be deleted, pass or fail. n8n only carries it out.
+
+| Scenario | Email to `invoices+e2e@` | Must end with | OCR calls |
+|---|---|---|---|
+| Posted | Clean invoice E2E-1001, USD 218.09, from the test supplier (known, with a default account) | `ready`, AP/Ready + AP/Processed, a bill with its PDF in QuickBooks | 1 |
+| Review | Invoice E2E-1002, printed total wrong | `needs_review` (`total_mismatch`), an open review item, AP/Review | 1 |
+| Rejected | Only a .docx attached | AP/Rejected + AP/Processed, logged `no_valid_attachment` | 0 |
+| Fraud alert | Asks to pay a new bank account (full fictional number in the text) | AP/Fraud alert + AP/Processed, logged `possible_bank_detail_change` | 0 |
+
+So a run makes **two OCR calls** (one page each, about 1 cent at Mistral's list price). An email that fails is retried by the AP/Error re-check like any other, up to 5 attempts.
+
+**How the emails get into the mailbox.** An email sent from the mailbox to its own alias is delivered into the same mailbox it was sent from. Gmail usually merges it with the Sent copy, so it may never get the INBOX label or a usable `Delivered-To` header, and the intake's search wouldn't see it. The workflow therefore puts each message in the mailbox with the Gmail API (`messages.insert`, the Gmail credential's `gmail.modify` scope), as a delivered message: sender `billing@example.com`, To and Delivered-To `invoices+e2e@…`, the run named in the subject (`[E2E run 12]`) and in an `X-AP-E2E-Run` header. Everything from the mailbox onwards is tested: search, trigger, attachments, screening, OCR, checks, labels, posting. SMTP delivery and Google's alias routing are not; real mail covers them every day.
+
+**Test data is kept apart (scope `e2e`).**
+- The screening marks an email as test data only if it is addressed to `invoices+e2e@` **and** its subject names a run that is in progress. Anything else sent to that address is processed as live, so a real invoice sent there is never hidden among test data.
+- The scope goes with everything the email produces: the invoice, its review item, its log entries (each takes its invoice's scope), its failure record. Duplicate checks and the bank-details baseline compare only within a scope, and bank matching uses live bills only.
+- The daily summary, the touchless rate and the review list show live data only. Each run checks that none of its emails was recorded as live.
+- Every action of the test is logged with scope `e2e` under the automation label `e2e-test`.
+
+**Steps of a run.**
+1. **Start.** The core opens a run, one at a time. A run still open after an hour is closed as failed ("did not finish").
+2. **Clean QuickBooks** (sub-workflow **AP – E2E QuickBooks clean-up**). The core lists the bills and attached PDFs of test postings not deleted yet. Each is read back from QuickBooks, and the core allows the delete only if it is provably the test's own: its invoice has scope `e2e`, the vendor is the test supplier's, the number starts with `E2E-` and equals the posting's, the note names the test invoice, and an attachment is attached to that bill only. n8n sends the delete request the core wrote (`Id` + `SyncToken`). The core records it only when QuickBooks answers "Deleted". Anything else is kept and logged as an error. The next steps then refuse to go on, so the run fails and a person looks.
+3. **Reset.** The core deletes the earlier runs' test invoices, so the same files are new again. This deletes only rows with scope `e2e`: the delete refuses the whole request if any row is live or demo data (tested). It also refuses while a test posting's QuickBooks objects are not deleted, or a test posting is in progress. The log entries stay (append-only), and so does the record of what was deleted in QuickBooks (`e2e_qbo_objects`).
+4. **Insert** the four messages. The email intake processes them within a minute; ready invoices are posted at once.
+5. **After 10 minutes:** the Gmail labels are read, the test emails go to the trash, QuickBooks is cleaned again (the run's own bill and PDF), then the core checks everything. For each email: status, reasons, review item, Gmail labels (and never AP/Error), moved to the trash, the expected log entry, the bill (total, PDF attached, deleted afterwards). For the run: isolation from live data, and **no full bank account number anywhere in the log**.
+6. **Result:** recorded in `e2e_runs`. A failed run sends the core's **alert email at once** to `DAILY_SUMMARY_TO`. If the workflow could not finish (Gmail or the core failing), it records the step that failed and sends the alert too. The 08:00 summary shows the result either way.
+
+**Setup, once** (creates the test supplier's vendor in QuickBooks, never deleted, and links it in the core with a default account):
+
+```bash
+set -a; . ./.env; set +a
+python3 scripts/e2e_setup.py            # dry run
+python3 scripts/e2e_setup.py --apply    # --account "Office Supplies" by default
+```
+
+The test documents are generated by `test-data/generate.py --e2e` into `services/core/app/e2e_fixtures/`: small amounts, no service period, no item near the capitalisation threshold, so the clean invoice stays straight-through (a test checks it).
+
+**Limits.**
+- The test invoices are dated 24 Nov 2026. If the QuickBooks closing date moves past that date, the bill can't be posted and the run fails.
+- n8n keeps each execution's data (all executions are saved, pruned after 14 days), including the fraud email's text with its fictional account number. The masking check covers the AP log, not n8n's execution history. Only fictional data goes in.
+- A test email that fails before the screening (e.g. the core is down) is recorded as live: its scope isn't known yet.
+
 ## Updating the workflows in n8n
 
 The builders in `n8n/build_*.py` are the source of truth. To load a changed workflow into the running n8n (credential IDs from a local file, never committed):
@@ -223,4 +268,4 @@ python3 n8n/build_bank_sync.py --credentials cred_ids.json \
 docker compose restart n8n
 ```
 
-Workflow IDs: `apEmailIntake001`, `apPostQbo0000001`, `apBankSync000001`, `apSyncQboRef0001`, `apRunNow00000001`, `apDailySummary01`, `apErrorLog000001` (import it before the others: they name it as their error workflow). An import leaves the workflow unpublished, so publish it again. Wait until the log says "Finished building workflow dependency index" before calling a webhook (until then it answers 404). `scripts/export_workflow.sh` brings editor changes back for comparison.
+Workflow IDs: `apEmailIntake001`, `apPostQbo0000001`, `apBankSync000001`, `apSyncQboRef0001`, `apRunNow00000001`, `apDailySummary01`, `apDailyE2eTest01`, `apE2eCleanup0001` (import it before the e2e test, which calls it), `apErrorLog000001` (import it before the others: they name it as their error workflow). An import leaves the workflow unpublished, so publish it again. Wait until the log says "Finished building workflow dependency index" before calling a webhook (until then it answers 404). `scripts/export_workflow.sh` brings editor changes back for comparison.
