@@ -28,7 +28,7 @@ Every one of these controls is deterministic code ([validation](validation.md)).
 
 ## First calibration (2026-11-24)
 
-**Data:** every document processed on the live pipeline so far, compared with its expected result in `test-data/invoices/*.expected.json` by `scripts/run_e2e.sh` (read-only), plus the review queue (decisions and corrections).
+**Data:** every document processed on the live pipeline so far (16 distinct documents; 15 have an expected result, the first smoke test has none), compared with its expected result in `test-data/invoices/*.expected.json` by `scripts/run_e2e.sh` (read-only), plus the review queue (decisions and corrections).
 
 | Document | Routed at intake | Confidence | OCR average × fields found | Extraction correct? |
 |---|---|---|---|---|
@@ -52,7 +52,7 @@ Every one of these controls is deterministic code ([validation](validation.md)).
 
 (1) F's expected result has since changed: a bank-change request now goes to review as a fraud alert (`possible_bank_detail_change`). This copy was processed before that check existed. Its reading was correct either way.
 
-**Invoice D, an interpretation error.** The OCR read every value on the page correctly. The structured output then returned the 15 % IRPF withholding twice, once as a tax line and once as an "other" adjustment after tax, so it was deducted twice and the totals didn't balance (`total_mismatch`). The routing worked as intended: the invoice went to review, not to QuickBooks. The cause was fixed with a deterministic normalization rule (an "other" adjustment repeating a tax line is counted once and recorded as `adjustment_repeats_tax`), with unit tests and a live re-check. The reviewer later rejected this copy as superseded test data.
+**Invoice D, an interpretation error.** The OCR read every value on the page correctly. The structured output then returned the 15 % IRPF withholding twice, once as a tax line and once as an "other" adjustment after tax, so it was deducted twice: 1,560.00 + 327.60 VAT − 234.00 − 234.00 = 1,419.60 against a printed total of 1,653.60 (`total_mismatch`). The routing worked as intended: the invoice went to review, not to QuickBooks. The cause was fixed with a deterministic normalization rule (an "other" adjustment repeating a tax line is counted once and recorded as `adjustment_repeats_tax`), with unit tests and a live re-check. The reviewer later rejected this copy as superseded test data.
 
 **Reviewer corrections:** none. No review item, live or test, needed a field corrected because of a misreading. All 9 review decisions so far were judgement calls (fixed asset, new supplier, expense account, bank matching, write-off) or rejections (C's wrong total, D as superseded test data).
 
