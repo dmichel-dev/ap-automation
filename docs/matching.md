@@ -1,15 +1,14 @@
 # Bank matching
 
-Deterministic rules in [`services/core/app/matching.py`](../services/core/app/matching.py) (rule version `m1`), unit-tested in `tests/test_matching.py`. No AI is involved: a bill is marked paid only when the rules point to exactly one bank transaction.
+Deterministic rules in [`services/core/app/matching.py`](../services/core/app/matching.py) (rule version `m2`), unit-tested in `tests/test_matching.py`; exchange rates and the payment rate in [`fx.py`](../services/core/app/fx.py). No AI is involved: a bill is marked paid only when the rules point to exactly one bank transaction.
 
 ## What is compared
 
 | Side | Taken into account |
 |---|---|
-| Bills | Posted in QuickBooks, **unpaid**, not excluded, in the **bank account's currency** |
+| Bills | Posted in QuickBooks, **unpaid**, not excluded, in **any currency** (see [Bills in another currency](#bills-in-another-currency)) |
 | Bank transactions | The configured account only; **outgoing** (Plaid amount > 0, verified: positive = money out); posted, not pending; not removed; not already used by an accepted match |
 
-Until FX matching (Day 4), bills in another currency are not compared at all: they stay unpaid with the reason `fx_match_pending`.
 
 ## Rules (all three must pass)
 
@@ -28,11 +27,54 @@ Settings: `MATCH_*` in `.env` (see `.env.example`).
 | The bill has exactly one candidate, and that transaction fits no other bill | `accepted` → a bill payment is recorded in QuickBooks | `payment_pending`, then paid |
 | Several candidates on either side | nothing is paid; all candidates are stored, and a review item (stage `matching`) names the candidate transactions | `ambiguous_match` |
 | No candidate | re-checked on the next run | `no_match_yet` |
-| Bill not in the account's currency | not compared | `fx_match_pending` |
+| Bill in another currency, a transaction fits date and name but not the amount | review (stage `matching`) with expected vs actual | `fx_amount_difference` |
+| Bill in another currency, no usable rate | review if a transaction fits date and name; otherwise waits | `fx_rate_unavailable` |
+
+## Bills in another currency
+
+The bank account is in USD; a bill can be in EUR, JPY, GBP… It is compared with the bank amount through the **ECB reference rate of the transaction date**.
+
+**Rates.** Before matching, the bank workflow asks the core which rate series the open bills need (one per bill currency, from a few days before the earliest invoice date to today), fetches them from the [Frankfurter API](https://frankfurter.dev) with the ECB as the only provider (`/v2/providers/ecb/rates?base=EUR&quotes=USD&from=…&to=…`), and passes the answers to the core, which stores them in `fx_rates`. The ECB publishes on business days only, so a transaction takes the **latest rate on or before its date**.
+
+| Frankfurter answers | The core |
+|---|---|
+| 200 with the daily rates | stores them (and forgets any earlier "not quoted") |
+| 422 "ECB doesn't quote AED" | remembers the currency as not quoted (`fx_unsupported`); its bills get `fx_rate_unavailable` |
+| Anything else, or no answer | stores nothing and logs a warning; the next run fetches again (an outage never sends a bill to review) |
+
+Covered by the ECB: EUR, JPY, GBP, INR, CHF and about 25 more. **Not** covered: AED, SAR and other currencies the ECB doesn't publish.
+
+**Rules.** Date and name are the same as above. The amount rule becomes:
+
+| Rule | Test | Default |
+|---|---|---|
+| Rate | the rate is at most 4 days older than the transaction (weekends and holidays) | `MATCH_FX_MAX_RATE_AGE_DAYS=4` |
+| Amount | \|bank − bill × rate\| ≤ 3 % of bill × rate (no absolute cap: rates move between the invoice and the payment) | `MATCH_FX_PCT_TOLERANCE=0.03` |
+
+Uniqueness applies across all bills: one USD payment that fits a USD bill and a EUR bill is ambiguous.
+
+A foreign bill with no candidate, but a transaction that fits its **date and name**, goes to a person instead of waiting silently: `fx_amount_difference` when the amount is outside the tolerance, `fx_rate_unavailable` when there is no usable rate. The review item shows expected vs actual, e.g.:
+
+> 2026-11-24 bank 1900.00 USD, expected 1748.72 USD (1598.61 EUR × 1.0939, ECB 2026-11-23), +8.65 %
+
+The reviewer confirms the transaction or rejects it, as for an ambiguous match. A transaction that another bill can take by rule is never proposed for review.
+
+**Payment.** The bill payment is in the **bill's currency**, settles the **whole bill**, and carries the actual rate:
+
+- `TotalAmt` = the bill amount, `CurrencyRef` = the bill currency, paid from the USD bank account;
+- `ExchangeRate` = bank amount ÷ bill amount, rounded to **7 decimals** (what QuickBooks keeps, verified live: 1.1009564559 was stored as 1.1009565);
+- **QuickBooks posts the exchange gain or loss** to *Exchange Gain or Loss*. The ECB rate is only used to decide the match; the gain or loss comes from the bill's rate and the payment's rate;
+- an FX difference is **never a payment difference** and never written off: the posting is `paid`.
+
+With 7 decimals, bill × rate lands on the exact bank amount for any bill under 100,000 currency units. Above that (e.g. a 2,345,678 JPY bill, where one rate step is worth 0.23 USD), the booked amount can be off by up to half a step: the payment is still recorded, and the gap is logged as a warning (`bank amount not booked to the cent`, with the booked amount, the gap and the rate) so the bank account can be adjusted by hand. It is never adjusted silently.
+
+Verified live on 2026-11-24 (bill AV-2026-0147, 1,598.61 EUR, posted at 1.099904; Plaid sandbox payment of 1,760.00 USD on 2026-11-24, from `test-data/bank/fx-transactions.json`): matched at the ECB rate of 2026-11-24 (1.0963: 1,752.56 USD expected, +0.42 %); bill payment `AP-PAY-29` of 1,598.61 EUR at 1.1009565. In QuickBooks: Cr Checking **1,760.00** (the bank amount to the cent), Dr A/P-EUR 1,758.32, Dr *Exchange Gain or Loss* 1.68; bill balance 0. A second run created nothing.
+
+A 0.01 line on *Exchange Gain or Loss* when a foreign-currency **bill** is posted is QuickBooks' own rounding (it converts each line and the total separately), not an error.
 
 ## Amount differences
 
-When the bank amount differs from the bill within the tolerance:
+When the bank amount differs from a bill **in the same currency** within the tolerance:
 
 - the **actual bank amount** is kept on the match (`bank_amount`, `difference`);
 - the payment recorded in QuickBooks never exceeds the bill: an under-payment leaves the difference open on the bill, an over-payment is applied up to the bill amount;

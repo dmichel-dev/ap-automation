@@ -52,7 +52,7 @@ docker compose exec postgres sh /docker-entrypoint-initdb.d/01_migrate.sh   # ap
 docker compose up -d --build core
 ```
 
-Migration 004 (Day 2) was applied this way on 2026-11-22, after backup `pg_dumpall_20261122-172709.sql`; 006 and 007 on 2026-11-23 (backups `pg_dumpall_20261123-113152.sql`, `pg_dumpall_20261123-114811.sql`).
+Migration 004 (Day 2) was applied this way on 2026-11-22, after backup `pg_dumpall_20261122-172709.sql`; 006 and 007 on 2026-11-23 (backups `pg_dumpall_20261123-113152.sql`, `pg_dumpall_20261123-114811.sql`); 016 on 2026-11-24 (backup `pg_dumpall_20261124-155751.sql`).
 
 ## Recomputing a normalized value after a rule change
 

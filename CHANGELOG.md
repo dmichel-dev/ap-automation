@@ -2,6 +2,16 @@
 
 All notable changes to this project. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Foreign-currency bank matching:** a bill in EUR, JPY, GBP… is matched with a payment from the USD bank account at the ECB reference rate of the payment date (Frankfurter API, ECB only, fetched by the bank workflow), within 3 %. The bill payment settles the whole bill at the bank's actual rate (bank amount ÷ bill amount, at the 7 decimals QuickBooks keeps), and QuickBooks posts the exchange gain or loss. An exchange difference is never written off. A payment outside the tolerance, or a currency without a usable rate (e.g. AED, SAR), goes to review with the expected and actual amounts.
+
+### Changed
+
+- Bills in another currency than the bank account are no longer left aside (`fx_match_pending`): they are matched (rule version `m2`). Rules for bills in the bank account's currency are unchanged.
+
 ## [0.3.0] - 2026-11-24
 
 Human review, with decisions that take effect in QuickBooks, a fraud alert on bank-detail changes, error handling that never loses an email, a daily summary and a daily automated end-to-end test.
