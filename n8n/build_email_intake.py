@@ -18,7 +18,9 @@ SPLIT = "Split by attachment"
 ITEM = f"$('{SPLIT}').item.json"
 
 DESCRIBE_EMAIL_JS = r"""
-// Metadata only (recipients, attachment types, names, sizes) for the core's screening.
+// For the core's screening: metadata (recipients, attachment types, names, sizes) and the text
+// (subject + body, which the core checks for bank-change wording and never stores; it accepts
+// up to 20,000 characters).
 return $('New email (Gmail)').all().map((email, i) => {
   const mail = email.json;
   const files = Object.entries(email.binary ?? {}).filter(([key]) => /^attachment_\d+$/.test(key));
@@ -29,6 +31,7 @@ return $('New email (Gmail)').all().map((email, i) => {
     delivered_to: String(mail.headers?.['delivered-to'] ?? ''),
     attachments: files.map(([key, b]) => ({ key, mime_type: b.mimeType ?? null, file_name: b.fileName ?? null,
                                            size: b.fileSize ?? null })),
+    text: [mail.subject, mail.text].filter(Boolean).join('\n\n').slice(0, 20000),
   }, pairedItem: { item: i } };
 });
 """
@@ -37,7 +40,7 @@ SPLIT_JS = r"""
 // One item per attachment the core accepted (with its file), or one item saying why there is none.
 // File names are not passed on to the logs: they may be personal data.
 const LABELS = { processed: 'AP/Processed', ready: 'AP/Ready', review: 'AP/Review',
-                 rejected: 'AP/Rejected', error: 'AP/Error' };
+                 rejected: 'AP/Rejected', error: 'AP/Error', fraud: 'AP/Fraud alert' };
 
 // Label IDs, looked up by name so nothing is hard-coded
 const byName = Object.fromEntries($('Get AP labels').all().map(i => [i.json.name, i.json.id]));
@@ -64,7 +67,7 @@ $input.all().forEach((screen, i) => {
   for (const a of s.accepted) {
     out.push({
       json: { ...base, route: 'process', source_ref: `gmail:${mail.message_id}:${a.index}`, mime: a.mime,
-              size: a.size, attachments_in_email: s.accepted.length },
+              size: a.size, attachments_in_email: s.accepted.length, email_text: mail.text },
       binary: { file: files[i].binary[a.key] },
       pairedItem: { item: i },
     });
@@ -165,7 +168,7 @@ def _intake_nodes() -> list[Node]:
             "POST",
             f"={CORE}/intake/email/screen",
             body="JSON.stringify({ recipients: $json.recipients, delivered_to: $json.delivered_to, "
-            "attachments: $json.attachments })",
+            "attachments: $json.attachments, text: $json.text })",
         ),
         code_node(SPLIT, AUTO, SPLIT_JS),
         switch(
@@ -174,6 +177,7 @@ def _intake_nodes() -> list[Node]:
             [
                 switch_rule("invoice attachment", "$json.route === 'process'"),
                 switch_rule("no valid attachment", "$json.route === 'no_valid_attachment'"),
+                switch_rule("bank detail notice", "$json.route === 'bank_detail_notice'"),
                 switch_rule("not for alias", "$json.route === 'not_for_alias'"),
             ],
             {},
@@ -202,6 +206,7 @@ def _processing_nodes() -> list[Node]:
                         {"name": "channel", "value": "email"},
                         {"name": "source_ref", "value": "={{ $json.source_ref }}"},
                         {"name": "n8n_execution_id", "value": "={{ $execution.id }}"},
+                        {"name": "email_text", "value": "={{ $json.email_text }}"},
                     ]
                 },
                 "options": {
@@ -271,6 +276,16 @@ def _not_processed_nodes() -> list[Node]:
             f"'gmail:' + {ITEM}.message_id",
             f"{ITEM}.details",
         ),
+        label_node("Label: fraud alert", ["fraud", "processed"], AUTO),
+        log_node(
+            "Log fraud alert",
+            AUTO,
+            "intake",
+            "warning",
+            "'possible_bank_detail_change: email asks to change bank details, no invoice attached'",
+            f"'gmail:' + {ITEM}.message_id",
+            f"{ITEM}.details",
+        ),
         log_node(
             "Log not for alias",
             AUTO,
@@ -292,6 +307,7 @@ CONNECTIONS: Connections = {
     "Route intake": [
         [("Process invoice (core)", 0)],
         [("Label: no valid attachment", 0)],
+        [("Label: fraud alert", 0)],
         [("Log not for alias", 0)],
     ],
     "Process invoice (core)": [[("Route by status", 0)], [("Label: error", 0)]],
@@ -304,6 +320,7 @@ CONNECTIONS: Connections = {
     "Label: ready": [[("Post to QuickBooks", 0)]],
     "Label: error": [[("Log core error", 0)]],
     "Label: no valid attachment": [[("Log no valid attachment", 0)]],
+    "Label: fraud alert": [[("Log fraud alert", 0)]],
 }
 
 
@@ -349,10 +366,15 @@ SECTIONS = [
     ),
     Section(
         "Not processed",
-        "No PDF or image attached, or not addressed to the alias: labelled and logged, never ignored silently.",
+        "No PDF or image attached, or not addressed to the alias: labelled and logged, never ignored silently. "
+        "An email asking to change bank details, with no invoice, is a **fraud alert** (AP/Fraud alert).",
         col=3,
         row=4,
-        grid=(("Label: no valid attachment", "Log no valid attachment"), ("Log not for alias", None)),
+        grid=(
+            ("Label: no valid attachment", "Log no valid attachment"),
+            ("Label: fraud alert", "Log fraud alert"),
+            ("Log not for alias", None),
+        ),
         kind="failure",
     ),
     Section(

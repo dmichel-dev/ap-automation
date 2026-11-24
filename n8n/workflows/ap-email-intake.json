@@ -34,6 +34,17 @@
         ]
       ]
     },
+    "Label: fraud alert": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Log fraud alert",
+            "type": "main"
+          }
+        ]
+      ]
+    },
     "Label: no valid attachment": {
       "main": [
         [
@@ -130,6 +141,13 @@
           {
             "index": 0,
             "node": "Label: no valid attachment",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Label: fraud alert",
             "type": "main"
           }
         ],
@@ -252,8 +270,8 @@
       "name": "Note: Not processed",
       "parameters": {
         "color": 3,
-        "content": "## Not processed\nNo PDF or image attached, or not addressed to the alias: labelled and logged, never ignored silently.",
-        "height": 550,
+        "content": "## Not processed\nNo PDF or image attached, or not addressed to the alias: labelled and logged, never ignored silently. An email asking to change bank details, with no invoice, is a **fraud alert** (AP/Fraud alert).",
+        "height": 750,
         "width": 420
       },
       "position": [
@@ -338,7 +356,7 @@
       "id": "email-facts",
       "name": "Email facts",
       "parameters": {
-        "jsCode": "// Metadata only (recipients, attachment types, names, sizes) for the core's screening.\nreturn $('New email (Gmail)').all().map((email, i) => {\n  const mail = email.json;\n  const files = Object.entries(email.binary ?? {}).filter(([key]) => /^attachment_\\d+$/.test(key));\n  return { json: {\n    message_id: mail.id,\n    thread_id: mail.threadId,\n    recipients: [...(mail.to?.value ?? []), ...(mail.cc?.value ?? [])].map(a => String(a.address ?? '')),\n    delivered_to: String(mail.headers?.['delivered-to'] ?? ''),\n    attachments: files.map(([key, b]) => ({ key, mime_type: b.mimeType ?? null, file_name: b.fileName ?? null,\n                                           size: b.fileSize ?? null })),\n  }, pairedItem: { item: i } };\n});",
+        "jsCode": "// For the core's screening: metadata (recipients, attachment types, names, sizes) and the text\n// (subject + body, which the core checks for bank-change wording and never stores; it accepts\n// up to 20,000 characters).\nreturn $('New email (Gmail)').all().map((email, i) => {\n  const mail = email.json;\n  const files = Object.entries(email.binary ?? {}).filter(([key]) => /^attachment_\\d+$/.test(key));\n  return { json: {\n    message_id: mail.id,\n    thread_id: mail.threadId,\n    recipients: [...(mail.to?.value ?? []), ...(mail.cc?.value ?? [])].map(a => String(a.address ?? '')),\n    delivered_to: String(mail.headers?.['delivered-to'] ?? ''),\n    attachments: files.map(([key, b]) => ({ key, mime_type: b.mimeType ?? null, file_name: b.fileName ?? null,\n                                           size: b.fileSize ?? null })),\n    text: [mail.subject, mail.text].filter(Boolean).join('\\n\\n').slice(0, 20000),\n  }, pairedItem: { item: i } };\n});",
         "language": "javaScript",
         "mode": "runOnceForAllItems"
       },
@@ -362,7 +380,7 @@
       "parameters": {
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "jsonBody": "={{ JSON.stringify({ recipients: $json.recipients, delivered_to: $json.delivered_to, attachments: $json.attachments }) }}",
+        "jsonBody": "={{ JSON.stringify({ recipients: $json.recipients, delivered_to: $json.delivered_to, attachments: $json.attachments, text: $json.text }) }}",
         "method": "POST",
         "options": {
           "response": {
@@ -389,7 +407,7 @@
       "id": "split-by-attachment",
       "name": "Split by attachment",
       "parameters": {
-        "jsCode": "// One item per attachment the core accepted (with its file), or one item saying why there is none.\n// File names are not passed on to the logs: they may be personal data.\nconst LABELS = { processed: 'AP/Processed', ready: 'AP/Ready', review: 'AP/Review',\n                 rejected: 'AP/Rejected', error: 'AP/Error' };\n\n// Label IDs, looked up by name so nothing is hard-coded\nconst byName = Object.fromEntries($('Get AP labels').all().map(i => [i.json.name, i.json.id]));\nconst labels = {};\nfor (const [key, name] of Object.entries(LABELS)) {\n  if (!byName[name]) throw new Error(`Gmail label \"${name}\" not found: create it in Gmail first`);\n  labels[key] = byName[name];\n}\n\nconst emails = $('Email facts').all();\nconst files = $('New email (Gmail)').all();\nconst out = [];\n$input.all().forEach((screen, i) => {\n  if (screen.json.statusCode !== 200) {\n    throw new Error(`email screening failed (core HTTP ${screen.json.statusCode ?? 'no response'})`);\n  }\n  const mail = emails[i].json, s = screen.json.body;\n  const base = { message_id: mail.message_id, thread_id: mail.thread_id, labels };\n  if (s.route !== 'process') {\n    out.push({ json: { ...base, route: s.route, reason: s.reason,\n                       details: { attachments: s.attachments, skipped: s.skipped } }, pairedItem: { item: i } });\n    return;\n  }\n  for (const a of s.accepted) {\n    out.push({\n      json: { ...base, route: 'process', source_ref: `gmail:${mail.message_id}:${a.index}`, mime: a.mime,\n              size: a.size, attachments_in_email: s.accepted.length },\n      binary: { file: files[i].binary[a.key] },\n      pairedItem: { item: i },\n    });\n  }\n});\nreturn out;",
+        "jsCode": "// One item per attachment the core accepted (with its file), or one item saying why there is none.\n// File names are not passed on to the logs: they may be personal data.\nconst LABELS = { processed: 'AP/Processed', ready: 'AP/Ready', review: 'AP/Review',\n                 rejected: 'AP/Rejected', error: 'AP/Error', fraud: 'AP/Fraud alert' };\n\n// Label IDs, looked up by name so nothing is hard-coded\nconst byName = Object.fromEntries($('Get AP labels').all().map(i => [i.json.name, i.json.id]));\nconst labels = {};\nfor (const [key, name] of Object.entries(LABELS)) {\n  if (!byName[name]) throw new Error(`Gmail label \"${name}\" not found: create it in Gmail first`);\n  labels[key] = byName[name];\n}\n\nconst emails = $('Email facts').all();\nconst files = $('New email (Gmail)').all();\nconst out = [];\n$input.all().forEach((screen, i) => {\n  if (screen.json.statusCode !== 200) {\n    throw new Error(`email screening failed (core HTTP ${screen.json.statusCode ?? 'no response'})`);\n  }\n  const mail = emails[i].json, s = screen.json.body;\n  const base = { message_id: mail.message_id, thread_id: mail.thread_id, labels };\n  if (s.route !== 'process') {\n    out.push({ json: { ...base, route: s.route, reason: s.reason,\n                       details: { attachments: s.attachments, skipped: s.skipped } }, pairedItem: { item: i } });\n    return;\n  }\n  for (const a of s.accepted) {\n    out.push({\n      json: { ...base, route: 'process', source_ref: `gmail:${mail.message_id}:${a.index}`, mime: a.mime,\n              size: a.size, attachments_in_email: s.accepted.length, email_text: mail.text },\n      binary: { file: files[i].binary[a.key] },\n      pairedItem: { item: i },\n    });\n  }\n});\nreturn out;",
         "language": "javaScript",
         "mode": "runOnceForAllItems"
       },
@@ -462,6 +480,31 @@
                 "combinator": "and",
                 "conditions": [
                   {
+                    "id": "bank-detail-notice",
+                    "leftValue": "={{ $json.route === 'bank_detail_notice' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                }
+              },
+              "outputKey": "bank detail notice",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
                     "id": "not-for-alias",
                     "leftValue": "={{ $json.route === 'not_for_alias' }}",
                     "operator": {
@@ -521,6 +564,10 @@
             {
               "name": "n8n_execution_id",
               "value": "={{ $execution.id }}"
+            },
+            {
+              "name": "email_text",
+              "value": "={{ $json.email_text }}"
             }
           ]
         },
@@ -815,6 +862,49 @@
     },
     {
       "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail – david@davidmichel.dev"
+        }
+      },
+      "id": "label-fraud-alert",
+      "name": "Label: fraud alert",
+      "parameters": {
+        "labelIds": "={{ [$('Split by attachment').item.json.labels.fraud, $('Split by attachment').item.json.labels.processed] }}",
+        "messageId": "={{ $('Split by attachment').item.json.message_id }}",
+        "operation": "addLabels",
+        "resource": "message"
+      },
+      "position": [
+        720,
+        1000
+      ],
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "AP database (ap_app)"
+        }
+      },
+      "id": "log-fraud-alert",
+      "name": "Log fraud alert",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ ['gmail:' + $('Split by attachment').item.json.message_id, $execution.id, 'intake', 'warning', 'possible_bank_detail_change: email asks to change bank details, no invoice attached', JSON.stringify($('Split by attachment').item.json.details)] }}"
+        },
+        "query": "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details)\nVALUES ('email', $1, $2, $3, $4, $5, $6::jsonb)"
+      },
+      "position": [
+        960,
+        1000
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "credentials": {
         "postgres": {
           "name": "AP database (ap_app)"
         }
@@ -830,7 +920,7 @@
       },
       "position": [
         720,
-        1000
+        1200
       ],
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6
