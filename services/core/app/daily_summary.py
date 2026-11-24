@@ -9,6 +9,9 @@ from posting), the share posted to QuickBooks without any validation or posting 
 Unreadable documents count, as not touchless. Matching reviews don't count: payments come later.
 
 Bank details appear only as their stored masked labels (last 4 characters), as everywhere else.
+
+End-to-end test: the result of the morning's run (e2e_test.py). A run that failed, never finished or
+didn't happen is a failure, named in the subject. The same wording is the alert sent when a run fails.
 """
 
 from dataclasses import dataclass, field
@@ -16,14 +19,18 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from html import escape
 from typing import Any
+from zoneinfo import ZoneInfo
 
-from . import db, intake_failures
+from . import db, e2e_test, intake_failures
 from .web.display import age
 from .web.reasons import explain
 
 REVIEW_LIST_LIMIT = 10  # open items listed one by one; the rest are counted
 NOTHING = "Nothing to report in the last 24 hours."
 FOOTER = "© David Michel · https://davidmichel.dev"
+E2E_TITLE = "End-to-end test"
+# Times in the email: the workflows' time zone (their schedules, e.g. 07:30 and 08:00, are Paris time)
+TIME_ZONE = ZoneInfo("Europe/Paris")
 # Left out of the touchless rate: nothing to process (a person could do nothing with them either)
 NOT_PROCESSABLE = ("not_invoice", "duplicate_file")
 
@@ -60,6 +67,7 @@ def figures(conn: db.Conn, hours: int = 24) -> dict[str, Any]:
         "fraud_emails": _fraud_emails(conn, period),
         "first_seen": _invoices_with(conn, period, "checks->'info'", "bank_details_first_seen"),
         "intake": intake_failures.summary(conn, hours),
+        "e2e": e2e_test.latest(conn, hours),
     }
 
 
@@ -259,8 +267,18 @@ def intake_section(f: dict[str, Any]) -> Section | None:
     return Section("Email intake problems", lines) if lines else None
 
 
+def e2e_section(f: dict[str, Any]) -> Section | None:
+    if not f["e2e"]["set_up"]:
+        return None
+    return Section(E2E_TITLE, e2e_test.describe(f["e2e"]["run"], f["end"], TIME_ZONE)[1])
+
+
+def _e2e_failed(f: dict[str, Any]) -> bool:
+    return bool(f["e2e"]["set_up"]) and not e2e_test.describe(f["e2e"]["run"], f["end"])[0]
+
+
 # In reading order. A new part of the summary is one more function here.
-SECTIONS = (fraud_section, invoices_section, review_section, first_seen_section, intake_section)
+SECTIONS = (fraud_section, invoices_section, review_section, first_seen_section, intake_section, e2e_section)
 
 
 def _money(amount: Decimal) -> str:
@@ -276,12 +294,15 @@ def sections(f: dict[str, Any]) -> list[Section]:
 
 def subject(f: dict[str, Any], parts: list[Section]) -> str:
     day = f["end"].strftime("%-d %b %Y")
-    if not parts:
+    failed = _e2e_failed(f)
+    if not failed and all(s.title == E2E_TITLE for s in parts):
         return f"AP daily summary, {day}: nothing to report"
     alerts = len(f["fraud_invoices"]) + f["fraud_emails"]
     bits = [f"{f['invoices']['received']} received", f"{len(f['open_reviews'])} waiting for review"]
     if alerts:
         bits.insert(0, _plural(alerts, "fraud alert"))
+    if failed:
+        bits.insert(0, "end-to-end test FAILED")
     return f"AP daily summary, {day}: {', '.join(bits)}"
 
 
@@ -313,6 +334,17 @@ def _html(parts: list[Section]) -> str:
         '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;line-height:1.45;'
         f'max-width:600px;color:#1a1a1a">{body}{footer}</div>'
     )
+
+
+def e2e_alert(run: db.Row, recipients: list[str], now: datetime) -> dict[str, str]:
+    """The email sent at once when a run fails: the summary's end-to-end section on its own."""
+    parts = [Section(E2E_TITLE, e2e_test.describe(run, now, TIME_ZONE)[1])]
+    return {
+        "to": ", ".join(recipients),
+        "subject": f"AP end-to-end test FAILED (run {run['id']})",
+        "text": _text(parts),
+        "html": _html(parts),
+    }
 
 
 def daily(conn: db.Conn, recipients: list[str], hours: int = 24) -> dict[str, Any]:

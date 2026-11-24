@@ -131,15 +131,18 @@ def record(
     status_code: int | None,
     error: str | None,
     execution_id: str | None,
+    scope: db.Scope = "live",
 ) -> dict[str, Any]:
-    """A failure reported by the workflow. One attempt per n8n run, however many attachments failed."""
+    """A failure reported by the workflow. One attempt per n8n run, however many attachments failed.
+    Scope: the screening's answer when the email got that far (an earlier failure is counted as live)."""
     failure = classify(stage, status_code, error)
     row = _lock_row(conn, channel, message_id)
     if row is None:
         row = db.one(
             conn,
-            "INSERT INTO intake_failures (channel, message_id, last_error_code) VALUES (%s, %s, %s) RETURNING *",
-            (channel, message_id, failure.code),
+            "INSERT INTO intake_failures (channel, message_id, last_error_code, scope) VALUES (%s, %s, %s, %s) "
+            "RETURNING *",
+            (channel, message_id, failure.code, scope),
         )
     same_run = execution_id is not None and row["counted_execution_id"] == execution_id
     attempts = row["attempts"] if same_run else row["attempts"] + 1
@@ -185,6 +188,7 @@ def _log_failure(conn: db.Conn, row: db.Row, failure: Failure, execution_id: str
         channel=row["channel"],
         source_ref=source_ref(row["channel"], row["message_id"]),
         execution_id=execution_id,
+        scope=row["scope"],
         details={
             "code": failure.code,
             "permanent": failure.permanent,
@@ -228,6 +232,7 @@ def claim_due(conn: db.Conn, channel: str, found: list[str], execution_id: str |
             channel=channel,
             source_ref=source_ref(channel, row["message_id"]),
             execution_id=execution_id,
+            scope=row["scope"],
             details={"code": _code(row), "attempts": row["attempts"]},
         )
     return [r["message_id"] for r in rows]
@@ -267,6 +272,7 @@ def resolve(conn: db.Conn, channel: str, message_id: str | None, execution_id: s
         channel=channel,
         source_ref=source_ref(channel, message_id),
         execution_id=execution_id,
+        scope=row["scope"],
         details={"code": _code(row), "attempts": row["attempts"]},
     )
     return True
@@ -299,16 +305,17 @@ def retry(conn: db.Conn, channel: str, message_id: str | None, error_code: str |
 
 
 def summary(conn: db.Conn, hours: int = 24) -> dict[str, Any]:
-    """For the daily summary: what needs a person, what is still being retried, what recovered."""
+    """For the daily summary: what needs a person, what is still being retried, what recovered (live emails;
+    a failed test email is the end-to-end test's own result). Failed workflow runs: every workflow."""
     given_up = conn.execute(
         """SELECT channel, message_id, last_error_code AS code, attempts, first_failed_at, given_up_at
-             FROM intake_failures WHERE state = 'given_up' ORDER BY given_up_at""",
+             FROM intake_failures WHERE state = 'given_up' AND scope = 'live' ORDER BY given_up_at""",
     ).fetchall()
     counts = db.one(
         conn,
         """SELECT count(*) FILTER (WHERE state = 'waiting') AS retrying,
                   count(*) FILTER (WHERE state = 'resolved' AND resolved_at > now() - %(h)s) AS recovered
-             FROM intake_failures""",
+             FROM intake_failures WHERE scope = 'live'""",
         {"h": timedelta(hours=hours)},
     )
     crashes = db.one(

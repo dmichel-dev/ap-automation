@@ -10,6 +10,16 @@ Endpoints:
   POST /invoices/process  file + source → extract, check, store; returns the status for n8n routing
   POST /extract           file → common invoice format (no persistence; tests and debugging)
 
+Daily end-to-end test (e2e_test.py; n8n puts the messages in Gmail and does the QuickBooks calls):
+  POST /e2e/runs                      start a run
+  GET  /e2e/qbo-objects               QuickBooks objects of test postings still to delete
+  POST /e2e/qbo-objects/{id}/check    the object read back → delete / skip / keep (core decides)
+  POST /e2e/qbo-objects/{id}/deleted  QuickBooks' answer to the delete
+  POST /e2e/runs/{id}/reset           earlier test invoices deleted (scope e2e only) → the run's messages
+  POST /e2e/runs/{id}/sent            the messages' Gmail IDs
+  POST /e2e/runs/{id}/verify          what Gmail shows → every check, pass or fail, and the alert to send
+  POST /e2e/runs/{id}/abort           the workflow could not finish: the run fails, with the alert
+
 Accounting and bank (n8n does the QuickBooks/Plaid calls; the core keeps state and rules):
   GET  /invoices/{id}/file               original file, for the accounting attachment
   POST /invoices/{id}/exclude-from-posting
@@ -47,6 +57,7 @@ from . import (
     actors,
     daily_summary,
     db,
+    e2e_test,
     files,
     intake,
     intake_failures,
@@ -144,6 +155,7 @@ def process_invoice(
         str | None, Form(max_length=intake.EMAIL_TEXT_MAX, description="subject + body; checked, never stored")
     ] = None,
     message_id: Annotated[str | None, Form(max_length=200, description="the email, for the re-check")] = None,
+    scope: Annotated[Literal["live", "e2e"], Form(description="the screening's answer")] = "live",
 ) -> processing.ProcessOutcome:
     """The shared core for every channel: extract → normalize → check → store. Idempotent per source_ref."""
     content = file.file.read(files.MAX_FILE_BYTES + 1)
@@ -156,6 +168,7 @@ def process_invoice(
         execution_id=n8n_execution_id,
         email_text=email_text,
         message_id=message_id or None,
+        scope=scope,
     )
     return processing.process(req, provider, cfg)
 
@@ -327,6 +340,7 @@ class EmailToScreen(BaseModel):
     delivered_to: str = Field(default="", max_length=2000)
     attachments: list[EmailAttachment] = Field(default=[], max_length=100)
     text: str = Field(default="", max_length=intake.EMAIL_TEXT_MAX)  # subject + body: checked, never stored
+    subject: str = Field(default="", max_length=2000)  # names the end-to-end run, for test emails
     message_id: str | None = Field(default=None, max_length=200)  # for the re-check
     execution_id: str | None = Field(default=None, max_length=100)
 
@@ -341,9 +355,13 @@ def screen_email(body: EmailToScreen, cfg: AcctCfg) -> JsonDict:
         [intake.Attachment(a.key, a.mime_type, a.file_name, a.size) for a in body.attachments],
         get_settings().intake_email_alias,
         text=body.text,
+        subject=body.subject,
     )
-    if body.message_id and screening.route != "process":
-        with db.connect(cfg.database_url) as conn:
+    if screening.scope != "e2e" and not (body.message_id and screening.route != "process"):
+        return asdict(screening)  # nothing to look up or record
+    with db.connect(cfg.database_url) as conn:
+        screening = e2e_test.confirm_scope(conn, screening)
+        if body.message_id and screening.route != "process":
             intake_failures.resolve(conn, "email", body.message_id, body.execution_id)
     return asdict(screening)
 
@@ -360,13 +378,21 @@ class IntakeFailure(BaseModel):
     status_code: int | None = Field(default=None, ge=0, le=599)  # None or 0 = no answer
     error: str | None = Field(default=None, max_length=100)  # the core's error code, if it answered
     execution_id: str | None = Field(default=None, max_length=100)
+    scope: Literal["live", "e2e"] | None = None  # the screening's answer, if the email got that far
 
 
 @app.post("/intake/failures", dependencies=Auth)
 def intake_failure(body: IntakeFailure, cfg: AcctCfg) -> JsonDict:
     with db.connect(cfg.database_url) as conn:
         return intake_failures.record(
-            conn, body.channel, body.message_id, body.stage, body.status_code, body.error, body.execution_id
+            conn,
+            body.channel,
+            body.message_id,
+            body.stage,
+            body.status_code,
+            body.error,
+            body.execution_id,
+            body.scope or "live",
         )
 
 
@@ -408,11 +434,8 @@ def intake_failures_summary(cfg: AcctCfg, hours: int = 24) -> JsonDict:
 @app.get("/summary/daily", dependencies=Auth)
 def summary_daily(cfg: AcctCfg, hours: int = 24) -> JsonDict:
     """The daily summary email, ready to send: recipients, subject, text and HTML (plus the figures)."""
-    recipients = [a.strip() for a in get_settings().daily_summary_to.split(",") if a.strip()]
-    if not recipients:
-        raise HTTPException(500, "DAILY_SUMMARY_TO is empty")
     with db.connect(cfg.database_url) as conn:
-        return daily_summary.daily(conn, recipients, max(1, min(hours, 24 * 31)))
+        return daily_summary.daily(conn, _summary_recipients(), max(1, min(hours, 24 * 31)))
 
 
 @app.post("/postings/{invoice_id}/lookup/{kind}", dependencies=Auth)
@@ -678,3 +701,119 @@ def review_keep_open(review_id: int, body: settlement.Settlement, cfg: AcctCfg) 
 @app.post("/review/items/{review_id}/retry", dependencies=Auth)
 def review_retry(review_id: int, body: settlement.Settlement, cfg: AcctCfg) -> JsonDict:
     return _settle(review_id, "retry", body, cfg)
+
+
+# =====================================================================================
+# Daily end-to-end test
+# =====================================================================================
+@app.exception_handler(e2e_test.Blocked)
+def _e2e_blocked(_: Request, exc: e2e_test.Blocked) -> JSONResponse:
+    return JSONResponse({"error": "e2e_blocked", "message": str(exc)}, status_code=409)
+
+
+class E2eStart(BaseModel):
+    execution_id: str | None = Field(default=None, max_length=100)
+
+
+@app.post("/e2e/runs", dependencies=Auth)
+def e2e_start(body: E2eStart, cfg: AcctCfg) -> JsonDict:
+    """A new run, and where the workflow sends QuickBooks calls."""
+    with db.connect(cfg.database_url) as conn:
+        run = e2e_test.start(conn, body.execution_id)
+    return {"run_id": run["id"], **_qbo_target(cfg)}
+
+
+@app.get("/e2e/qbo-objects", dependencies=Auth)
+def e2e_qbo_objects(run_id: int, cfg: AcctCfg) -> JsonDict:
+    with db.connect(cfg.database_url) as conn:
+        objects = e2e_test.cleanup_list(conn, run_id)
+    return {"objects": [db.jsonable(o) for o in objects], **_qbo_target(cfg)}
+
+
+class QboAnswer(BaseModel):
+    """A QuickBooks response, passed through unchanged by the workflow."""
+
+    status_code: int = Field(ge=0, le=599)
+    body: Any = None
+    execution_id: str | None = Field(default=None, max_length=100)
+
+
+@app.post("/e2e/qbo-objects/{object_id}/check", dependencies=Auth)
+def e2e_qbo_check(object_id: int, body: QboAnswer, cfg: AcctCfg) -> JsonDict:
+    with db.connect(cfg.database_url) as conn:
+        return e2e_test.qbo_check(conn, object_id, body.status_code, body.body, body.execution_id)
+
+
+@app.post("/e2e/qbo-objects/{object_id}/deleted", dependencies=Auth)
+def e2e_qbo_deleted(object_id: int, body: QboAnswer, cfg: AcctCfg) -> JsonDict:
+    with db.connect(cfg.database_url) as conn:
+        return {"deleted": e2e_test.qbo_deleted(conn, object_id, body.status_code, body.body, body.execution_id)}
+
+
+@app.post("/e2e/runs/{run_id}/reset", dependencies=Auth)
+def e2e_reset(run_id: int, body: E2eStart, cfg: AcctCfg) -> JsonDict:
+    """The earlier runs' test invoices are deleted (scope e2e only), then the run's messages are handed out."""
+    with db.connect(cfg.database_url) as conn:
+        done = e2e_test.reset(conn, run_id, body.execution_id)
+        now = db.one(conn, "SELECT now() AS t")["t"]
+    for path in done.files:  # after COMMIT
+        accounting.delete_stored_file(cfg.storage_dir, path)
+    return {
+        "deleted_invoices": done.invoices,
+        "messages": e2e_test.messages(run_id, get_settings().intake_email_alias, now),
+    }
+
+
+class E2eMessage(BaseModel):
+    scenario: str = Field(max_length=50)
+    gmail_id: str = Field(min_length=1, max_length=200)
+    labels: list[Annotated[str, Field(max_length=200)]] = Field(default=[], max_length=50)
+    trashed: bool = False  # moved to Gmail's trash after its labels were read
+
+
+class E2eMessages(BaseModel):
+    messages: list[E2eMessage] = Field(max_length=10)
+    execution_id: str | None = Field(default=None, max_length=100)
+
+
+@app.post("/e2e/runs/{run_id}/sent", dependencies=Auth)
+def e2e_sent(run_id: int, body: E2eMessages, cfg: AcctCfg) -> JsonDict:
+    with db.connect(cfg.database_url) as conn:
+        e2e_test.record_sent(conn, run_id, [{"scenario": m.scenario, "gmail_id": m.gmail_id} for m in body.messages])
+    return {"recorded": len(body.messages)}
+
+
+def _summary_recipients() -> list[str]:
+    recipients = [a.strip() for a in get_settings().daily_summary_to.split(",") if a.strip()]
+    if not recipients:
+        raise HTTPException(500, "DAILY_SUMMARY_TO is empty")
+    return recipients
+
+
+def _run_result(conn: db.Conn, run: db.Row) -> JsonDict:
+    """A finished run, with the alert email to send at once if it failed."""
+    now = db.one(conn, "SELECT now() AS t")["t"]
+    alert = daily_summary.e2e_alert(run, _summary_recipients(), now) if run["status"] == "failed" else None
+    return {"status": run["status"], "checks": run["checks"], "failures": run["failures"], "alert": alert}
+
+
+@app.post("/e2e/runs/{run_id}/verify", dependencies=Auth)
+def e2e_verify(run_id: int, body: E2eMessages, cfg: AcctCfg) -> JsonDict:
+    """Every check of the run."""
+    with db.connect(cfg.database_url) as conn:
+        run = e2e_test.verify(conn, run_id, [m.model_dump() for m in body.messages], body.execution_id)
+        return _run_result(conn, run)
+
+
+class E2eAbort(BaseModel):
+    step: str = Field(min_length=1, max_length=100)  # the workflow node that failed
+    message: str = Field(default="", max_length=500)
+    execution_id: str | None = Field(default=None, max_length=100)
+
+
+@app.post("/e2e/runs/{run_id}/abort", dependencies=Auth)
+def e2e_abort(run_id: int, body: E2eAbort, cfg: AcctCfg) -> JsonDict:
+    """The workflow could not finish the run: it fails, with the alert to send."""
+    with db.connect(cfg.database_url) as conn:
+        run = e2e_test.abort(conn, run_id, body.step, body.message, body.execution_id)
+        return _run_result(conn, run)

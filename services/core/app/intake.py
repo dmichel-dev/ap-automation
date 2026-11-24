@@ -1,8 +1,14 @@
-"""Email intake screening (pure): which emails and which attachments go to processing.
+"""Email intake screening (pure): which emails and which attachments go to processing, and whose data
+they are (scope).
 
 The n8n workflow sends the email's metadata (recipients, attachment types, names and sizes, never the
 files) and its text (subject + body, checked for bank-change wording, never stored), and splits the
 email according to the answer. Deterministic code only.
+
+Scope: mail to the alias is live. Mail to its "+e2e" sub-address is the daily end-to-end test's only
+if its subject names a run ("[E2E run 12]"), and the core then checks that this run is in progress
+(e2e_test.confirm_scope). Anything else sent there is processed as live, so a real invoice sent to
+that address is never hidden among test data.
 """
 
 import re
@@ -23,6 +29,8 @@ MIME_BY_EXTENSION = {
 MIN_IMAGE_BYTES = 15000  # smaller images are almost always signature logos
 EMAIL_TEXT_MAX = 20000  # characters of subject + body that n8n sends
 _SIZE_UNITS = {"b": 1, "kb": 1000, "mb": 1000**2, "gb": 1000**3}
+E2E_TAG = "e2e"  # invoices+e2e@…: the daily end-to-end test's address
+E2E_MARKER = re.compile(r"\[E2E run (\d{1,12})\]")
 
 
 @dataclass(frozen=True)
@@ -40,6 +48,8 @@ class Screening:
     accepted: list[dict[str, str | int]] = field(default_factory=list)  # key, index, mime, size
     skipped: list[dict[str, str | int]] = field(default_factory=list)  # type, size, why
     attachments: int = 0
+    scope: str = "live"  # live | e2e
+    e2e_run: int | None = None  # the end-to-end run the subject names (confirmed by the core)
 
 
 def size_in_bytes(size: str | int | None) -> int:
@@ -62,18 +72,45 @@ def _mime(a: Attachment) -> str | None:
     return MIME_BY_EXTENSION.get(ext)
 
 
+def sub_address(alias: str, tag: str) -> str:
+    """invoices@example.com + e2e → invoices+e2e@example.com"""
+    local, domain = alias.lower().split("@", 1)
+    return f"{local}+{tag}@{domain}"
+
+
+def _addressed_to(address: str, recipients: list[str], delivered_to: str) -> bool:
+    return address in [r.lower() for r in recipients] or address in delivered_to.lower()
+
+
+def addressed_scope(
+    recipients: list[str], delivered_to: str, alias: str, subject: str
+) -> tuple[str, int | None] | None:
+    """(scope, end-to-end run named in the subject), or None when the email isn't for the alias."""
+    if _addressed_to(alias.lower(), recipients, delivered_to):
+        return "live", None
+    if not _addressed_to(sub_address(alias, E2E_TAG), recipients, delivered_to):
+        return None
+    marker = E2E_MARKER.search(subject)
+    return ("e2e", int(marker.group(1))) if marker else ("live", None)
+
+
 def screen_email(
-    recipients: list[str], delivered_to: str, attachments: list[Attachment], alias: str, text: str = ""
+    recipients: list[str],
+    delivered_to: str,
+    attachments: list[Attachment],
+    alias: str,
+    text: str = "",
+    subject: str = "",
 ) -> Screening:
     """Second guard after the Gmail search (the alias must be a recipient), then the attachments
     worth processing. An email without one is never silently ignored: it gets a route and a reason.
     Without one, an email asking to change bank details is a fraud alert (with one, the processing
     flags each invoice)."""
-    alias = alias.lower()
-    if alias not in [r.lower() for r in recipients] and alias not in delivered_to.lower():
+    addressed = addressed_scope(recipients, delivered_to, alias, subject)
+    if addressed is None:
         return Screening("not_for_alias", "not_addressed_to_alias")
     files = sorted((a for a in attachments if a.key.startswith("attachment_")), key=lambda a: _index(a.key))
-    screening = Screening("process", attachments=len(files))
+    screening = Screening("process", attachments=len(files), scope=addressed[0], e2e_run=addressed[1])
     for a in files:
         mime, size = _mime(a), size_in_bytes(a.size)
         if not mime:

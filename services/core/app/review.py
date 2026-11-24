@@ -35,7 +35,7 @@ Action = Literal[
     "approve", "verify", "correct", "reject", "confirm_match", "reject_match", "write_off", "keep_open", "retry"
 ]
 SETTLEMENT_ACTIONS = frozenset({"confirm_match", "reject_match", "write_off", "keep_open", "retry"})
-Scope = Literal["live", "e2e", "demo"]
+Scope = db.Scope
 FRAUD_CODES = frozenset({"possible_bank_detail_change"})
 # Reasons whose approval must name the account (never the supplier's default by fallback): an item
 # that may be a fixed asset needs an explicit expense-or-asset choice
@@ -345,7 +345,7 @@ def _apply_changes(conn: db.Conn, item: db.Row, inv: db.Row, values: dict[str, A
 def _add_duplicate_reasons(conn: db.Conn, item: db.Row, inv: db.Row) -> list[str]:
     """After a correction (number, supplier, total, date), the duplicate check runs again; new
     matches are added to the item's reasons so the reviewer sees them before approving."""
-    found = db.find_possible_duplicates(conn, stored_invoice(conn, inv), exclude_id=str(inv["id"]))
+    found = db.find_possible_duplicates(conn, stored_invoice(conn, inv), exclude_id=str(inv["id"]), scope=inv["scope"])
     known = {r.get("message") for r in item["reasons"]}
     new = [
         Issue(

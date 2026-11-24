@@ -444,9 +444,10 @@ def _open_review(
     shown = (detail or "")[:500] if code in QUICKBOOKS_REFUSED else _effect_error(code, detail)
     error = shown if code in QUICKBOOKS_REFUSED else None  # QuickBooks' own words, shown on the item
     row = conn.execute(
-        """INSERT INTO review_queue (invoice_id, reasons, stage, effect_error) VALUES (%s, %s, %s, %s)
+        """INSERT INTO review_queue (invoice_id, reasons, stage, effect_error, scope)
+           SELECT id, %s, %s, %s, scope FROM invoices WHERE id = %s
            ON CONFLICT (invoice_id) WHERE status = 'open' DO NOTHING RETURNING id""",
-        (invoice_id, Jsonb([reason]), stage, error),
+        (Jsonb([reason]), stage, error, invoice_id),
     ).fetchone()
     if row:  # logged once, when opened (matching runs every hour)
         db.log(
@@ -749,7 +750,8 @@ def run_matching(conn: Conn, cfg: AccountingConfig, item_key: str, rules: matchi
                   i.invoice_date, i.due_date, i.supplier_name_norm, i.invoice_number_norm
              FROM accounting_postings p JOIN invoices i ON i.id = p.invoice_id
             WHERE p.status = 'posted' AND p.object_type = 'bill' AND p.payment_status = 'unpaid'
-              AND p.payment_reason <> 'payment_pending' AND i.posting_excluded_reason IS NULL"""
+              AND p.payment_reason <> 'payment_pending' AND i.posting_excluded_reason IS NULL
+              AND i.scope = 'live'"""  # the bank account is live: test and demo bills are never paid
     ).fetchall()
 
     def set_reason(posting_ids: list[int], reason: str) -> None:

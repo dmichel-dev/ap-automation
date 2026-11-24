@@ -45,6 +45,7 @@ class ProcessRequest:
     execution_id: str | None = None
     email_text: str | None = None  # subject + body: checked for bank-change wording, never stored
     message_id: str | None = None  # the email (or other message) this file came from, for the re-check
+    scope: db.Scope = "live"  # from the intake screening: the daily end-to-end test's emails are 'e2e'
 
 
 class ProcessOutcome(BaseModel):
@@ -71,7 +72,7 @@ class Config:
 
 
 def _ctx(req: ProcessRequest) -> dict[str, Any]:
-    return {"channel": req.channel, "source_ref": req.source_ref, "execution_id": req.execution_id}
+    return {"channel": req.channel, "source_ref": req.source_ref, "execution_id": req.execution_id, "scope": req.scope}
 
 
 def _existing(row: dict[str, Any]) -> ProcessOutcome:
@@ -125,7 +126,7 @@ def _process(req: ProcessRequest, provider: ExtractionProvider, cfg: Config) -> 
         db.lock(conn, source_lock, file_lock)
         if row := db.find_by_source(conn, req.channel, req.source_ref):
             return _existing(row)
-        if same := db.find_same_file(conn, sha256):
+        if same := db.find_same_file(conn, sha256, req.scope):
             return _reject_duplicate_file(conn, req, prepared, sha256, received_at, same, cfg)
         db.log(
             conn,
@@ -159,12 +160,13 @@ def _process(req: ProcessRequest, provider: ExtractionProvider, cfg: Config) -> 
         db.lock(conn, source_lock, file_lock, supplier_lock)
         if row := db.find_by_source(conn, req.channel, req.source_ref):  # lost a race
             return _existing(row)
-        if same := db.find_same_file(conn, sha256):
+        if same := db.find_same_file(conn, sha256, req.scope):
             return _reject_duplicate_file(conn, req, prepared, sha256, received_at, same, cfg)
 
-        duplicates = db.find_possible_duplicates(conn, inv)
+        duplicates = db.find_possible_duplicates(conn, inv, scope=req.scope)
         supplier = db.supplier_status(conn, inv)
-        bank = bank_details.assess(inv, req.email_text, db.bank_baseline(conn, inv), cfg.bank_fingerprint_key)
+        baseline = db.bank_baseline(conn, inv, req.scope)
+        bank = bank_details.assess(inv, req.email_text, baseline, cfg.bank_fingerprint_key)
         v = validate(
             inv,
             confidence_threshold=cfg.confidence_threshold,
@@ -201,6 +203,7 @@ def _process(req: ProcessRequest, provider: ExtractionProvider, cfg: Config) -> 
                 duplicate_of=duplicates[0].invoice_id if duplicates else None,
                 expense_account_id=supplier.default_account_id if v.status == "ready" else None,
                 bank_accounts=bank.accounts,
+                scope=req.scope,
             )
             review_id = db.open_review(conn, invoice_id, v.reasons) if v.status == "needs_review" else None
             db.log(
@@ -268,6 +271,7 @@ def _reject_duplicate_file(
         execution_id=req.execution_id,
         confidence_threshold=cfg.confidence_threshold,
         duplicate_of=str(same["id"]),
+        scope=req.scope,
     )
     db.log(
         conn,

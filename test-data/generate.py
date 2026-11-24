@@ -8,11 +8,15 @@ All companies, people, addresses and numbers are fictional: names were checked w
 search, phone numbers use 555-01xx, emails use example.com, tax IDs and IBANs are invalid.
 Totals are computed here with exact decimals; the expected values are written next to each
 file in invoices/<id>.expected.json and checked by scripts/run_e2e.py.
+
+  generate.py --e2e   only the daily end-to-end test's documents (services/core/app/e2e_fixtures;
+                      their expected results are in services/core/app/e2e_test.py)
 """
 
 import io
 import json
 import random
+import sys
 import zipfile
 from collections.abc import Callable
 from decimal import ROUND_DOWN, ROUND_HALF_UP
@@ -25,6 +29,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 OUT = Path(__file__).parent / "invoices"
 FIXTURES = Path("/app/tests/fixtures")  # core-test container: services/core is mounted at /app
+E2E_FIXTURES = Path("/app/app/e2e_fixtures")
 FONT = "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf"
 FONT_BOLD = "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf"
 FONT_CJK = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"  # index 0 = Japanese
@@ -114,9 +119,11 @@ def us_invoice(
     lines: list,
     extra: str | None = None,
     footer: str | None = None,
+    printed_total: D | None = None,
 ) -> tuple[bytes, D]:
     """supplier = (name, address, tax ID and contact line); dates = (invoice, due) as MM/DD/YYYY;
-    extra = one more header line (e.g. the service period); footer = text under the totals."""
+    extra = one more header line (e.g. the service period); footer = text under the totals;
+    printed_total = a wrong total to print instead of the right one (returned: the right one)."""
     subtotal = sum((qty * price for _, qty, price in lines), D(0))
     tax = q(subtotal * US_TAX)
     total = subtotal + tax
@@ -141,7 +148,7 @@ def us_invoice(
         [
             ("Subtotal", f"${fmt_en(subtotal)}", False),
             ("Sales tax 8.5%", f"${fmt_en(tax)}", False),
-            ("Total due", f"USD {fmt_en(total)}", True),
+            ("Total due", f"USD {fmt_en(printed_total or total)}", True),
         ]
     )
     if footer:
@@ -692,11 +699,32 @@ def doc_g_h() -> None:
         "Same bytes as A: rejected before any OCR call. 'occurrence: 2' = the second row with this file.",
     )
 
-    # Minimal valid .docx (no python-docx needed)
+    (OUT / "H-delivery-note.docx").write_bytes(
+        docx("Delivery note DN-77 (fictional): 3 boxes delivered on 21 November 2026.")
+    )
+    save_expected(
+        "H-no-valid-attachment",
+        "H-delivery-note.docx",
+        {
+            "subject": "Delivery note DN-77",
+            "body": "Hello,\n\nattached is the delivery note for today's delivery.\n\nRegards,\n"
+            "Thistlecombe Office Supplies (fictional test supplier)",
+        },
+        {
+            "no_invoice_row": True,
+            "log_message": "email without a valid invoice attachment",
+            "labels": ["AP/Rejected", "AP/Processed"],
+        },
+        "Only a .docx: no invoice is created; the email is labelled and logged, never ignored.",
+    )
+
+
+def docx(text: str) -> bytes:
+    """A minimal valid .docx with one paragraph (no python-docx needed)."""
     document = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'
-        "<w:p><w:r><w:t>Delivery note DN-77 (fictional): 3 boxes delivered on 21 November 2026.</w:t></w:r></w:p>"
+        f"<w:p><w:r><w:t>{text}</w:t></w:r></w:p>"
         "</w:body></w:document>"
     )
     buf = io.BytesIO()
@@ -716,23 +744,7 @@ def doc_g_h() -> None:
             'relationships/officeDocument" Target="word/document.xml"/></Relationships>',
         )
         z.writestr("word/document.xml", document)
-    (OUT / "H-delivery-note.docx").write_bytes(buf.getvalue())
-
-    save_expected(
-        "H-no-valid-attachment",
-        "H-delivery-note.docx",
-        {
-            "subject": "Delivery note DN-77",
-            "body": "Hello,\n\nattached is the delivery note for today's delivery.\n\nRegards,\n"
-            "Thistlecombe Office Supplies (fictional test supplier)",
-        },
-        {
-            "no_invoice_row": True,
-            "log_message": "email without a valid invoice attachment",
-            "labels": ["AP/Rejected", "AP/Processed"],
-        },
-        "Only a .docx: no invoice is created; the email is labelled and logged, never ignored.",
-    )
+    return buf.getvalue()
 
 
 def doc_l_m() -> None:
@@ -913,7 +925,39 @@ def bank_change_samples() -> None:
         (FIXTURES / f"bank_change_{lang}.pdf").write_bytes(bytes(pdf.output()))
 
 
-if __name__ == "__main__":
+# =====================================================================================
+# Daily end-to-end test (services/core/app/e2e_test.py holds what each must produce)
+# =====================================================================================
+OSTLEWICK = (
+    "Ostlewick Test Supplies LLC",
+    "9 Fictional Court, Eugene, OR 97401, USA",
+    "EIN 00-0000090 · (541) 555-0190 · billing@example.com",
+)
+
+
+def e2e_set() -> None:
+    """Small amounts, no service period, no item near the capitalisation threshold: the clean invoice
+    stays under every review rule and goes straight through."""
+    E2E_FIXTURES.mkdir(exist_ok=True)
+    dates = ("11/24/2026", "12/24/2026")
+    lines = [("Copy paper, letter size (case)", 4, D("38.00")), ("Desk organizer, mesh", 2, D("24.50"))]
+    pdf, total = us_invoice(OSTLEWICK, "E2E-1001", dates, lines)
+    assert total == D("218.09")
+    (E2E_FIXTURES / "e2e-invoice-ready.pdf").write_bytes(pdf)
+    lines = [("Printer toner, black", 2, D("64.00")), ("Sticky notes (pack of 12)", 3, D("9.00"))]
+    pdf, total = us_invoice(OSTLEWICK, "E2E-1002", dates, lines, printed_total=D("178.18"))
+    assert total == D("168.18")  # printed 178.18: total_mismatch
+    (E2E_FIXTURES / "e2e-invoice-wrong-total.pdf").write_bytes(pdf)
+    (E2E_FIXTURES / "e2e-delivery-note.docx").write_bytes(
+        docx("Delivery note DN-1003 (fictional): 4 cases of copy paper and 2 desk organizers delivered.")
+    )
+
+
+if __name__ == "__main__" and sys.argv[1:] == ["--e2e"]:
+    e2e_set()
+    for p in sorted(E2E_FIXTURES.iterdir()):
+        print(f"{p.stat().st_size:>8}  {p.name}")
+elif __name__ == "__main__":
     OUT.mkdir(exist_ok=True)
     for old in OUT.glob("*"):
         old.unlink()
