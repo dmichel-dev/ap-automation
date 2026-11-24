@@ -2,29 +2,19 @@
 writing off or keeping a payment difference, retrying after a failed call; and the "run now" gate.
 Real Postgres; QuickBooks answers are passed in as the workflow would pass them."""
 
-import dataclasses
 import hashlib
 import time
 from decimal import Decimal as D
 
 import pytest
 from app import db, run_now, settlement
-from app.main import app, get_accounting_config
+from app.main import app
 from fastapi.testclient import TestClient
 
-from .conftest import AUTH, AUTOMATION
+from .conftest import AUTH, AUTOMATION, WRITE_OFF_ACCOUNT
 from .test_accounting import bank_page, plaid_tx, posted_bill, posting, register_bank, run, sql
 
 c = TestClient(app)
-WRITE_OFF_ACCOUNT = "1150040015"
-
-
-@pytest.fixture
-def acfg(cfg):
-    """Accounting settings with the payment-differences account, also used by the API."""
-    config = dataclasses.replace(cfg, write_off_account_id=WRITE_OFF_ACCOUNT)
-    app.dependency_overrides[get_accounting_config] = lambda: config
-    return config
 
 
 def review(cfg, invoice_id):

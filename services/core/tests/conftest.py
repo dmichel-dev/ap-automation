@@ -1,3 +1,4 @@
+import dataclasses
 import os
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,7 @@ AUTOMATION = "e2e-test (automated test)"  # how the bearer-token API records who
 OCR_TEXT = "Quillmoor Paper Supply LLC ... Total due: USD 641.24 (all amounts in $)"
 FIXTURES = Path(__file__).parent / "fixtures"
 BANK_KEY = b"test-bank-fingerprint-key"  # keys the bank-account fingerprints on the test database
+WRITE_OFF_ACCOUNT = "1150040015"  # "Payment differences" in the sandbox
 
 
 def query(url: str, sql: str, *args: Any) -> list[dict[str, Any]]:
@@ -162,3 +164,11 @@ def cfg(clean_db, tmp_path):
     app.dependency_overrides[get_accounting_config] = lambda: c
     yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def acfg(cfg):
+    """Accounting settings with the payment-differences account, also used by the API."""
+    config = dataclasses.replace(cfg, write_off_account_id=WRITE_OFF_ACCOUNT)
+    app.dependency_overrides[get_accounting_config] = lambda: config
+    return config

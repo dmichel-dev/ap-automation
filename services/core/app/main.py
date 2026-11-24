@@ -45,6 +45,7 @@ from pydantic import BaseModel, Field
 from . import (
     accounting,
     actors,
+    daily_summary,
     db,
     files,
     intake,
@@ -402,6 +403,16 @@ def intake_failures_retry(body: IntakeRetry, cfg: AcctCfg) -> JsonDict:
 def intake_failures_summary(cfg: AcctCfg, hours: int = 24) -> JsonDict:
     with db.connect(cfg.database_url) as conn:
         return intake_failures.summary(conn, max(1, min(hours, 24 * 31)))
+
+
+@app.get("/summary/daily", dependencies=Auth)
+def summary_daily(cfg: AcctCfg, hours: int = 24) -> JsonDict:
+    """The daily summary email, ready to send: recipients, subject, text and HTML (plus the figures)."""
+    recipients = [a.strip() for a in get_settings().daily_summary_to.split(",") if a.strip()]
+    if not recipients:
+        raise HTTPException(500, "DAILY_SUMMARY_TO is empty")
+    with db.connect(cfg.database_url) as conn:
+        return daily_summary.daily(conn, recipients, max(1, min(hours, 24 * 31)))
 
 
 @app.post("/postings/{invoice_id}/lookup/{kind}", dependencies=Auth)

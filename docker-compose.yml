@@ -92,6 +92,7 @@ services:
       INTAKE_EMAIL_ALIAS: ${INTAKE_EMAIL_ALIAS:-invoices@davidmichel.dev}
       FILE_STORAGE_DIR: /data/files
       FILE_RETENTION_DAYS: ${FILE_RETENTION_DAYS}
+      DAILY_SUMMARY_TO: ${DAILY_SUMMARY_TO:-david@davidmichel.dev}
       BANK_FINGERPRINT_KEY: ${BANK_FINGERPRINT_KEY:-}   # required: processing refuses to run without it
       # Accounting accounts (QuickBooks IDs) and matching rules, see docs/matching.md
       QBO_REALM_ID: ${QBO_REALM_ID:-}

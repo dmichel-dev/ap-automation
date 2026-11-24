@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     intake_email_alias: str = "invoices@davidmichel.dev"  # only emails to this address are processed
     file_storage_dir: str = "/data/files"
     file_retention_days: int = 30
+    # Who gets the daily summary email (comma-separated list)
+    daily_summary_to: str = "david@davidmichel.dev"
     # Keys the fingerprints that compare bank accounts across invoices (empty: processing refuses to run)
     bank_fingerprint_key: SecretStr = SecretStr("")
     # Company accounting policy (docs/validation.md): amounts in the home currency
