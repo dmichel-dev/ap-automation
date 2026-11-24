@@ -1,0 +1,512 @@
+{
+  "active": false,
+  "connections": {
+    "Called by the e2e test": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Objects to delete (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Check object (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Delete it?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Delete it?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Delete object (QBO)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Delete object (QBO)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Record deletion (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Listed?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "One item per object",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Stop: no list",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Objects to delete (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Listed?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "One item per object": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Read object (QBO)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Read object (QBO)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Check object (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "AP – E2E QuickBooks clean-up",
+  "nodes": [
+    {
+      "id": "note-e2e-quickbooks-clean-up",
+      "name": "Note: E2E QuickBooks clean-up",
+      "parameters": {
+        "color": 5,
+        "content": "## E2E QuickBooks clean-up\nDeletes the QuickBooks bills and attached PDFs created by the **daily end-to-end test**, so the books stay clean. Called by *AP – Daily e2e test* before and after each run.\n\nThe **core decides** what may be deleted: only an object it recorded for a test invoice, read back with the test vendor, an **E2E-** number and the test invoice named in its note. Anything else is kept, logged, and the test fails until a person looks.",
+        "height": 350,
+        "width": 1380
+      },
+      "position": [
+        -40,
+        -150
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-list",
+      "name": "Note: List",
+      "parameters": {
+        "color": 7,
+        "content": "## List\nThe core lists the test's objects not deleted yet (attachments before bills).",
+        "height": 350,
+        "width": 900
+      },
+      "position": [
+        -40,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-check,-then-delete",
+      "name": "Note: Check, then delete",
+      "parameters": {
+        "color": 7,
+        "content": "## Check, then delete\nEach object is read back from QuickBooks; the core checks it and writes the delete request. QuickBooks' answer goes back to the core.",
+        "height": 550,
+        "width": 660
+      },
+      "position": [
+        920,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-no-list",
+      "name": "Note: No list",
+      "parameters": {
+        "color": 3,
+        "content": "## No list\nThe core did not answer: the run fails (logged by the error workflow); the test's reset then refuses to delete anything.",
+        "height": 350,
+        "width": 420
+      },
+      "position": [
+        440,
+        650
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "called-by-the-e2e-test",
+      "name": "Called by the e2e test",
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "position": [
+        0,
+        400
+      ],
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "executeOnce": true,
+      "id": "objects-to-delete-core",
+      "maxTries": 3,
+      "name": "Objects to delete (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "method": "GET",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "url": "=http://core:8000/e2e/qbo-objects?run_id={{ $json.run_id }}"
+      },
+      "position": [
+        240,
+        400
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "listed",
+      "name": "Listed?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        480,
+        400
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "one-item-per-object",
+      "name": "One item per object",
+      "parameters": {
+        "jsCode": "// One item per QuickBooks object the core listed (none: nothing to clean up, the run ends here)\nreturn $input.first().json.body.objects.map(o => ({ json: o }));",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        720,
+        400
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "name": "QuickBooks – Sandbox US"
+        }
+      },
+      "id": "read-object-qbo",
+      "maxTries": 3,
+      "name": "Read object (QBO)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "method": "GET",
+        "nodeCredentialType": "quickBooksOAuth2Api",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchInterval": 300,
+              "batchSize": 1
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "minorversion",
+              "value": "={{ $('Objects to delete (core)').first().json.body.minorversion }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "sendQuery": true,
+        "url": "={{ $('Objects to delete (core)').first().json.body.qbo_base }}/{{ $json.entity.toLowerCase() }}/{{ $json.external_id }}"
+      },
+      "position": [
+        960,
+        400
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "check-object-core",
+      "maxTries": 3,
+      "name": "Check object (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ status_code: $json.statusCode ?? 0, body: $json.body ?? null, execution_id: $execution.id }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "=http://core:8000/e2e/qbo-objects/{{ $('One item per object').item.json.id }}/check"
+      },
+      "position": [
+        1200,
+        400
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "delete-it",
+      "name": "Delete it?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 && $json.body.action === 'delete' }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1440,
+        400
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "name": "QuickBooks – Sandbox US"
+        }
+      },
+      "id": "delete-object-qbo",
+      "maxTries": 3,
+      "name": "Delete object (QBO)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "jsonBody": "={{ JSON.stringify($('Check object (core)').item.json.body.body) }}",
+        "method": "POST",
+        "nodeCredentialType": "quickBooksOAuth2Api",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchInterval": 300,
+              "batchSize": 1
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "minorversion",
+              "value": "={{ $('Objects to delete (core)').first().json.body.minorversion }}"
+            },
+            {
+              "name": "operation",
+              "value": "delete"
+            }
+          ]
+        },
+        "sendBody": true,
+        "sendHeaders": true,
+        "sendQuery": true,
+        "specifyBody": "json",
+        "url": "={{ $('Objects to delete (core)').first().json.body.qbo_base }}{{ $json.body.path }}"
+      },
+      "position": [
+        1200,
+        600
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "record-deletion-core",
+      "maxTries": 3,
+      "name": "Record deletion (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ status_code: $json.statusCode ?? 0, body: $json.body ?? null, execution_id: $execution.id }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "=http://core:8000/e2e/qbo-objects/{{ $('One item per object').item.json.id }}/deleted"
+      },
+      "position": [
+        1440,
+        600
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "stop-no-list",
+      "name": "Stop: no list",
+      "parameters": {
+        "errorMessage": "={{ 'e2e clean-up: the core answered ' + ($json.statusCode ?? 'nothing') }}"
+      },
+      "position": [
+        480,
+        800
+      ],
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1
+    }
+  ],
+  "pinData": {},
+  "settings": {
+    "errorWorkflow": "apErrorLog000001",
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "timezone": "Europe/Paris"
+  }
+}

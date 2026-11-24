@@ -1,0 +1,1225 @@
+{
+  "active": false,
+  "connections": {
+    "Abort run (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Alert ready?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Alert ready?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Send alert email",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Stop: no alert",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "All in Gmail?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Record sent (core)",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Failed step",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Checked?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Failed?",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Failed step",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Clean up QuickBooks (after)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Verify (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Clean up QuickBooks (before)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Reset test data (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Every day at 07:30": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Start run (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Failed step": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Abort run (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Failed?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Send alert email",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Get labels": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "One item per sent message",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Gmail IDs": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "All in Gmail?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Labels by name": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Clean up QuickBooks (after)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Manual run": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Start run (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Move to trash (Gmail)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Labels by name",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "One item per message": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Put in Gmail",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "One item per sent message": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Read labels (Gmail)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Put in Gmail": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Gmail IDs",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Read labels (Gmail)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Move to trash (Gmail)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Record sent (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Recorded?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Recorded?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Wait 10 minutes",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Failed step",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Reset done?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "One item per message",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Failed step",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Reset test data (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Reset done?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Run ID": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Clean up QuickBooks (before)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Start run (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Started?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Started?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Run ID",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Stop: not started",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Verify (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Checked?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Wait 10 minutes": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Get labels",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "AP – Daily e2e test",
+  "nodes": [
+    {
+      "id": "note-daily-end-to-end-test",
+      "name": "Note: Daily end-to-end test",
+      "parameters": {
+        "color": 5,
+        "content": "## Daily end-to-end test\nEvery morning before the summary, four test emails go through the **whole pipeline**: one invoice posted straight to QuickBooks, one sent to review, one rejected, one bank-details change (fraud alert). Two OCR calls per run.\n\nTest data is kept apart (scope **e2e**): never in live figures, the touchless rate or the live review list. The **core** writes the messages, decides what may be deleted and whether the run passed. A failure sends an alert at once; the 08:00 summary shows the result.",
+        "height": 350,
+        "width": 2100
+      },
+      "position": [
+        -40,
+        -150
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-start-and-reset",
+      "name": "Note: Start and reset",
+      "parameters": {
+        "color": 7,
+        "content": "## Start and reset\nThe core starts a run. QuickBooks objects of earlier test postings are deleted first (sub-workflow), then the core deletes the earlier test invoices (**scope e2e only**) and writes the run's messages.",
+        "height": 750,
+        "width": 900
+      },
+      "position": [
+        -40,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-put-in-gmail",
+      "name": "Note: Put in Gmail",
+      "parameters": {
+        "color": 7,
+        "content": "## Put in Gmail\nThe messages are inserted in the mailbox (Gmail API **messages.insert**), addressed to **invoices+e2e@**: mail sent from the mailbox to its own alias may never reach the inbox. The email intake picks them up within a minute.",
+        "height": 550,
+        "width": 900
+      },
+      "position": [
+        1160,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-collect-and-verify",
+      "name": "Note: Collect and verify",
+      "parameters": {
+        "color": 7,
+        "content": "## Collect and verify\nGmail labels read, test emails moved to the trash, QuickBooks cleaned up. The core checks status, labels, log, QuickBooks objects, the clean-up, isolation from live data and the masking of bank numbers.",
+        "height": 750,
+        "width": 900
+      },
+      "position": [
+        1160,
+        850
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-alert",
+      "name": "Note: Alert",
+      "parameters": {
+        "color": 3,
+        "content": "## Alert\nA failed run, or one that could not finish (the step is recorded), sends the core's alert email at once to the summary's recipients.",
+        "height": 550,
+        "width": 660
+      },
+      "position": [
+        -40,
+        1050
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "every-day-at-0730",
+      "name": "Every day at 07:30",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "daysInterval": 1,
+              "field": "days",
+              "triggerAtHour": 7,
+              "triggerAtMinute": 30
+            }
+          ]
+        }
+      },
+      "position": [
+        0,
+        400
+      ],
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2
+    },
+    {
+      "id": "manual-run",
+      "name": "Manual run",
+      "parameters": {},
+      "position": [
+        0,
+        600
+      ],
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "start-run-core",
+      "maxTries": 3,
+      "name": "Start run (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ execution_id: $execution.id }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "http://core:8000/e2e/runs"
+      },
+      "position": [
+        240,
+        400
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "started",
+      "name": "Started?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        480,
+        400
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "run-id",
+      "name": "Run ID",
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "run_id",
+              "name": "run_id",
+              "type": "string",
+              "value": "={{ $json.body.run_id }}"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "mode": "manual",
+        "options": {}
+      },
+      "position": [
+        720,
+        400
+      ],
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4
+    },
+    {
+      "id": "stop-not-started",
+      "name": "Stop: not started",
+      "parameters": {
+        "errorMessage": "={{ 'e2e test not started: HTTP ' + ($json.statusCode ?? 0) + ' ' + ($json.body?.message ?? '') }}"
+      },
+      "position": [
+        480,
+        600
+      ],
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1
+    },
+    {
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "id": "clean-up-quickbooks-before",
+      "name": "Clean up QuickBooks (before)",
+      "parameters": {
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apE2eCleanup0001"
+        }
+      },
+      "position": [
+        720,
+        600
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "executeOnce": true,
+      "id": "reset-test-data-core",
+      "maxTries": 3,
+      "name": "Reset test data (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ execution_id: $execution.id }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "=http://core:8000/e2e/runs/{{ $('Run ID').first().json.run_id }}/reset"
+      },
+      "position": [
+        480,
+        800
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "reset-done",
+      "name": "Reset done?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        720,
+        800
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "one-item-per-message",
+      "name": "One item per message",
+      "parameters": {
+        "jsCode": "// One item per message the core wrote (scenario + RFC 822 message, base64url)\nreturn $input.first().json.body.messages.map(m => ({ json: m }));",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        1200,
+        400
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail – david@davidmichel.dev"
+        }
+      },
+      "id": "put-in-gmail",
+      "maxTries": 3,
+      "name": "Put in Gmail",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "jsonBody": "={{ JSON.stringify({ raw: $json.raw, labelIds: ['INBOX', 'UNREAD'] }) }}",
+        "method": "POST",
+        "nodeCredentialType": "gmailOAuth2",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages"
+      },
+      "position": [
+        1440,
+        400
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "gmail-ids",
+      "name": "Gmail IDs",
+      "parameters": {
+        "jsCode": "// The Gmail ID of each inserted message, by scenario (the core records them)\nconst written = $('One item per message').all();\nreturn [{ json: {\n  inserted: $input.all().filter(i => i.json.statusCode === 200).length,\n  expected: written.length,\n  messages: $input.all().map((i, n) => ({ scenario: written[n].json.scenario, gmail_id: i.json.body?.id ?? '' }))\n                        .filter(m => m.gmail_id),\n} }];",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        1680,
+        400
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "all-in-gmail",
+      "name": "All in Gmail?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.inserted === $json.expected }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1920,
+        400
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "record-sent-core",
+      "maxTries": 3,
+      "name": "Record sent (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ messages: $json.messages, execution_id: $execution.id }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "=http://core:8000/e2e/runs/{{ $('Run ID').first().json.run_id }}/sent"
+      },
+      "position": [
+        1440,
+        600
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "recorded",
+      "name": "Recorded?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1680,
+        600
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "wait-10-minutes",
+      "name": "Wait 10 minutes",
+      "parameters": {
+        "amount": 10,
+        "resume": "timeInterval",
+        "unit": "minutes"
+      },
+      "position": [
+        1920,
+        600
+      ],
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1
+    },
+    {
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail – david@davidmichel.dev"
+        }
+      },
+      "executeOnce": true,
+      "id": "get-labels",
+      "name": "Get labels",
+      "parameters": {
+        "operation": "getAll",
+        "resource": "label",
+        "returnAll": true
+      },
+      "position": [
+        1200,
+        1000
+      ],
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1
+    },
+    {
+      "id": "one-item-per-sent-message",
+      "name": "One item per sent message",
+      "parameters": {
+        "jsCode": "// One item per inserted message, to read its labels\nreturn $('Gmail IDs').first().json.messages.map(m => ({ json: m }));",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        1440,
+        1000
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail – david@davidmichel.dev"
+        }
+      },
+      "id": "read-labels-gmail",
+      "maxTries": 3,
+      "name": "Read labels (Gmail)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "method": "GET",
+        "nodeCredentialType": "gmailOAuth2",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "url": "=https://gmail.googleapis.com/gmail/v1/users/me/messages/{{ $json.gmail_id }}?format=minimal"
+      },
+      "position": [
+        1680,
+        1000
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "labels-by-name",
+      "name": "Labels by name",
+      "parameters": {
+        "jsCode": "// What Gmail shows for each test email: its labels by name, for the core's checks\nconst names = Object.fromEntries($('Get labels').all().map(l => [l.json.id, l.json.name]));\nconst sent = $('One item per sent message').all();\nreturn [{ json: {\n  run_id: $('Run ID').first().json.run_id,\n  messages: $('Read labels (Gmail)').all().map((r, n) => ({\n    scenario: sent[n].json.scenario, gmail_id: sent[n].json.gmail_id,\n    labels: (r.json.body?.labelIds ?? []).map(id => names[id] ?? id),\n    trashed: $('Move to trash (Gmail)').all()[n].json.statusCode === 200,\n  })),\n} }];",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        1200,
+        1200
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail – david@davidmichel.dev"
+        }
+      },
+      "id": "move-to-trash-gmail",
+      "maxTries": 3,
+      "name": "Move to trash (Gmail)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "method": "POST",
+        "nodeCredentialType": "gmailOAuth2",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "url": "=https://gmail.googleapis.com/gmail/v1/users/me/messages/{{ $('One item per sent message').item.json.gmail_id }}/trash"
+      },
+      "position": [
+        1920,
+        1000
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "id": "clean-up-quickbooks-after",
+      "name": "Clean up QuickBooks (after)",
+      "parameters": {
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apE2eCleanup0001"
+        }
+      },
+      "position": [
+        1440,
+        1200
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "executeOnce": true,
+      "id": "verify-core",
+      "maxTries": 3,
+      "name": "Verify (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ messages: $('Labels by name').first().json.messages, execution_id: $execution.id }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "=http://core:8000/e2e/runs/{{ $('Run ID').first().json.run_id }}/verify"
+      },
+      "position": [
+        1680,
+        1200
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "checked",
+      "name": "Checked?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1920,
+        1200
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "failed",
+      "name": "Failed?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.body.status === 'failed' }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1920,
+        1400
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "failed-step",
+      "name": "Failed step",
+      "parameters": {
+        "jsCode": "// Which step stopped the run, and what it saw (the core records it and writes the alert)\nconst r = $input.first().json;\nreturn [{ json: { step: $prevNode.name,\n  message: String(r.body?.message ?? r.body?.detail ?? r.error?.message ?? `HTTP ${r.statusCode ?? 0}`)\n    .slice(0, 400) } }];",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        0,
+        1200
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "abort-run-core",
+      "maxTries": 3,
+      "name": "Abort run (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ step: $json.step, message: $json.message, execution_id: $execution.id }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "=http://core:8000/e2e/runs/{{ $('Run ID').first().json.run_id }}/abort"
+      },
+      "position": [
+        240,
+        1200
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "alert-ready",
+      "name": "Alert ready?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 && !!$json.body.alert }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        480,
+        1200
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail – david@davidmichel.dev"
+        }
+      },
+      "id": "send-alert-email",
+      "name": "Send alert email",
+      "parameters": {
+        "emailType": "html",
+        "message": "={{ $json.body.alert.html }}",
+        "operation": "send",
+        "options": {
+          "appendAttribution": false
+        },
+        "resource": "message",
+        "sendTo": "={{ $json.body.alert.to }}",
+        "subject": "={{ $json.body.alert.subject }}"
+      },
+      "position": [
+        240,
+        1400
+      ],
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1
+    },
+    {
+      "id": "stop-no-alert",
+      "name": "Stop: no alert",
+      "parameters": {
+        "errorMessage": "={{ 'e2e test failed and the core wrote no alert: HTTP ' + ($json.statusCode ?? 0) }}"
+      },
+      "position": [
+        480,
+        1400
+      ],
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1
+    }
+  ],
+  "pinData": {},
+  "settings": {
+    "errorWorkflow": "apErrorLog000001",
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "timezone": "Europe/Paris"
+  }
+}

@@ -33,6 +33,8 @@ from nodes import (
 )
 
 ALIAS = "invoices@davidmichel.dev"  # Gmail search filter; the core checks the recipients again
+E2E_ADDRESS = "invoices+e2e@davidmichel.dev"  # the daily end-to-end test's emails (scope decided by the core)
+TO_US = f"{{deliveredto:{ALIAS} deliveredto:{E2E_ADDRESS} to:{E2E_ADDRESS}}}"
 EMAIL_IN = "Email in"  # new emails and re-checked ones meet here
 SPLIT = "Split by attachment"
 ITEM = f"$('{SPLIT}').item.json"
@@ -50,6 +52,7 @@ return $('Email in').all().map((email, i) => {
     thread_id: mail.threadId,
     recipients: [...(mail.to?.value ?? []), ...(mail.cc?.value ?? [])].map(a => String(a.address ?? '')),
     delivered_to: String(mail.headers?.['delivered-to'] ?? ''),
+    subject: String(mail.subject ?? '').slice(0, 2000),
     attachments: files.map(([key, b]) => ({ key, mime_type: b.mimeType ?? null, file_name: b.fileName ?? null,
                                            size: b.fileSize ?? null })),
     text: [mail.subject, mail.text].filter(Boolean).join('\n\n').slice(0, 20000),
@@ -76,7 +79,7 @@ const files = $('Email in').all();
 const out = [];
 $input.all().forEach((screen, i) => {
   const mail = emails[i].json, s = screen.json.body;
-  const base = { message_id: mail.message_id, thread_id: mail.thread_id, labels };
+  const base = { message_id: mail.message_id, thread_id: mail.thread_id, labels, scope: s?.scope ?? null };
   if (screen.json.statusCode !== 200) {  // the screening itself failed: what was seen, for the core
     out.push({ json: { ...base, route: 'error', stage: 'screen', source_ref: `gmail:${mail.message_id}`,
                        status_code: screen.json.statusCode ?? null, error: s?.error ?? null,
@@ -124,12 +127,13 @@ if (answer.statusCode !== 200) {
 return answer.body.due.map(id => ({ json: { id } }));
 """
 
+# Scope: the core's screening answer; unknown (the screening failed) → the column's default, live
 LOG_SQL = (
-    "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details)\n"
-    "VALUES ('email', $1, $2, $3, $4, $5, $6::jsonb)"
+    "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details, scope)\n"
+    "VALUES ('email', $1, $2, $3, $4, $5, $6::jsonb, COALESCE(NULLIF($7, ''), 'live'))"
 )
 # Emails that failed and are not given up; the core also hands out due ones whose label was lost
-RECHECK_QUERY = f"deliveredto:{ALIAS} label:ap-error -label:ap-processed newer_than:14d"
+RECHECK_QUERY = f"{TO_US} label:ap-error -label:ap-processed newer_than:14d"
 GMAIL_ATTACHMENTS = {"downloadAttachments": True, "dataPropertyAttachmentsPrefixName": "attachment_"}
 
 
@@ -165,8 +169,16 @@ def label_node(name: str, label_keys: list[str], operation: str = "addLabels") -
     )
 
 
-def log_node(name: str, step: str, level: str, message: str, source_ref: str, details: str) -> Node:
-    replacements = [source_ref, "$execution.id", f"'{step}'", f"'{level}'", message, f"JSON.stringify({details})"]
+def log_node(name: str, step: str, level: str, message: str, source_ref: str, details: str, scope: str) -> Node:
+    replacements = [
+        source_ref,
+        "$execution.id",
+        f"'{step}'",
+        f"'{level}'",
+        message,
+        f"JSON.stringify({details})",
+        f"{scope} ?? ''",
+    ]
     return postgres_query(name, AUTO, LOG_SQL, replacements)
 
 
@@ -180,7 +192,7 @@ def _intake_nodes() -> list[Node]:
             "parameters": {
                 "pollTimes": {"item": [{"mode": "everyMinute"}]},
                 "simple": False,
-                "filters": {"q": f"deliveredto:{ALIAS} -label:ap-processed", "readStatus": "both"},
+                "filters": {"q": f"{TO_US} -label:ap-processed", "readStatus": "both"},
                 "options": GMAIL_ATTACHMENTS,
                 "maxResults": 10,
             },
@@ -195,7 +207,7 @@ def _intake_nodes() -> list[Node]:
             "POST",
             f"={CORE}/intake/email/screen",
             body="JSON.stringify({ recipients: $json.recipients, delivered_to: $json.delivered_to, "
-            "attachments: $json.attachments, text: $json.text, message_id: $json.message_id, "
+            "attachments: $json.attachments, text: $json.text, subject: $json.subject, message_id: $json.message_id, "
             "execution_id: $execution.id })",
         ),
         code_node(SPLIT, AUTO, SPLIT_JS),
@@ -281,6 +293,7 @@ def _processing_nodes() -> list[Node]:
                         {"name": "message_id", "value": "={{ $json.message_id }}"},
                         {"name": "n8n_execution_id", "value": "={{ $execution.id }}"},
                         {"name": "email_text", "value": "={{ $json.email_text }}"},
+                        {"name": "scope", "value": "={{ $json.scope }}"},
                     ]
                 },
                 "options": {
@@ -340,6 +353,7 @@ def _error_nodes() -> list[Node]:
             f"'core service call failed (' + {ERR}.stage + ')'",
             f"{ERR}.source_ref",
             f"{{ stage: {ERR}.stage, status_code: {ERR}.status_code, error: {ERR}.error, message: {ERR}.message }}",
+            f"{ERR}.scope",
         ),
         core_call(
             "Report failure (core)",
@@ -347,7 +361,7 @@ def _error_nodes() -> list[Node]:
             "POST",
             f"={CORE}/intake/failures",
             body=f"JSON.stringify({{ message_id: {ERR}.message_id, stage: {ERR}.stage, "
-            f"status_code: {ERR}.status_code, error: {ERR}.error, execution_id: $execution.id }})",
+            f"status_code: {ERR}.status_code, error: {ERR}.error, scope: {ERR}.scope, execution_id: $execution.id }})",
         ),
         if_node("Given up?", AUTO, "$json.statusCode === 200 && $json.body?.state === 'given_up'"),
         # Done, failed: a person looks (log, daily summary). AP/Error stays.
@@ -365,6 +379,7 @@ def _not_processed_nodes() -> list[Node]:
             "'email without a valid invoice attachment'",
             f"'gmail:' + {ITEM}.message_id",
             f"{ITEM}.details",
+            f"{ITEM}.scope",
         ),
         label_node("Label: fraud alert", ["fraud", "processed"]),
         log_node(
@@ -374,6 +389,7 @@ def _not_processed_nodes() -> list[Node]:
             "'possible_bank_detail_change: email asks to change bank details, no invoice attached'",
             f"'gmail:' + {ITEM}.message_id",
             f"{ITEM}.details",
+            f"{ITEM}.scope",
         ),
         log_node(
             "Log not for alias",
@@ -382,6 +398,7 @@ def _not_processed_nodes() -> list[Node]:
             "'email not addressed to the invoices alias'",
             "'gmail:' + $json.message_id",
             "{}",
+            "$json.scope",
         ),
     ]
 
@@ -441,8 +458,8 @@ SECTIONS = [
     ),
     Section(
         "Receive",
-        "Checks Gmail every minute for emails delivered to the alias and not yet processed. "
-        "Re-checked emails join here.",
+        "Checks Gmail every minute for emails delivered to the alias (or its **+e2e** test address) and not "
+        "yet processed. Re-checked emails join here.",
         col=0,
         row=2,
         grid=(("New email (Gmail)", EMAIL_IN, "Get AP labels", "Email facts"),),
@@ -460,7 +477,8 @@ SECTIONS = [
     ),
     Section(
         "Screen (core)",
-        "The core checks the recipients and keeps only PDF and image attachments. One item per attachment.",
+        "The core checks the recipients, says whose data it is (live, or the daily end-to-end test's) and keeps "
+        "only PDF and image attachments. One item per attachment.",
         col=4,
         row=2,
         grid=(("Screen email (core)", SPLIT, "Route intake"),),

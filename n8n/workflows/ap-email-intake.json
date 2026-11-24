@@ -360,7 +360,7 @@
       "name": "Note: Receive",
       "parameters": {
         "color": 7,
-        "content": "## Receive\nChecks Gmail every minute for emails delivered to the alias and not yet processed. Re-checked emails join here.",
+        "content": "## Receive\nChecks Gmail every minute for emails delivered to the alias (or its **+e2e** test address) and not yet processed. Re-checked emails join here.",
         "height": 350,
         "width": 900
       },
@@ -392,7 +392,7 @@
       "name": "Note: Screen (core)",
       "parameters": {
         "color": 7,
-        "content": "## Screen (core)\nThe core checks the recipients and keeps only PDF and image attachments. One item per attachment.",
+        "content": "## Screen (core)\nThe core checks the recipients, says whose data it is (live, or the daily end-to-end test's) and keeps only PDF and image attachments. One item per attachment.",
         "height": 350,
         "width": 660
       },
@@ -477,7 +477,7 @@
       "name": "New email (Gmail)",
       "parameters": {
         "filters": {
-          "q": "deliveredto:invoices@davidmichel.dev -label:ap-processed",
+          "q": "{deliveredto:invoices@davidmichel.dev deliveredto:invoices+e2e@davidmichel.dev to:invoices+e2e@davidmichel.dev} -label:ap-processed",
           "readStatus": "both"
         },
         "maxResults": 10,
@@ -537,7 +537,7 @@
       "id": "email-facts",
       "name": "Email facts",
       "parameters": {
-        "jsCode": "// For the core's screening: metadata (recipients, attachment types, names, sizes) and the text\n// (subject + body, which the core checks for bank-change wording and never stores; it accepts\n// up to 20,000 characters).\nreturn $('Email in').all().map((email, i) => {\n  const mail = email.json;\n  const files = Object.entries(email.binary ?? {}).filter(([key]) => /^attachment_\\d+$/.test(key));\n  return { json: {\n    message_id: mail.id,\n    thread_id: mail.threadId,\n    recipients: [...(mail.to?.value ?? []), ...(mail.cc?.value ?? [])].map(a => String(a.address ?? '')),\n    delivered_to: String(mail.headers?.['delivered-to'] ?? ''),\n    attachments: files.map(([key, b]) => ({ key, mime_type: b.mimeType ?? null, file_name: b.fileName ?? null,\n                                           size: b.fileSize ?? null })),\n    text: [mail.subject, mail.text].filter(Boolean).join('\\n\\n').slice(0, 20000),\n  }, pairedItem: { item: i } };\n});",
+        "jsCode": "// For the core's screening: metadata (recipients, attachment types, names, sizes) and the text\n// (subject + body, which the core checks for bank-change wording and never stores; it accepts\n// up to 20,000 characters).\nreturn $('Email in').all().map((email, i) => {\n  const mail = email.json;\n  const files = Object.entries(email.binary ?? {}).filter(([key]) => /^attachment_\\d+$/.test(key));\n  return { json: {\n    message_id: mail.id,\n    thread_id: mail.threadId,\n    recipients: [...(mail.to?.value ?? []), ...(mail.cc?.value ?? [])].map(a => String(a.address ?? '')),\n    delivered_to: String(mail.headers?.['delivered-to'] ?? ''),\n    subject: String(mail.subject ?? '').slice(0, 2000),\n    attachments: files.map(([key, b]) => ({ key, mime_type: b.mimeType ?? null, file_name: b.fileName ?? null,\n                                           size: b.fileSize ?? null })),\n    text: [mail.subject, mail.text].filter(Boolean).join('\\n\\n').slice(0, 20000),\n  }, pairedItem: { item: i } };\n});",
         "language": "javaScript",
         "mode": "runOnceForAllItems"
       },
@@ -561,7 +561,7 @@
       "parameters": {
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "jsonBody": "={{ JSON.stringify({ recipients: $json.recipients, delivered_to: $json.delivered_to, attachments: $json.attachments, text: $json.text, message_id: $json.message_id, execution_id: $execution.id }) }}",
+        "jsonBody": "={{ JSON.stringify({ recipients: $json.recipients, delivered_to: $json.delivered_to, attachments: $json.attachments, text: $json.text, subject: $json.subject, message_id: $json.message_id, execution_id: $execution.id }) }}",
         "method": "POST",
         "options": {
           "response": {
@@ -588,7 +588,7 @@
       "id": "split-by-attachment",
       "name": "Split by attachment",
       "parameters": {
-        "jsCode": "// One item per attachment the core accepted (with its file), or one item saying why there is none.\n// File names are not passed on to the logs: they may be personal data.\nconst LABELS = { processed: 'AP/Processed', ready: 'AP/Ready', review: 'AP/Review',\n                 rejected: 'AP/Rejected', error: 'AP/Error', fraud: 'AP/Fraud alert' };\n\n// Label IDs, looked up by name so nothing is hard-coded\nconst byName = Object.fromEntries($('Get AP labels').all().map(i => [i.json.name, i.json.id]));\nconst labels = {};\nfor (const [key, name] of Object.entries(LABELS)) {\n  if (!byName[name]) throw new Error(`Gmail label \"${name}\" not found: create it in Gmail first`);\n  labels[key] = byName[name];\n}\n\nconst emails = $('Email facts').all();\nconst files = $('Email in').all();\nconst out = [];\n$input.all().forEach((screen, i) => {\n  const mail = emails[i].json, s = screen.json.body;\n  const base = { message_id: mail.message_id, thread_id: mail.thread_id, labels };\n  if (screen.json.statusCode !== 200) {  // the screening itself failed: what was seen, for the core\n    out.push({ json: { ...base, route: 'error', stage: 'screen', source_ref: `gmail:${mail.message_id}`,\n                       status_code: screen.json.statusCode ?? null, error: s?.error ?? null,\n                       message: String(s?.message ?? screen.json.error?.message ?? '').slice(0, 300) },\n               pairedItem: { item: i } });\n    return;\n  }\n  if (s.route !== 'process') {\n    out.push({ json: { ...base, route: s.route, reason: s.reason,\n                       details: { attachments: s.attachments, skipped: s.skipped } }, pairedItem: { item: i } });\n    return;\n  }\n  for (const a of s.accepted) {\n    out.push({\n      json: { ...base, route: 'process', source_ref: `gmail:${mail.message_id}:${a.index}`, mime: a.mime,\n              size: a.size, attachments_in_email: s.accepted.length, email_text: mail.text },\n      binary: { file: files[i].binary[a.key] },\n      pairedItem: { item: i },\n    });\n  }\n});\nreturn out;",
+        "jsCode": "// One item per attachment the core accepted (with its file), or one item saying why there is none.\n// File names are not passed on to the logs: they may be personal data.\nconst LABELS = { processed: 'AP/Processed', ready: 'AP/Ready', review: 'AP/Review',\n                 rejected: 'AP/Rejected', error: 'AP/Error', fraud: 'AP/Fraud alert' };\n\n// Label IDs, looked up by name so nothing is hard-coded\nconst byName = Object.fromEntries($('Get AP labels').all().map(i => [i.json.name, i.json.id]));\nconst labels = {};\nfor (const [key, name] of Object.entries(LABELS)) {\n  if (!byName[name]) throw new Error(`Gmail label \"${name}\" not found: create it in Gmail first`);\n  labels[key] = byName[name];\n}\n\nconst emails = $('Email facts').all();\nconst files = $('Email in').all();\nconst out = [];\n$input.all().forEach((screen, i) => {\n  const mail = emails[i].json, s = screen.json.body;\n  const base = { message_id: mail.message_id, thread_id: mail.thread_id, labels, scope: s?.scope ?? null };\n  if (screen.json.statusCode !== 200) {  // the screening itself failed: what was seen, for the core\n    out.push({ json: { ...base, route: 'error', stage: 'screen', source_ref: `gmail:${mail.message_id}`,\n                       status_code: screen.json.statusCode ?? null, error: s?.error ?? null,\n                       message: String(s?.message ?? screen.json.error?.message ?? '').slice(0, 300) },\n               pairedItem: { item: i } });\n    return;\n  }\n  if (s.route !== 'process') {\n    out.push({ json: { ...base, route: s.route, reason: s.reason,\n                       details: { attachments: s.attachments, skipped: s.skipped } }, pairedItem: { item: i } });\n    return;\n  }\n  for (const a of s.accepted) {\n    out.push({\n      json: { ...base, route: 'process', source_ref: `gmail:${mail.message_id}:${a.index}`, mime: a.mime,\n              size: a.size, attachments_in_email: s.accepted.length, email_text: mail.text },\n      binary: { file: files[i].binary[a.key] },\n      pairedItem: { item: i },\n    });\n  }\n});\nreturn out;",
         "language": "javaScript",
         "mode": "runOnceForAllItems"
       },
@@ -772,7 +772,7 @@
       "name": "Find AP/Error emails",
       "parameters": {
         "filters": {
-          "q": "deliveredto:invoices@davidmichel.dev label:ap-error -label:ap-processed newer_than:14d"
+          "q": "{deliveredto:invoices@davidmichel.dev deliveredto:invoices+e2e@davidmichel.dev to:invoices+e2e@davidmichel.dev} label:ap-error -label:ap-processed newer_than:14d"
         },
         "limit": 50,
         "operation": "getAll",
@@ -901,6 +901,10 @@
             {
               "name": "email_text",
               "value": "={{ $json.email_text }}"
+            },
+            {
+              "name": "scope",
+              "value": "={{ $json.scope }}"
             }
           ]
         },
@@ -1175,9 +1179,9 @@
       "parameters": {
         "operation": "executeQuery",
         "options": {
-          "queryReplacement": "={{ [$('Error facts').item.json.source_ref, $execution.id, 'core_call', 'error', 'core service call failed (' + $('Error facts').item.json.stage + ')', JSON.stringify({ stage: $('Error facts').item.json.stage, status_code: $('Error facts').item.json.status_code, error: $('Error facts').item.json.error, message: $('Error facts').item.json.message })] }}"
+          "queryReplacement": "={{ [$('Error facts').item.json.source_ref, $execution.id, 'core_call', 'error', 'core service call failed (' + $('Error facts').item.json.stage + ')', JSON.stringify({ stage: $('Error facts').item.json.stage, status_code: $('Error facts').item.json.status_code, error: $('Error facts').item.json.error, message: $('Error facts').item.json.message }), $('Error facts').item.json.scope ?? ''] }}"
         },
-        "query": "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details)\nVALUES ('email', $1, $2, $3, $4, $5, $6::jsonb)"
+        "query": "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details, scope)\nVALUES ('email', $1, $2, $3, $4, $5, $6::jsonb, COALESCE(NULLIF($7, ''), 'live'))"
       },
       "position": [
         1920,
@@ -1199,7 +1203,7 @@
       "parameters": {
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "jsonBody": "={{ JSON.stringify({ message_id: $('Error facts').item.json.message_id, stage: $('Error facts').item.json.stage, status_code: $('Error facts').item.json.status_code, error: $('Error facts').item.json.error, execution_id: $execution.id }) }}",
+        "jsonBody": "={{ JSON.stringify({ message_id: $('Error facts').item.json.message_id, stage: $('Error facts').item.json.stage, status_code: $('Error facts').item.json.status_code, error: $('Error facts').item.json.error, scope: $('Error facts').item.json.scope, execution_id: $execution.id }) }}",
         "method": "POST",
         "options": {
           "response": {
@@ -1309,9 +1313,9 @@
       "parameters": {
         "operation": "executeQuery",
         "options": {
-          "queryReplacement": "={{ ['gmail:' + $('Split by attachment').item.json.message_id, $execution.id, 'intake', 'warning', 'email without a valid invoice attachment', JSON.stringify($('Split by attachment').item.json.details)] }}"
+          "queryReplacement": "={{ ['gmail:' + $('Split by attachment').item.json.message_id, $execution.id, 'intake', 'warning', 'email without a valid invoice attachment', JSON.stringify($('Split by attachment').item.json.details), $('Split by attachment').item.json.scope ?? ''] }}"
         },
-        "query": "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details)\nVALUES ('email', $1, $2, $3, $4, $5, $6::jsonb)"
+        "query": "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details, scope)\nVALUES ('email', $1, $2, $3, $4, $5, $6::jsonb, COALESCE(NULLIF($7, ''), 'live'))"
       },
       "position": [
         1200,
@@ -1352,9 +1356,9 @@
       "parameters": {
         "operation": "executeQuery",
         "options": {
-          "queryReplacement": "={{ ['gmail:' + $('Split by attachment').item.json.message_id, $execution.id, 'intake', 'warning', 'possible_bank_detail_change: email asks to change bank details, no invoice attached', JSON.stringify($('Split by attachment').item.json.details)] }}"
+          "queryReplacement": "={{ ['gmail:' + $('Split by attachment').item.json.message_id, $execution.id, 'intake', 'warning', 'possible_bank_detail_change: email asks to change bank details, no invoice attached', JSON.stringify($('Split by attachment').item.json.details), $('Split by attachment').item.json.scope ?? ''] }}"
         },
-        "query": "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details)\nVALUES ('email', $1, $2, $3, $4, $5, $6::jsonb)"
+        "query": "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details, scope)\nVALUES ('email', $1, $2, $3, $4, $5, $6::jsonb, COALESCE(NULLIF($7, ''), 'live'))"
       },
       "position": [
         1200,
@@ -1374,9 +1378,9 @@
       "parameters": {
         "operation": "executeQuery",
         "options": {
-          "queryReplacement": "={{ ['gmail:' + $json.message_id, $execution.id, 'intake', 'warning', 'email not addressed to the invoices alias', JSON.stringify({})] }}"
+          "queryReplacement": "={{ ['gmail:' + $json.message_id, $execution.id, 'intake', 'warning', 'email not addressed to the invoices alias', JSON.stringify({}), $json.scope ?? ''] }}"
         },
-        "query": "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details)\nVALUES ('email', $1, $2, $3, $4, $5, $6::jsonb)"
+        "query": "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details, scope)\nVALUES ('email', $1, $2, $3, $4, $5, $6::jsonb, COALESCE(NULLIF($7, ''), 'live'))"
       },
       "position": [
         960,
