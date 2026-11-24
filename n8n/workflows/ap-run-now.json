@@ -383,6 +383,7 @@
   ],
   "pinData": {},
   "settings": {
+    "errorWorkflow": "apErrorLog000001",
     "executionOrder": "v1",
     "saveDataErrorExecution": "none",
     "saveDataSuccessExecution": "none",

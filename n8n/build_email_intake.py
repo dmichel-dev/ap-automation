@@ -7,21 +7,41 @@ Usage:
 Flow: Gmail trigger → email metadata → the core screens it (alias guard, which attachments) →
 one item per attachment → the core processes it → Gmail labels by status, posting started for
 ready invoices. Emails without a valid attachment, or not for the alias, are labelled and logged.
+
+A failure (OCR service down, core unreachable) labels the email AP/Error and is reported to the core,
+which decides: retried later or given up. Every 15 minutes the re-check lists AP/Error emails, asks the
+core which are due (one with no failure on record is due at once) and sends them down the same path.
 """
 
 from typing import Any
 
-from nodes import AUTO, CORE, Connections, Node, Section, code_node, condition, core_call, lay_out, main, workflow
+from nodes import (
+    AUTO,
+    CORE,
+    Connections,
+    Node,
+    Section,
+    code_node,
+    condition,
+    core_call,
+    if_node,
+    lay_out,
+    main,
+    postgres_query,
+    workflow,
+)
 
 ALIAS = "invoices@davidmichel.dev"  # Gmail search filter; the core checks the recipients again
+EMAIL_IN = "Email in"  # new emails and re-checked ones meet here
 SPLIT = "Split by attachment"
 ITEM = f"$('{SPLIT}').item.json"
+ERR = "$('Error facts').item.json"
 
 DESCRIBE_EMAIL_JS = r"""
 // For the core's screening: metadata (recipients, attachment types, names, sizes) and the text
 // (subject + body, which the core checks for bank-change wording and never stores; it accepts
 // up to 20,000 characters).
-return $('New email (Gmail)').all().map((email, i) => {
+return $('Email in').all().map((email, i) => {
   const mail = email.json;
   const files = Object.entries(email.binary ?? {}).filter(([key]) => /^attachment_\d+$/.test(key));
   return { json: {
@@ -51,14 +71,18 @@ for (const [key, name] of Object.entries(LABELS)) {
 }
 
 const emails = $('Email facts').all();
-const files = $('New email (Gmail)').all();
+const files = $('Email in').all();
 const out = [];
 $input.all().forEach((screen, i) => {
-  if (screen.json.statusCode !== 200) {
-    throw new Error(`email screening failed (core HTTP ${screen.json.statusCode ?? 'no response'})`);
-  }
   const mail = emails[i].json, s = screen.json.body;
   const base = { message_id: mail.message_id, thread_id: mail.thread_id, labels };
+  if (screen.json.statusCode !== 200) {  // the screening itself failed: what was seen, for the core
+    out.push({ json: { ...base, route: 'error', stage: 'screen', source_ref: `gmail:${mail.message_id}`,
+                       status_code: screen.json.statusCode ?? null, error: s?.error ?? null,
+                       message: String(s?.message ?? screen.json.error?.message ?? '').slice(0, 300) },
+               pairedItem: { item: i } });
+    return;
+  }
   if (s.route !== 'process') {
     out.push({ json: { ...base, route: s.route, reason: s.reason,
                        details: { attachments: s.attachments, skipped: s.skipped } }, pairedItem: { item: i } });
@@ -76,10 +100,36 @@ $input.all().forEach((screen, i) => {
 return out;
 """
 
+ERROR_FACTS_JS = r"""
+// What failed, for the log and the core: the screening (already described by the split) or the
+// processing of one attachment. The core decides what it means (retried later, or given up).
+return $input.all().map((item, i) => {
+  if (item.json.route === 'error') return { json: item.json, pairedItem: { item: i } };
+  const { email_text, ...source } = $('Split by attachment').itemMatching(i).json;
+  const r = item.json;
+  return { json: { ...source, route: 'error', stage: 'process', status_code: r.statusCode ?? null,
+                   error: r.body?.error ?? null,
+                   message: String(r.body?.message ?? r.error?.message ?? '').slice(0, 300) },
+           pairedItem: { item: i } };
+});
+"""
+
+DUE_JS = r"""
+// One item per email the core says to process now (it decides which, and counts the attempt).
+const answer = $input.first().json;
+if (answer.statusCode !== 200) {
+  throw new Error(`re-check: the core answered ${answer.statusCode ?? 'nothing'}; the next run tries again`);
+}
+return answer.body.due.map(id => ({ json: { id } }));
+"""
+
 LOG_SQL = (
     "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details)\n"
     "VALUES ('email', $1, $2, $3, $4, $5, $6::jsonb)"
 )
+# Emails that failed and are not given up; the core also hands out due ones whose label was lost
+RECHECK_QUERY = f"deliveredto:{ALIAS} label:ap-error -label:ap-processed newer_than:14d"
+GMAIL_ATTACHMENTS = {"downloadAttachments": True, "dataPropertyAttachmentsPrefixName": "attachment_"}
 
 
 def switch_rule(output_key: str, expression: str) -> dict[str, Any]:
@@ -101,39 +151,34 @@ def switch(name: str, position: list[int], rules: list[dict[str, Any]], options:
     }
 
 
-def label_node(name: str, label_keys: list[str], position: list[int]) -> Node:
-    labels = ", ".join(f"{ITEM}.labels.{k}" for k in label_keys)
+def gmail(name: str, parameters: dict[str, Any], **extra: Any) -> Node:
     return {
         "name": name,
         "type": "n8n-nodes-base.gmail",
         "typeVersion": 2.1,
-        "position": position,
-        "parameters": {
-            "resource": "message",
-            "operation": "addLabels",
-            "messageId": "={{ " + ITEM + ".message_id }}",
-            "labelIds": "={{ [" + labels + "] }}",
-        },
+        "position": AUTO,
+        **extra,
+        "parameters": parameters,
         "credentials": {"gmailOAuth2": "GMAIL"},
     }
 
 
-def log_node(
-    name: str, position: list[int], step: str, level: str, message: str, source_ref: str, details: str
-) -> Node:
-    replacements = [source_ref, "$execution.id", f"'{step}'", f"'{level}'", message, f"JSON.stringify({details})"]
-    return {
-        "name": name,
-        "type": "n8n-nodes-base.postgres",
-        "typeVersion": 2.6,
-        "position": position,
-        "parameters": {
-            "operation": "executeQuery",
-            "query": LOG_SQL,
-            "options": {"queryReplacement": "={{ [" + ", ".join(replacements) + "] }}"},
+def label_node(name: str, label_keys: list[str], operation: str = "addLabels") -> Node:
+    labels = ", ".join(f"{ITEM}.labels.{k}" for k in label_keys)
+    return gmail(
+        name,
+        {
+            "resource": "message",
+            "operation": operation,
+            "messageId": "={{ " + ITEM + ".message_id }}",
+            "labelIds": "={{ [" + labels + "] }}",
         },
-        "credentials": {"postgres": "POSTGRES"},
-    }
+    )
+
+
+def log_node(name: str, step: str, level: str, message: str, source_ref: str, details: str) -> Node:
+    replacements = [source_ref, "$execution.id", f"'{step}'", f"'{level}'", message, f"JSON.stringify({details})"]
+    return postgres_query(name, AUTO, LOG_SQL, replacements)
 
 
 def _intake_nodes() -> list[Node]:
@@ -147,20 +192,13 @@ def _intake_nodes() -> list[Node]:
                 "pollTimes": {"item": [{"mode": "everyMinute"}]},
                 "simple": False,
                 "filters": {"q": f"deliveredto:{ALIAS} -label:ap-processed", "readStatus": "both"},
-                "options": {"downloadAttachments": True, "dataPropertyAttachmentsPrefixName": "attachment_"},
+                "options": GMAIL_ATTACHMENTS,
                 "maxResults": 10,
             },
             "credentials": {"gmailOAuth2": "GMAIL"},
         },
-        {
-            "name": "Get AP labels",
-            "type": "n8n-nodes-base.gmail",
-            "typeVersion": 2.1,
-            "position": AUTO,
-            "executeOnce": True,
-            "parameters": {"resource": "label", "operation": "getAll", "returnAll": True},
-            "credentials": {"gmailOAuth2": "GMAIL"},
-        },
+        {"name": EMAIL_IN, "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": AUTO, "parameters": {}},
+        gmail("Get AP labels", {"resource": "label", "operation": "getAll", "returnAll": True}, executeOnce=True),
         code_node("Email facts", AUTO, DESCRIBE_EMAIL_JS),
         core_call(
             "Screen email (core)",
@@ -168,7 +206,8 @@ def _intake_nodes() -> list[Node]:
             "POST",
             f"={CORE}/intake/email/screen",
             body="JSON.stringify({ recipients: $json.recipients, delivered_to: $json.delivered_to, "
-            "attachments: $json.attachments, text: $json.text })",
+            "attachments: $json.attachments, text: $json.text, message_id: $json.message_id, "
+            "execution_id: $execution.id })",
         ),
         code_node(SPLIT, AUTO, SPLIT_JS),
         switch(
@@ -179,8 +218,53 @@ def _intake_nodes() -> list[Node]:
                 switch_rule("no valid attachment", "$json.route === 'no_valid_attachment'"),
                 switch_rule("bank detail notice", "$json.route === 'bank_detail_notice'"),
                 switch_rule("not for alias", "$json.route === 'not_for_alias'"),
+                switch_rule("core error", "$json.route === 'error'"),
             ],
             {},
+        ),
+    ]
+
+
+def _recheck_nodes() -> list[Node]:
+    return [
+        {
+            "name": "Every 15 minutes",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1.2,
+            "position": AUTO,
+            "parameters": {"rule": {"interval": [{"field": "minutes", "minutesInterval": 15}]}},
+        },
+        gmail(
+            "Find AP/Error emails",
+            {
+                "resource": "message",
+                "operation": "getAll",
+                "returnAll": False,
+                "limit": 50,
+                "simple": True,
+                "filters": {"q": RECHECK_QUERY},
+            },
+            alwaysOutputData=True,  # none listed: the core may still have due emails whose label was lost
+        ),
+        core_call(
+            "Which are due? (core)",
+            AUTO,
+            "POST",
+            f"={CORE}/intake/failures/due",
+            body="JSON.stringify({ found: $input.all().map(i => i.json.id).filter(Boolean), "
+            "execution_id: $execution.id })",
+        )
+        | {"executeOnce": True},
+        code_node("One item per due email", AUTO, DUE_JS),
+        gmail(
+            "Get email (Gmail)",
+            {
+                "resource": "message",
+                "operation": "get",
+                "messageId": "={{ $json.id }}",
+                "simple": False,
+                "options": GMAIL_ATTACHMENTS,
+            },
         ),
     ]
 
@@ -205,6 +289,7 @@ def _processing_nodes() -> list[Node]:
                         {"parameterType": "formBinaryData", "name": "file", "inputDataFieldName": "file"},
                         {"name": "channel", "value": "email"},
                         {"name": "source_ref", "value": "={{ $json.source_ref }}"},
+                        {"name": "message_id", "value": "={{ $json.message_id }}"},
                         {"name": "n8n_execution_id", "value": "={{ $execution.id }}"},
                         {"name": "email_text", "value": "={{ $json.email_text }}"},
                     ]
@@ -231,7 +316,7 @@ def _processing_nodes() -> list[Node]:
             ],
             {"fallbackOutput": "extra", "renameFallbackOutput": "error"},
         ),
-        label_node("Label: ready", ["ready", "processed"], AUTO),
+        label_node("Label: ready", ["ready", "processed"]),
         # Post ready invoices right away (the 15-minute schedule is the safety net).
         # Fire and forget: the intake doesn't wait for QuickBooks.
         {
@@ -246,40 +331,55 @@ def _processing_nodes() -> list[Node]:
                 "options": {"waitForSubWorkflow": False},
             },
         },
-        label_node("Label: review", ["review", "processed"], AUTO),
-        label_node("Label: rejected", ["rejected", "processed"], AUTO),
-        # Technical error: AP/Error only, NOT AP/Processed (re-checked later)
-        label_node("Label: error", ["error"], AUTO),
+        label_node("Label: review", ["review", "processed"]),
+        label_node("Label: rejected", ["rejected", "processed"]),
+        # An email that got an answer is no longer in error (a re-checked one, or nothing to remove)
+        label_node("Clear AP/Error", ["error"], operation="removeLabels"),
+    ]
+
+
+def _error_nodes() -> list[Node]:
+    return [
+        code_node("Error facts", AUTO, ERROR_FACTS_JS),
+        # AP/Error only, NOT AP/Processed: the re-check picks it up
+        label_node("Label: error", ["error"]),
+        # Logged here first: if the core is unreachable, this is the only record (the label is the other)
         log_node(
             "Log core error",
-            AUTO,
             "core_call",
             "error",
-            "'core service call failed'",
-            f"{ITEM}.source_ref",
-            "{ status_code: $('Process invoice (core)').item.json.statusCode ?? null, "
-            "error: $('Process invoice (core)').item.json.body?.error"
-            " ?? $('Process invoice (core)').item.json.error?.message ?? null }",
+            f"'core service call failed (' + {ERR}.stage + ')'",
+            f"{ERR}.source_ref",
+            f"{{ stage: {ERR}.stage, status_code: {ERR}.status_code, error: {ERR}.error, message: {ERR}.message }}",
         ),
+        core_call(
+            "Report failure (core)",
+            AUTO,
+            "POST",
+            f"={CORE}/intake/failures",
+            body=f"JSON.stringify({{ message_id: {ERR}.message_id, stage: {ERR}.stage, "
+            f"status_code: {ERR}.status_code, error: {ERR}.error, execution_id: $execution.id }})",
+        ),
+        if_node("Given up?", AUTO, "$json.statusCode === 200 && $json.body?.state === 'given_up'"),
+        # Done, failed: a person looks (log, daily summary). AP/Error stays.
+        label_node("Label: given up", ["processed"]),
     ]
 
 
 def _not_processed_nodes() -> list[Node]:
     return [
-        label_node("Label: no valid attachment", ["rejected", "processed"], AUTO),
+        label_node("Label: no valid attachment", ["rejected", "processed"]),
         log_node(
             "Log no valid attachment",
-            AUTO,
             "intake",
             "warning",
             "'email without a valid invoice attachment'",
             f"'gmail:' + {ITEM}.message_id",
             f"{ITEM}.details",
         ),
-        label_node("Label: fraud alert", ["fraud", "processed"], AUTO),
+        label_node("Label: fraud alert", ["fraud", "processed"]),
         log_node(
             "Log fraud alert",
-            AUTO,
             "intake",
             "warning",
             "'possible_bank_detail_change: email asks to change bank details, no invoice attached'",
@@ -288,7 +388,6 @@ def _not_processed_nodes() -> list[Node]:
         ),
         log_node(
             "Log not for alias",
-            AUTO,
             "intake",
             "warning",
             "'email not addressed to the invoices alias'",
@@ -298,8 +397,15 @@ def _not_processed_nodes() -> list[Node]:
     ]
 
 
+CLEAR = [("Clear AP/Error", 0)]
 CONNECTIONS: Connections = {
-    "New email (Gmail)": [[("Get AP labels", 0)]],
+    "New email (Gmail)": [[(EMAIL_IN, 0)]],
+    "Every 15 minutes": [[("Find AP/Error emails", 0)]],
+    "Find AP/Error emails": [[("Which are due? (core)", 0)]],
+    "Which are due? (core)": [[("One item per due email", 0)]],
+    "One item per due email": [[("Get email (Gmail)", 0)]],
+    "Get email (Gmail)": [[(EMAIL_IN, 0)]],
+    EMAIL_IN: [[("Get AP labels", 0)]],
     "Get AP labels": [[("Email facts", 0)]],
     "Email facts": [[("Screen email (core)", 0)]],
     "Screen email (core)": [[(SPLIT, 0)]],
@@ -309,18 +415,25 @@ CONNECTIONS: Connections = {
         [("Label: no valid attachment", 0)],
         [("Label: fraud alert", 0)],
         [("Log not for alias", 0)],
+        [("Error facts", 0)],
     ],
-    "Process invoice (core)": [[("Route by status", 0)], [("Label: error", 0)]],
+    "Process invoice (core)": [[("Route by status", 0)], [("Error facts", 0)]],
     "Route by status": [
         [("Label: ready", 0)],
         [("Label: review", 0)],
         [("Label: rejected", 0)],
-        [("Label: error", 0)],
+        [("Error facts", 0)],
     ],
-    "Label: ready": [[("Post to QuickBooks", 0)]],
+    "Label: ready": [[("Post to QuickBooks", 0), *CLEAR]],
+    "Label: review": [CLEAR],
+    "Label: rejected": [CLEAR],
+    "Error facts": [[("Label: error", 0)]],
     "Label: error": [[("Log core error", 0)]],
-    "Label: no valid attachment": [[("Log no valid attachment", 0)]],
-    "Label: fraud alert": [[("Log fraud alert", 0)]],
+    "Log core error": [[("Report failure (core)", 0)]],
+    "Report failure (core)": [[("Given up?", 0)]],
+    "Given up?": [[("Label: given up", 0)]],
+    "Label: no valid attachment": [[("Log no valid attachment", 0), *CLEAR]],
+    "Label: fraud alert": [[("Log fraud alert", 0), *CLEAR]],
 }
 
 
@@ -329,46 +442,60 @@ SECTIONS = [
         "Email intake",
         "Turns emails sent to **invoices@** into processed invoices.\n\n"
         "n8n receives the email and applies the Gmail labels. The **core service decides** everything else: "
-        "which emails and attachments to process, the extracted data, the checks and the status. "
-        "The AI only extracts data; every decision is deterministic code.",
+        "which emails and attachments to process, the extracted data, the checks and the status, and what a "
+        "failure means (retried later, or given up). The AI only extracts data; every decision is deterministic "
+        "code.",
         col=0,
         row=0,
         kind="overview",
-        min_cols=6,
+        min_cols=7,
     ),
     Section(
         "Receive",
-        "Checks Gmail every minute for emails delivered to the alias and not yet processed.",
+        "Checks Gmail every minute for emails delivered to the alias and not yet processed. "
+        "Re-checked emails join here.",
         col=0,
         row=2,
-        grid=(("New email (Gmail)", "Get AP labels", "Email facts"),),
+        grid=(("New email (Gmail)", EMAIL_IN, "Get AP labels", "Email facts"),),
+    ),
+    Section(
+        "Re-check AP/Error",
+        "Every 15 minutes: emails labelled **AP/Error** go to the core, which says which are due (backoff 15 min, "
+        "1 h, 4 h, 12 h; 5 attempts). One with no failure on record (the core was down) is due at once.",
+        col=0,
+        row=4,
+        grid=(
+            ("Every 15 minutes", "Find AP/Error emails", "Which are due? (core)"),
+            (None, "One item per due email", "Get email (Gmail)"),
+        ),
     ),
     Section(
         "Screen (core)",
         "The core checks the recipients and keeps only PDF and image attachments. One item per attachment.",
-        col=3,
+        col=4,
         row=2,
         grid=(("Screen email (core)", SPLIT, "Route intake"),),
     ),
     Section(
         "Process (core)",
         "Extract, normalize, check, store. The answer is **ready**, **needs review** or **rejected**.",
-        col=6,
+        col=7,
         row=2,
         grid=(("Process invoice (core)", "Route by status"),),
     ),
     Section(
         "Label, then post",
-        "Gmail labels show the outcome. Ready invoices start the posting workflow.",
-        col=8,
+        "Gmail labels show the outcome; AP/Error is removed once an email has an answer. Ready invoices start "
+        "the posting workflow.",
+        col=9,
         row=2,
-        grid=(("Label: ready", "Post to QuickBooks"), ("Label: review", None), ("Label: rejected", None)),
+        grid=(("Label: ready", "Post to QuickBooks"), ("Label: review", "Clear AP/Error"), ("Label: rejected", None)),
     ),
     Section(
         "Not processed",
         "No PDF or image attached, or not addressed to the alias: labelled and logged, never ignored silently. "
         "An email asking to change bank details, with no invoice, is a **fraud alert** (AP/Fraud alert).",
-        col=3,
+        col=4,
         row=4,
         grid=(
             ("Label: no valid attachment", "Log no valid attachment"),
@@ -379,18 +506,23 @@ SECTIONS = [
     ),
     Section(
         "Technical error",
-        "The core could not process the file (e.g. OCR service down): labelled AP/Error and logged.",
+        "The screening or processing failed (e.g. OCR service down, core unreachable): labelled **AP/Error**, "
+        "logged, reported to the core. Temporary → the re-check retries it. Permanent, or 5 attempts used → "
+        "**given up** (AP/Processed added): a person looks.",
         col=6,
-        row=4,
-        grid=(("Label: error", "Log core error"),),
+        row=5,
+        grid=(
+            ("Error facts", "Label: error", "Log core error"),
+            ("Report failure (core)", "Given up?", "Label: given up"),
+        ),
         kind="failure",
     ),
 ]
 
 
 def build(cred_ids: dict[str, str] | None) -> dict[str, Any]:
-    nodes = lay_out(_intake_nodes() + _processing_nodes() + _not_processed_nodes(), SECTIONS)
-    return workflow("AP – Email intake", nodes, CONNECTIONS, cred_ids)
+    nodes = _intake_nodes() + _recheck_nodes() + _processing_nodes() + _error_nodes() + _not_processed_nodes()
+    return workflow("AP – Email intake", lay_out(nodes, SECTIONS), CONNECTIONS, cred_ids)
 
 
 if __name__ == "__main__":

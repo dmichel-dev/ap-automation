@@ -16,6 +16,8 @@ Node = dict[str, Any]
 Connections = dict[str, list[list[tuple[str, int]]]]
 
 CORE = "http://core:8000"
+# Every workflow's failed runs are logged by this one (build_error_log.py), so they reach the daily summary
+ERROR_WORKFLOW_ID = "apErrorLog000001"
 CREDENTIAL_NAMES = {
     "GMAIL": "Gmail – david@davidmichel.dev",
     "CORE": "AP core token",
@@ -197,6 +199,22 @@ def qbo_send(node: Node, body: str) -> Node:
     return node
 
 
+def postgres_query(name: str, pos: list[int], sql: str, replacements: list[str]) -> Node:
+    """A parameterized statement on the AP database ($1, $2… filled from the expressions, never inlined)."""
+    return {
+        "name": name,
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": pos,
+        "parameters": {
+            "operation": "executeQuery",
+            "query": sql,
+            "options": {"queryReplacement": "={{ [" + ", ".join(replacements) + "] }}"},
+        },
+        "credentials": {"postgres": "POSTGRES"},
+    }
+
+
 def stop(name: str, pos: list[int], message: str) -> Node:
     """Ends the run as failed (visible in the executions list)."""
     return {
@@ -301,6 +319,7 @@ def workflow(name: str, nodes: list[Node], connections: Connections, cred_ids: d
             "saveDataSuccessExecution": "all",
             "saveManualExecutions": True,
             "timezone": "Europe/Paris",
+            "errorWorkflow": ERROR_WORKFLOW_ID,
         },
         "pinData": {},
         "active": False,

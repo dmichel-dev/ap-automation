@@ -1,0 +1,92 @@
+{
+  "active": false,
+  "connections": {
+    "Workflow failed": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Log workflow error",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "AP – Error log",
+  "nodes": [
+    {
+      "id": "note-error-log",
+      "name": "Note: Error log",
+      "parameters": {
+        "color": 5,
+        "content": "## Error log\nEvery AP workflow names this one as its **error workflow**. A failed run (e.g. Gmail or the database unreachable, a missing label) is written to the AP log, so the daily summary shows it. Open the run in n8n's executions list to see the details.",
+        "height": 350,
+        "width": 900
+      },
+      "position": [
+        -40,
+        -150
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-log-the-failed-run",
+      "name": "Note: Log the failed run",
+      "parameters": {
+        "color": 3,
+        "content": "## Log the failed run\nWorkflow, last node, short error message. Never document data.",
+        "height": 350,
+        "width": 420
+      },
+      "position": [
+        -40,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "workflow-failed",
+      "name": "Workflow failed",
+      "parameters": {},
+      "position": [
+        0,
+        400
+      ],
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "AP database (ap_app)"
+        }
+      },
+      "id": "log-workflow-error",
+      "name": "Log workflow error",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [String($json.execution?.id ?? ''), 'workflow failed: ' + ($json.workflow?.name ?? 'unknown'), JSON.stringify({ workflow_id: $json.workflow?.id ?? null, workflow: $json.workflow?.name ?? null, node: $json.execution?.lastNodeExecuted ?? null, mode: $json.execution?.mode ?? null, error: String($json.execution?.error?.message ?? '').slice(0, 300) })] }}"
+        },
+        "query": "INSERT INTO ap.processing_log (n8n_execution_id, step, level, message, details)\nVALUES ($1, 'workflow_error', 'error', $2, $3::jsonb)"
+      },
+      "position": [
+        240,
+        400
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    }
+  ],
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "timezone": "Europe/Paris"
+  }
+}

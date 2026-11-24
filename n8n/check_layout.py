@@ -13,7 +13,14 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).parent))
 from nodes import LABEL, NODE
 
-BUILDERS = ("build_email_intake", "build_post_qbo", "build_bank_sync", "build_sync_reference", "build_run_now")
+BUILDERS = (
+    "build_email_intake",
+    "build_post_qbo",
+    "build_bank_sync",
+    "build_sync_reference",
+    "build_run_now",
+    "build_error_log",
+)
 Box = tuple[int, int, int, int]  # x, y, width, height
 GAP = 20  # minimum free space between two nodes
 

@@ -12,12 +12,78 @@
         ]
       ]
     },
+    "Email in": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Get AP labels",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Error facts": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Label: error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Every 15 minutes": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Find AP/Error emails",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Find AP/Error emails": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Which are due? (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
     "Get AP labels": {
       "main": [
         [
           {
             "index": 0,
             "node": "Email facts",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Get email (Gmail)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Email in",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Given up?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Label: given up",
             "type": "main"
           }
         ]
@@ -41,6 +107,11 @@
             "index": 0,
             "node": "Log fraud alert",
             "type": "main"
+          },
+          {
+            "index": 0,
+            "node": "Clear AP/Error",
+            "type": "main"
           }
         ]
       ]
@@ -51,6 +122,11 @@
           {
             "index": 0,
             "node": "Log no valid attachment",
+            "type": "main"
+          },
+          {
+            "index": 0,
+            "node": "Clear AP/Error",
             "type": "main"
           }
         ]
@@ -63,6 +139,44 @@
             "index": 0,
             "node": "Post to QuickBooks",
             "type": "main"
+          },
+          {
+            "index": 0,
+            "node": "Clear AP/Error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Label: rejected": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Clear AP/Error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Label: review": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Clear AP/Error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Log core error": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Report failure (core)",
+            "type": "main"
           }
         ]
       ]
@@ -72,7 +186,18 @@
         [
           {
             "index": 0,
-            "node": "Get AP labels",
+            "node": "Email in",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "One item per due email": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Get email (Gmail)",
             "type": "main"
           }
         ]
@@ -90,7 +215,18 @@
         [
           {
             "index": 0,
-            "node": "Label: error",
+            "node": "Error facts",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Report failure (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Given up?",
             "type": "main"
           }
         ]
@@ -122,7 +258,7 @@
         [
           {
             "index": 0,
-            "node": "Label: error",
+            "node": "Error facts",
             "type": "main"
           }
         ]
@@ -157,6 +293,13 @@
             "node": "Log not for alias",
             "type": "main"
           }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Error facts",
+            "type": "main"
+          }
         ]
       ]
     },
@@ -181,6 +324,17 @@
           }
         ]
       ]
+    },
+    "Which are due? (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "One item per due email",
+            "type": "main"
+          }
+        ]
+      ]
     }
   },
   "name": "AP – Email intake",
@@ -190,9 +344,9 @@
       "name": "Note: Email intake",
       "parameters": {
         "color": 5,
-        "content": "## Email intake\nTurns emails sent to **invoices@** into processed invoices.\n\nn8n receives the email and applies the Gmail labels. The **core service decides** everything else: which emails and attachments to process, the extracted data, the checks and the status. The AI only extracts data; every decision is deterministic code.",
+        "content": "## Email intake\nTurns emails sent to **invoices@** into processed invoices.\n\nn8n receives the email and applies the Gmail labels. The **core service decides** everything else: which emails and attachments to process, the extracted data, the checks and the status, and what a failure means (retried later, or given up). The AI only extracts data; every decision is deterministic code.",
         "height": 350,
-        "width": 1380
+        "width": 1620
       },
       "position": [
         -40,
@@ -206,13 +360,29 @@
       "name": "Note: Receive",
       "parameters": {
         "color": 7,
-        "content": "## Receive\nChecks Gmail every minute for emails delivered to the alias and not yet processed.",
+        "content": "## Receive\nChecks Gmail every minute for emails delivered to the alias and not yet processed. Re-checked emails join here.",
         "height": 350,
-        "width": 660
+        "width": 900
       },
       "position": [
         -40,
         250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-re-check-ap/error",
+      "name": "Note: Re-check AP/Error",
+      "parameters": {
+        "color": 7,
+        "content": "## Re-check AP/Error\nEvery 15 minutes: emails labelled **AP/Error** go to the core, which says which are due (backoff 15 min, 1 h, 4 h, 12 h; 5 attempts). One with no failure on record (the core was down) is due at once.",
+        "height": 550,
+        "width": 660
+      },
+      "position": [
+        -40,
+        650
       ],
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1
@@ -227,7 +397,7 @@
         "width": 660
       },
       "position": [
-        680,
+        920,
         250
       ],
       "type": "n8n-nodes-base.stickyNote",
@@ -243,7 +413,7 @@
         "width": 420
       },
       "position": [
-        1400,
+        1640,
         250
       ],
       "type": "n8n-nodes-base.stickyNote",
@@ -254,12 +424,12 @@
       "name": "Note: Label, then post",
       "parameters": {
         "color": 7,
-        "content": "## Label, then post\nGmail labels show the outcome. Ready invoices start the posting workflow.",
+        "content": "## Label, then post\nGmail labels show the outcome; AP/Error is removed once an email has an answer. Ready invoices start the posting workflow.",
         "height": 750,
         "width": 420
       },
       "position": [
-        1880,
+        2120,
         250
       ],
       "type": "n8n-nodes-base.stickyNote",
@@ -275,7 +445,7 @@
         "width": 420
       },
       "position": [
-        680,
+        920,
         650
       ],
       "type": "n8n-nodes-base.stickyNote",
@@ -286,13 +456,13 @@
       "name": "Note: Technical error",
       "parameters": {
         "color": 3,
-        "content": "## Technical error\nThe core could not process the file (e.g. OCR service down): labelled AP/Error and logged.",
-        "height": 350,
-        "width": 420
+        "content": "## Technical error\nThe screening or processing failed (e.g. OCR service down, core unreachable): labelled **AP/Error**, logged, reported to the core. Temporary → the re-check retries it. Permanent, or 5 attempts used → **given up** (AP/Processed added): a person looks.",
+        "height": 550,
+        "width": 660
       },
       "position": [
         1400,
-        650
+        850
       ],
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1
@@ -332,6 +502,17 @@
       "typeVersion": 1.4
     },
     {
+      "id": "email-in",
+      "name": "Email in",
+      "parameters": {},
+      "position": [
+        240,
+        400
+      ],
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1
+    },
+    {
       "credentials": {
         "gmailOAuth2": {
           "name": "Gmail – david@davidmichel.dev"
@@ -346,7 +527,7 @@
         "returnAll": true
       },
       "position": [
-        240,
+        480,
         400
       ],
       "type": "n8n-nodes-base.gmail",
@@ -356,12 +537,12 @@
       "id": "email-facts",
       "name": "Email facts",
       "parameters": {
-        "jsCode": "// For the core's screening: metadata (recipients, attachment types, names, sizes) and the text\n// (subject + body, which the core checks for bank-change wording and never stores; it accepts\n// up to 20,000 characters).\nreturn $('New email (Gmail)').all().map((email, i) => {\n  const mail = email.json;\n  const files = Object.entries(email.binary ?? {}).filter(([key]) => /^attachment_\\d+$/.test(key));\n  return { json: {\n    message_id: mail.id,\n    thread_id: mail.threadId,\n    recipients: [...(mail.to?.value ?? []), ...(mail.cc?.value ?? [])].map(a => String(a.address ?? '')),\n    delivered_to: String(mail.headers?.['delivered-to'] ?? ''),\n    attachments: files.map(([key, b]) => ({ key, mime_type: b.mimeType ?? null, file_name: b.fileName ?? null,\n                                           size: b.fileSize ?? null })),\n    text: [mail.subject, mail.text].filter(Boolean).join('\\n\\n').slice(0, 20000),\n  }, pairedItem: { item: i } };\n});",
+        "jsCode": "// For the core's screening: metadata (recipients, attachment types, names, sizes) and the text\n// (subject + body, which the core checks for bank-change wording and never stores; it accepts\n// up to 20,000 characters).\nreturn $('Email in').all().map((email, i) => {\n  const mail = email.json;\n  const files = Object.entries(email.binary ?? {}).filter(([key]) => /^attachment_\\d+$/.test(key));\n  return { json: {\n    message_id: mail.id,\n    thread_id: mail.threadId,\n    recipients: [...(mail.to?.value ?? []), ...(mail.cc?.value ?? [])].map(a => String(a.address ?? '')),\n    delivered_to: String(mail.headers?.['delivered-to'] ?? ''),\n    attachments: files.map(([key, b]) => ({ key, mime_type: b.mimeType ?? null, file_name: b.fileName ?? null,\n                                           size: b.fileSize ?? null })),\n    text: [mail.subject, mail.text].filter(Boolean).join('\\n\\n').slice(0, 20000),\n  }, pairedItem: { item: i } };\n});",
         "language": "javaScript",
         "mode": "runOnceForAllItems"
       },
       "position": [
-        480,
+        720,
         400
       ],
       "type": "n8n-nodes-base.code",
@@ -380,7 +561,7 @@
       "parameters": {
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "jsonBody": "={{ JSON.stringify({ recipients: $json.recipients, delivered_to: $json.delivered_to, attachments: $json.attachments, text: $json.text }) }}",
+        "jsonBody": "={{ JSON.stringify({ recipients: $json.recipients, delivered_to: $json.delivered_to, attachments: $json.attachments, text: $json.text, message_id: $json.message_id, execution_id: $execution.id }) }}",
         "method": "POST",
         "options": {
           "response": {
@@ -395,7 +576,7 @@
         "url": "=http://core:8000/intake/email/screen"
       },
       "position": [
-        720,
+        960,
         400
       ],
       "retryOnFail": true,
@@ -407,12 +588,12 @@
       "id": "split-by-attachment",
       "name": "Split by attachment",
       "parameters": {
-        "jsCode": "// One item per attachment the core accepted (with its file), or one item saying why there is none.\n// File names are not passed on to the logs: they may be personal data.\nconst LABELS = { processed: 'AP/Processed', ready: 'AP/Ready', review: 'AP/Review',\n                 rejected: 'AP/Rejected', error: 'AP/Error', fraud: 'AP/Fraud alert' };\n\n// Label IDs, looked up by name so nothing is hard-coded\nconst byName = Object.fromEntries($('Get AP labels').all().map(i => [i.json.name, i.json.id]));\nconst labels = {};\nfor (const [key, name] of Object.entries(LABELS)) {\n  if (!byName[name]) throw new Error(`Gmail label \"${name}\" not found: create it in Gmail first`);\n  labels[key] = byName[name];\n}\n\nconst emails = $('Email facts').all();\nconst files = $('New email (Gmail)').all();\nconst out = [];\n$input.all().forEach((screen, i) => {\n  if (screen.json.statusCode !== 200) {\n    throw new Error(`email screening failed (core HTTP ${screen.json.statusCode ?? 'no response'})`);\n  }\n  const mail = emails[i].json, s = screen.json.body;\n  const base = { message_id: mail.message_id, thread_id: mail.thread_id, labels };\n  if (s.route !== 'process') {\n    out.push({ json: { ...base, route: s.route, reason: s.reason,\n                       details: { attachments: s.attachments, skipped: s.skipped } }, pairedItem: { item: i } });\n    return;\n  }\n  for (const a of s.accepted) {\n    out.push({\n      json: { ...base, route: 'process', source_ref: `gmail:${mail.message_id}:${a.index}`, mime: a.mime,\n              size: a.size, attachments_in_email: s.accepted.length, email_text: mail.text },\n      binary: { file: files[i].binary[a.key] },\n      pairedItem: { item: i },\n    });\n  }\n});\nreturn out;",
+        "jsCode": "// One item per attachment the core accepted (with its file), or one item saying why there is none.\n// File names are not passed on to the logs: they may be personal data.\nconst LABELS = { processed: 'AP/Processed', ready: 'AP/Ready', review: 'AP/Review',\n                 rejected: 'AP/Rejected', error: 'AP/Error', fraud: 'AP/Fraud alert' };\n\n// Label IDs, looked up by name so nothing is hard-coded\nconst byName = Object.fromEntries($('Get AP labels').all().map(i => [i.json.name, i.json.id]));\nconst labels = {};\nfor (const [key, name] of Object.entries(LABELS)) {\n  if (!byName[name]) throw new Error(`Gmail label \"${name}\" not found: create it in Gmail first`);\n  labels[key] = byName[name];\n}\n\nconst emails = $('Email facts').all();\nconst files = $('Email in').all();\nconst out = [];\n$input.all().forEach((screen, i) => {\n  const mail = emails[i].json, s = screen.json.body;\n  const base = { message_id: mail.message_id, thread_id: mail.thread_id, labels };\n  if (screen.json.statusCode !== 200) {  // the screening itself failed: what was seen, for the core\n    out.push({ json: { ...base, route: 'error', stage: 'screen', source_ref: `gmail:${mail.message_id}`,\n                       status_code: screen.json.statusCode ?? null, error: s?.error ?? null,\n                       message: String(s?.message ?? screen.json.error?.message ?? '').slice(0, 300) },\n               pairedItem: { item: i } });\n    return;\n  }\n  if (s.route !== 'process') {\n    out.push({ json: { ...base, route: s.route, reason: s.reason,\n                       details: { attachments: s.attachments, skipped: s.skipped } }, pairedItem: { item: i } });\n    return;\n  }\n  for (const a of s.accepted) {\n    out.push({\n      json: { ...base, route: 'process', source_ref: `gmail:${mail.message_id}:${a.index}`, mime: a.mime,\n              size: a.size, attachments_in_email: s.accepted.length, email_text: mail.text },\n      binary: { file: files[i].binary[a.key] },\n      pairedItem: { item: i },\n    });\n  }\n});\nreturn out;",
         "language": "javaScript",
         "mode": "runOnceForAllItems"
       },
       "position": [
-        960,
+        1200,
         400
       ],
       "type": "n8n-nodes-base.code",
@@ -524,16 +705,164 @@
               },
               "outputKey": "not for alias",
               "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "core-error",
+                    "leftValue": "={{ $json.route === 'error' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                }
+              },
+              "outputKey": "core error",
+              "renameOutput": true
             }
           ]
         }
       },
       "position": [
-        1200,
+        1440,
         400
       ],
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2
+    },
+    {
+      "id": "every-15-minutes",
+      "name": "Every 15 minutes",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "position": [
+        0,
+        800
+      ],
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2
+    },
+    {
+      "alwaysOutputData": true,
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail – david@davidmichel.dev"
+        }
+      },
+      "id": "find-ap/error-emails",
+      "name": "Find AP/Error emails",
+      "parameters": {
+        "filters": {
+          "q": "deliveredto:invoices@davidmichel.dev label:ap-error -label:ap-processed newer_than:14d"
+        },
+        "limit": 50,
+        "operation": "getAll",
+        "resource": "message",
+        "returnAll": false,
+        "simple": true
+      },
+      "position": [
+        240,
+        800
+      ],
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "executeOnce": true,
+      "id": "which-are-due-core",
+      "maxTries": 3,
+      "name": "Which are due? (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ found: $input.all().map(i => i.json.id).filter(Boolean), execution_id: $execution.id }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "=http://core:8000/intake/failures/due"
+      },
+      "position": [
+        480,
+        800
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "one-item-per-due-email",
+      "name": "One item per due email",
+      "parameters": {
+        "jsCode": "// One item per email the core says to process now (it decides which, and counts the attempt).\nconst answer = $input.first().json;\nif (answer.statusCode !== 200) {\n  throw new Error(`re-check: the core answered ${answer.statusCode ?? 'nothing'}; the next run tries again`);\n}\nreturn answer.body.due.map(id => ({ json: { id } }));",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        240,
+        1000
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail – david@davidmichel.dev"
+        }
+      },
+      "id": "get-email-gmail",
+      "name": "Get email (Gmail)",
+      "parameters": {
+        "messageId": "={{ $json.id }}",
+        "operation": "get",
+        "options": {
+          "dataPropertyAttachmentsPrefixName": "attachment_",
+          "downloadAttachments": true
+        },
+        "resource": "message",
+        "simple": false
+      },
+      "position": [
+        480,
+        1000
+      ],
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1
     },
     {
       "credentials": {
@@ -562,6 +891,10 @@
               "value": "={{ $json.source_ref }}"
             },
             {
+              "name": "message_id",
+              "value": "={{ $json.message_id }}"
+            },
+            {
               "name": "n8n_execution_id",
               "value": "={{ $execution.id }}"
             },
@@ -588,7 +921,7 @@
         "url": "http://core:8000/invoices/process"
       },
       "position": [
-        1440,
+        1680,
         400
       ],
       "type": "n8n-nodes-base.httpRequest",
@@ -683,7 +1016,7 @@
         }
       },
       "position": [
-        1680,
+        1920,
         400
       ],
       "type": "n8n-nodes-base.switch",
@@ -704,7 +1037,7 @@
         "resource": "message"
       },
       "position": [
-        1920,
+        2160,
         400
       ],
       "type": "n8n-nodes-base.gmail",
@@ -726,7 +1059,7 @@
         }
       },
       "position": [
-        2160,
+        2400,
         400
       ],
       "type": "n8n-nodes-base.executeWorkflow",
@@ -747,7 +1080,7 @@
         "resource": "message"
       },
       "position": [
-        1920,
+        2160,
         600
       ],
       "type": "n8n-nodes-base.gmail",
@@ -768,11 +1101,47 @@
         "resource": "message"
       },
       "position": [
-        1920,
+        2160,
         800
       ],
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1
+    },
+    {
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail – david@davidmichel.dev"
+        }
+      },
+      "id": "clear-ap/error",
+      "name": "Clear AP/Error",
+      "parameters": {
+        "labelIds": "={{ [$('Split by attachment').item.json.labels.error] }}",
+        "messageId": "={{ $('Split by attachment').item.json.message_id }}",
+        "operation": "removeLabels",
+        "resource": "message"
+      },
+      "position": [
+        2400,
+        600
+      ],
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1
+    },
+    {
+      "id": "error-facts",
+      "name": "Error facts",
+      "parameters": {
+        "jsCode": "// What failed, for the log and the core: the screening (already described by the split) or the\n// processing of one attachment. The core decides what it means (retried later, or given up).\nreturn $input.all().map((item, i) => {\n  if (item.json.route === 'error') return { json: item.json, pairedItem: { item: i } };\n  const { email_text, ...source } = $('Split by attachment').itemMatching(i).json;\n  const r = item.json;\n  return { json: { ...source, route: 'error', stage: 'process', status_code: r.statusCode ?? null,\n                   error: r.body?.error ?? null,\n                   message: String(r.body?.message ?? r.error?.message ?? '').slice(0, 300) },\n           pairedItem: { item: i } };\n});",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        1440,
+        1000
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
     },
     {
       "credentials": {
@@ -789,8 +1158,8 @@
         "resource": "message"
       },
       "position": [
-        1440,
-        800
+        1680,
+        1000
       ],
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1
@@ -806,16 +1175,107 @@
       "parameters": {
         "operation": "executeQuery",
         "options": {
-          "queryReplacement": "={{ [$('Split by attachment').item.json.source_ref, $execution.id, 'core_call', 'error', 'core service call failed', JSON.stringify({ status_code: $('Process invoice (core)').item.json.statusCode ?? null, error: $('Process invoice (core)').item.json.body?.error ?? $('Process invoice (core)').item.json.error?.message ?? null })] }}"
+          "queryReplacement": "={{ [$('Error facts').item.json.source_ref, $execution.id, 'core_call', 'error', 'core service call failed (' + $('Error facts').item.json.stage + ')', JSON.stringify({ stage: $('Error facts').item.json.stage, status_code: $('Error facts').item.json.status_code, error: $('Error facts').item.json.error, message: $('Error facts').item.json.message })] }}"
         },
         "query": "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details)\nVALUES ('email', $1, $2, $3, $4, $5, $6::jsonb)"
       },
       "position": [
-        1680,
-        800
+        1920,
+        1000
       ],
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "report-failure-core",
+      "maxTries": 3,
+      "name": "Report failure (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ message_id: $('Error facts').item.json.message_id, stage: $('Error facts').item.json.stage, status_code: $('Error facts').item.json.status_code, error: $('Error facts').item.json.error, execution_id: $execution.id }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "=http://core:8000/intake/failures"
+      },
+      "position": [
+        1440,
+        1200
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "given-up",
+      "name": "Given up?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 && $json.body?.state === 'given_up' }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1680,
+        1200
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail – david@davidmichel.dev"
+        }
+      },
+      "id": "label-given-up",
+      "name": "Label: given up",
+      "parameters": {
+        "labelIds": "={{ [$('Split by attachment').item.json.labels.processed] }}",
+        "messageId": "={{ $('Split by attachment').item.json.message_id }}",
+        "operation": "addLabels",
+        "resource": "message"
+      },
+      "position": [
+        1920,
+        1200
+      ],
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1
     },
     {
       "credentials": {
@@ -832,7 +1292,7 @@
         "resource": "message"
       },
       "position": [
-        720,
+        960,
         800
       ],
       "type": "n8n-nodes-base.gmail",
@@ -854,7 +1314,7 @@
         "query": "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details)\nVALUES ('email', $1, $2, $3, $4, $5, $6::jsonb)"
       },
       "position": [
-        960,
+        1200,
         800
       ],
       "type": "n8n-nodes-base.postgres",
@@ -875,7 +1335,7 @@
         "resource": "message"
       },
       "position": [
-        720,
+        960,
         1000
       ],
       "type": "n8n-nodes-base.gmail",
@@ -897,7 +1357,7 @@
         "query": "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details)\nVALUES ('email', $1, $2, $3, $4, $5, $6::jsonb)"
       },
       "position": [
-        960,
+        1200,
         1000
       ],
       "type": "n8n-nodes-base.postgres",
@@ -919,7 +1379,7 @@
         "query": "INSERT INTO ap.processing_log (channel, source_ref, n8n_execution_id, step, level, message, details)\nVALUES ('email', $1, $2, $3, $4, $5, $6::jsonb)"
       },
       "position": [
-        720,
+        960,
         1200
       ],
       "type": "n8n-nodes-base.postgres",
@@ -928,6 +1388,7 @@
   ],
   "pinData": {},
   "settings": {
+    "errorWorkflow": "apErrorLog000001",
     "executionOrder": "v1",
     "saveDataErrorExecution": "all",
     "saveDataSuccessExecution": "all",
