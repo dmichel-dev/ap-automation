@@ -1,0 +1,21 @@
+{
+  "id": "P-ar-aed-uae-tax-invoice",
+  "file": "P-ar-aed-uae-tax-invoice.pdf",
+  "email": {
+    "subject": "فاتورة ضريبية QW-INV-2026-0311 / Tax invoice QW-INV-2026-0311",
+    "body": "Dear Sir or Madam,\n\nPlease find attached tax invoice QW-INV-2026-0311 for AED 4,441.50, due 18/12/2026.\n\nمع التحية،\nQasrwind Office Supplies L.L.C. (fictional test supplier)"
+  },
+  "expect": {
+    "status": "ready",
+    "reasons": [],
+    "document_type": "invoice",
+    "invoice_number": "QW-INV-2026-0311",
+    "currency": "AED",
+    "total": "4441.50",
+    "invoice_date": "2026-11-18",
+    "due_date": "2026-12-18",
+    "supplier_country": "AE",
+    "min_lines": 3
+  },
+  "note": "Arabic (right-to-left) and English on the same page, UAE tax invoice with TRN, 5 % VAT; day-first dates with a day above 12, so not ambiguous."
+}

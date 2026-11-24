@@ -1,0 +1,22 @@
+{
+  "id": "S-fr-eur-skewed-scan",
+  "file": "S-fr-eur-skewed-scan.jpg",
+  "email": {
+    "subject": "Facture AV-2026-0147 – Ateliers Verlibreux",
+    "body": "Bonjour,\n\nVeuillez trouver ci-joint notre facture AV-2026-0147 d'un montant de 1 598,61 € TTC, payable au 23/12/2026.\n\nCordialement,\nAteliers Verlibreux (fournisseur fictif de test)"
+  },
+  "expect": {
+    "status": "ready",
+    "reasons": [],
+    "document_type": "invoice",
+    "invoice_number": "AV-2026-0147",
+    "currency": "EUR",
+    "total": "1598.61",
+    "invoice_date": "2026-11-23",
+    "due_date": "2026-12-23",
+    "supplier_country": "FR",
+    "min_lines": 4
+  },
+  "calibration_only": true,
+  "note": "Scan of invoice A turned 3.5°, 150 dpi, light blur and noise."
+}

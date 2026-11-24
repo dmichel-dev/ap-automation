@@ -9,6 +9,7 @@ search, phone numbers use 555-01xx, emails use example.com, tax IDs and IBANs ar
 Totals are computed here with exact decimals; the expected values are written next to each
 file in invoices/<id>.expected.json and checked by scripts/run_e2e.py.
 
+  generate.py --calibration   only P to T (bilingual and degraded invoices), other files untouched
   generate.py --e2e   only the daily end-to-end test's documents (services/core/app/e2e_fixtures;
                       their expected results are in services/core/app/e2e_test.py)
 """
@@ -25,7 +26,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 from fpdf import FPDF
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 OUT = Path(__file__).parent / "invoices"
 FIXTURES = Path("/app/tests/fixtures")  # core-test container: services/core is mounted at /app
@@ -99,8 +100,13 @@ class Doc(FPDF):
             self.cell(value_w, 6.5, value, align="R", new_x="LMARGIN", new_y="NEXT")
 
 
-def save_expected(doc_id: str, file: str, email: dict, expect: dict, note: str = "") -> None:
-    data = {"id": doc_id, "file": file, "email": email, "expect": expect}
+def save_expected(
+    doc_id: str, file: str, email: dict, expect: dict, note: str = "", calibration_only: bool = False
+) -> None:
+    """calibration_only: read by scripts/calibrate.sh only, never sent through the live pipeline."""
+    data: dict[str, object] = {"id": doc_id, "file": file, "email": email, "expect": expect}
+    if calibration_only:
+        data["calibration_only"] = True
     if note:
         data["note"] = note
     (OUT / f"{doc_id}.expected.json").write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
@@ -824,6 +830,359 @@ def doc_n_o() -> None:
 
 
 # =====================================================================================
+# Bilingual invoices in right-to-left and Indic scripts (shaped with HarfBuzz)
+# =====================================================================================
+FONT_ARABIC = "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf"
+FONT_ARABIC_BOLD = "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Bold.ttf"
+FONT_DEVANAGARI = "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf"
+FONT_DEVANAGARI_BOLD = "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf"
+
+
+def fmt_in(v: D) -> str:  # 1,35,818.00 (Indian grouping: lakh, crore)
+    whole, cents = f"{q(v):.2f}".split(".")
+    head, tail = whole[:-3], whole[-3:]
+    groups: list[str] = []
+    while len(head) > 2:
+        head, groups = head[:-2], [head[-2:], *groups]
+    return ",".join([g for g in [head, *groups] if g] + [tail]) + "." + cents
+
+
+class Bilingual(Doc):
+    """English on the left, the second language on the right of the same row. The second
+    script uses its own font family 'alt'; HarfBuzz shapes it (Arabic joining and right-to-left
+    order, Devanagari conjuncts and vowel signs)."""
+
+    def __init__(self, regular: str, bold: str, alt_align: str):
+        super().__init__()
+        self.add_font("alt", "", regular)
+        self.add_font("alt", "B", bold)
+        self.set_fallback_fonts(["main"])  # Latin letters, digits' symbols (@, %, brackets) missing in 'alt'
+        self.set_text_shaping(True)
+        self.alt_align = alt_align  # R for a right-to-left script, L otherwise
+
+    def pair(self, en: str, alt: str, size: float = 10, bold: bool = False, h: float = 6.0) -> None:
+        y = self.get_y()
+        self.set_font("main", "B" if bold else "", size)
+        self.cell(0, h, en, align="L")
+        self.set_xy(self.l_margin, y)
+        self.set_font("alt", "B" if bold else "", size)
+        self.cell(0, h, alt, align="R", new_x="LMARGIN", new_y="NEXT")
+
+    def field(self, en: str, alt: str, value: str, size: float = 10) -> None:
+        """'English label: value' on the left, the label in the second language on the right."""
+        self.pair(f"{en}: {value}", alt, size)
+
+    def table2(self, header: list[tuple[str, str]], rows: list[list[str]], widths: list[float], aligns: str) -> None:
+        """Header cells in both languages (two lines). Row cells: the description cell holds
+        'English\\nsecond language', drawn on two lines, the second aligned by its script."""
+        x0, y = self.l_margin, self.get_y()
+        self.set_fill_color(235, 235, 235)
+        self.rect(x0, y, sum(widths), 12, style="F")
+        for (en, alt), w, a in zip(header, widths, aligns, strict=True):
+            self.set_xy(x0, y)
+            self.set_font("main", "B", 8.5)
+            self.cell(w, 6, en, align=a)
+            self.set_xy(x0, y + 6)
+            self.set_font("alt", "B", 8.5)
+            self.cell(w, 6, alt, align=a)
+            x0 += w
+        self.line(self.l_margin, y + 12, self.l_margin + sum(widths), y + 12)
+        y += 13
+        for row in rows:
+            x0 = self.l_margin
+            for text, w, a in zip(row, widths, aligns, strict=True):
+                en, _, alt = text.partition("\n")
+                self.set_xy(x0, y)
+                self.set_font("main", "", 9)
+                self.cell(w, 6, en, align=a)
+                if alt:
+                    self.set_xy(x0, y + 5.5)
+                    self.set_font("alt", "", 9)
+                    self.cell(w, 6, alt, align=self.alt_align)
+                x0 += w
+            y += 13
+        self.set_xy(self.l_margin, y + 2)
+
+    def totals2(self, rows: list[tuple[str, str, str, bool]]) -> None:
+        """Totals: English label, value, second-language label (right)."""
+        for en, alt, value, bold in rows:
+            y = self.get_y()
+            self.set_font("main", "B" if bold else "", 10 if bold else 9.5)
+            self.set_x(self.l_margin + 50)
+            self.cell(54, 6.5, en, align="R")
+            self.cell(34, 6.5, value, align="R")
+            self.set_xy(self.l_margin, y)
+            self.set_font("alt", "B" if bold else "", 10 if bold else 9.5)
+            self.cell(0, 6.5, alt, align="R", new_x="LMARGIN", new_y="NEXT")
+
+
+# P: UAE tax invoice, Arabic and English, AED, 5 % VAT, TRN
+def doc_p() -> None:
+    lines = [  # English, Arabic, qty, unit price (AED, before VAT)
+        ("Toner cartridge, black", "خرطوشة حبر، أسود", 6, D("420.00")),
+        ("A4 copy paper (box of 5 reams)", "ورق نسخ A4 (صندوق 5 رزم)", 15, D("95.00")),
+        ("Whiteboard markers (pack of 12)", "أقلام سبورة بيضاء (عبوة 12)", 10, D("28.50")),
+    ]
+    sub = sum((n * p for _, _, n, p in lines), D(0))
+    vat = q(sub * D("0.05"))
+    total = sub + vat
+    assert (sub, vat, total) == (D("4230.00"), D("211.50"), D("4441.50"))
+
+    pdf = Bilingual(FONT_ARABIC, FONT_ARABIC_BOLD, alt_align="R")
+    pdf.pair("Qasrwind Office Supplies L.L.C.", "قصرويند للوازم المكتبية ذ.م.م", 14, bold=True, h=8)
+    pdf.pair("Office 1204, Example Tower, Dubai, United Arab Emirates", "مكتب 1204، برج المثال، دبي، الإمارات", 9)
+    pdf.pair("TRN 100000000000003  ·  +971 4 000 0000", "الرقم الضريبي 100000000000003", 9)
+    pdf.ln(5)
+    pdf.pair("TAX INVOICE", "فاتورة ضريبية", 15, bold=True, h=9)
+    pdf.ln(1)
+    pdf.field("Invoice No.", "رقم الفاتورة", "QW-INV-2026-0311")
+    pdf.field("Invoice date", "تاريخ الفاتورة", "18/11/2026")
+    pdf.field("Due date", "تاريخ الاستحقاق", "18/12/2026")
+    pdf.field("Customer", "العميل", f"{BUYER[0]}, {BUYER[1]}", 9)
+    pdf.ln(4)
+    pdf.table2(
+        [
+            ("Description", "الوصف"),
+            ("Qty", "الكمية"),
+            ("Unit price", "سعر الوحدة"),
+            ("VAT", "الضريبة"),
+            ("Amount (AED)", "المبلغ (درهم)"),
+        ],
+        [[f"{en}\n{ar}", str(n), fmt_en(p), "5%", fmt_en(n * p)] for en, ar, n, p in lines],
+        [78, 16, 26, 18, 36],
+        "LRRRR",
+    )
+    pdf.totals2(
+        [
+            ("Total excluding VAT", "الإجمالي غير شامل الضريبة", f"AED {fmt_en(sub)}", False),
+            ("VAT 5%", "ضريبة القيمة المضافة", f"AED {fmt_en(vat)}", False),
+            ("Total including VAT", "الإجمالي شامل الضريبة", f"AED {fmt_en(total)}", True),
+        ]
+    )
+    pdf.ln(8)
+    pdf.pair("Payment by bank transfer within 30 days.", "الدفع بالتحويل المصرفي خلال 30 يوماً.", 8)
+    pdf.pair("Fictional document generated for a demo project.", "مستند وهمي لأغراض العرض فقط.", 8)
+    (OUT / "P-ar-aed-uae-tax-invoice.pdf").write_bytes(bytes(pdf.output()))
+
+    save_expected(
+        "P-ar-aed-uae-tax-invoice",
+        "P-ar-aed-uae-tax-invoice.pdf",
+        {
+            "subject": "فاتورة ضريبية QW-INV-2026-0311 / Tax invoice QW-INV-2026-0311",
+            "body": "Dear Sir or Madam,\n\nPlease find attached tax invoice QW-INV-2026-0311 for AED 4,441.50, "
+            "due 18/12/2026.\n\nمع التحية،\nQasrwind Office Supplies L.L.C. (fictional test supplier)",
+        },
+        {
+            "status": "ready",
+            "reasons": [],
+            "document_type": "invoice",
+            "invoice_number": "QW-INV-2026-0311",
+            "currency": "AED",
+            "total": "4441.50",
+            "invoice_date": "2026-11-18",
+            "due_date": "2026-12-18",
+            "supplier_country": "AE",
+            "min_lines": 3,
+        },
+        "Arabic (right-to-left) and English on the same page, UAE tax invoice with TRN, 5 % VAT; "
+        "day-first dates with a day above 12, so not ambiguous.",
+    )
+
+
+# Q: Indian GST invoice, Hindi and English, INR, CGST + SGST (supply within one state)
+def doc_q() -> None:
+    lines = [  # English, Hindi, HSN/SAC, qty, rate (INR, before GST)
+        ("A4 copier paper (ream)", "ए4 कॉपियर पेपर (रीम)", "4802", 60, D("285.00")),
+        ("Ballpoint pens (box of 50)", "बॉलपॉइंट पेन (50 का डिब्बा)", "9608", 25, D("120.00")),
+        ("Printer repair, on-site visit", "प्रिंटर मरम्मत, साइट पर", "998719", 1, D("95000.00")),
+    ]
+    taxable = sum((n * p for *_, n, p in lines), D(0))
+    cgst = sgst = q(taxable * D("0.09"))
+    total = taxable + cgst + sgst
+    assert (taxable, cgst, total) == (D("115100.00"), D("10359.00"), D("135818.00"))
+
+    pdf = Bilingual(FONT_DEVANAGARI, FONT_DEVANAGARI_BOLD, alt_align="L")
+    pdf.pair("Kalindra Stationers Pvt. Ltd.", "कालिन्द्रा स्टेशनर्स प्रा. लि.", 14, bold=True, h=8)
+    pdf.pair("21 Example Road, Pune 411000, Maharashtra, India", "21 उदाहरण रोड, पुणे, महाराष्ट्र", 9)
+    pdf.pair("GSTIN 27AAAAA0000A1Z5  ·  +91 20 0000 0000", "जीएसटीआईएन 27AAAAA0000A1Z5", 9)
+    pdf.ln(5)
+    pdf.pair("TAX INVOICE", "कर बीजक", 15, bold=True, h=9)
+    pdf.ln(1)
+    pdf.field("Invoice No.", "बीजक संख्या", "KST/2026-27/0418")
+    pdf.field("Invoice date", "बीजक तिथि", "21/11/2026")
+    pdf.field("Due date", "देय तिथि", "21/12/2026")
+    pdf.field("Place of supply", "आपूर्ति का स्थान", "Maharashtra (27)")
+    pdf.field("Bill to", "प्राप्तकर्ता", "Example Buyer Inc., India branch office, Pune · GSTIN 27BBBBB0000B1Z3", 9)
+    pdf.ln(4)
+    pdf.table2(
+        [
+            ("Description", "विवरण"),
+            ("HSN/SAC", "एचएसएन"),
+            ("Qty", "मात्रा"),
+            ("Rate (₹)", "दर"),
+            ("Taxable value (₹)", "कर योग्य मूल्य"),
+        ],
+        [[f"{en}\n{hi}", code, str(n), fmt_in(p), fmt_in(n * p)] for en, hi, code, n, p in lines],
+        [72, 22, 16, 26, 38],
+        "LRRRR",
+    )
+    pdf.totals2(
+        [
+            ("Taxable amount", "कर योग्य राशि", f"₹ {fmt_in(taxable)}", False),
+            ("CGST @ 9%", "केंद्रीय जीएसटी @ 9%", f"₹ {fmt_in(cgst)}", False),
+            ("SGST @ 9%", "राज्य जीएसटी @ 9%", f"₹ {fmt_in(sgst)}", False),
+            ("Total invoice value", "कुल बीजक मूल्य", f"₹ {fmt_in(total)}", True),
+        ]
+    )
+    pdf.ln(3)
+    pdf.pair("Rupees One Lakh Thirty-Five Thousand Eight Hundred Eighteen Only", "", 8.5)
+    pdf.pair("", "एक लाख पैंतीस हज़ार आठ सौ अठारह रुपये मात्र", 8.5)
+    pdf.ln(6)
+    pdf.pair("Payment within 30 days by NEFT/RTGS.", "भुगतान 30 दिनों के भीतर।", 8)
+    pdf.pair("Fictional document generated for a demo project.", "यह डेमो के लिए बनाया गया काल्पनिक बीजक है।", 8)
+    (OUT / "Q-hi-inr-gst-invoice.pdf").write_bytes(bytes(pdf.output()))
+
+    save_expected(
+        "Q-hi-inr-gst-invoice",
+        "Q-hi-inr-gst-invoice.pdf",
+        {
+            "subject": "कर बीजक KST/2026-27/0418 / Tax invoice KST/2026-27/0418",
+            "body": "Dear Sir or Madam,\n\nPlease find attached tax invoice KST/2026-27/0418 for ₹1,35,818.00, "
+            "due 21/12/2026.\n\nधन्यवाद,\nKalindra Stationers Pvt. Ltd. (fictional test supplier)",
+        },
+        {
+            "status": "ready",
+            "reasons": [],
+            "document_type": "invoice",
+            "invoice_number": "KST/2026-27/0418",
+            "currency": "INR",
+            "total": "135818.00",
+            "invoice_date": "2026-11-21",
+            "due_date": "2026-12-21",
+            "supplier_country": "IN",
+            "min_lines": 3,
+        },
+        "Devanagari and English on the same page, GSTIN and HSN/SAC codes, CGST 9 % + SGST 9 % as two "
+        "tax lines, Indian digit grouping (1,35,818.00); day-first dates with a day above 12.",
+    )
+
+
+# =====================================================================================
+# Degraded copies of existing invoices: same content, same expected result, worse input
+# =====================================================================================
+def render_page(pdf_file: Path, dpi: int) -> Image.Image:
+    import pypdfium2 as pdfium
+
+    page = pdfium.PdfDocument(pdf_file.read_bytes())[0]
+    return page.render(scale=dpi / 72).to_pil().convert("RGB")
+
+
+def jpeg(img: Image.Image, quality: int) -> bytes:
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=quality)
+    return buf.getvalue()
+
+
+def low_resolution(src: Path) -> bytes:
+    """A fax-like copy: 90 dpi, greyscale, strong JPEG compression."""
+    return jpeg(render_page(src, 90).convert("L"), 45)
+
+
+def skewed(src: Path) -> bytes:
+    """A flatbed scan put in crooked: 150 dpi, turned 3.5°, light blur and sensor noise."""
+    img = render_page(src, 150).convert("L")
+    img = img.rotate(-3.5, resample=Image.Resampling.BICUBIC, expand=True, fillcolor=238)
+    img = img.filter(ImageFilter.GaussianBlur(0.6))
+    img = Image.blend(img, Image.effect_noise(img.size, 40), 0.08)
+    return jpeg(img, 80)
+
+
+def _solve(a: list[list[float]], b: list[float]) -> list[float]:
+    """Gaussian elimination with partial pivoting (8 unknowns: no numpy needed)."""
+    n = len(b)
+    m = [[*row, rhs] for row, rhs in zip(a, b, strict=True)]
+    for col in range(n):
+        pivot = max(range(col, n), key=lambda r: abs(m[r][col]))
+        m[col], m[pivot] = m[pivot], m[col]
+        for r in range(n):
+            if r != col:
+                f = m[r][col] / m[col][col]
+                m[r] = [x - f * y for x, y in zip(m[r], m[col], strict=True)]
+    return [m[r][n] / m[r][r] for r in range(n)]
+
+
+def _perspective_coeffs(dst: list[tuple[int, int]], src: list[tuple[int, int]]) -> list[float]:
+    """Coefficients for Image.transform(PERSPECTIVE): map each output point to an input point."""
+    rows: list[list[float]] = []
+    for (x, y), (u, v) in zip(dst, src, strict=True):
+        rows.append([x, y, 1, 0, 0, 0, -u * x, -u * y])
+        rows.append([0, 0, 0, x, y, 1, -v * x, -v * y])
+    return _solve(rows, [float(c) for p in src for c in p])
+
+
+def phone_photo(src: Path) -> bytes:
+    """A phone photo of the printed page on a desk: perspective, warm light with a shadow across
+    the top-left corner, slight blur, phone-grade JPEG."""
+    page = render_page(src, 130)
+    w, h = page.size
+    out_w, out_h = int(w * 1.12), int(h * 1.08)
+    corners = [(70, 140), (out_w - 40, 60), (out_w - 120, out_h - 50), (30, out_h - 130)]  # where the page lands
+    coeffs = _perspective_coeffs(corners, [(0, 0), (w, 0), (w, h), (0, h)])
+    photo = Image.new("RGB", (out_w, out_h), (92, 74, 58))  # the desk
+    warped = page.transform((out_w, out_h), Image.Transform.PERSPECTIVE, coeffs, Image.Resampling.BICUBIC)
+    mask = Image.new("L", (w, h), 255).transform((out_w, out_h), Image.Transform.PERSPECTIVE, coeffs)
+    photo.paste(warped, (0, 0), mask)
+    shade = Image.linear_gradient("L").rotate(-35, resample=Image.Resampling.BICUBIC, expand=True)
+    c = shade.width // 2  # the centre 180 px square lies fully inside the rotated gradient
+    shade = shade.crop((c - 90, c - 90, c + 90, c + 90)).resize((out_w, out_h), Image.Resampling.BILINEAR)
+    shade = shade.point(lambda v: 140 + v * 115 // 255)
+    light = Image.merge("RGB", [shade, shade.point(lambda v: v * 96 // 100), shade.point(lambda v: v * 86 // 100)])
+    photo = ImageChops.multiply(photo, light).filter(ImageFilter.GaussianBlur(0.9))
+    return jpeg(photo, 50)
+
+
+DEGRADED = [  # id, original, how it is degraded, note
+    (
+        "R-ja-jpy-low-resolution",
+        "B-ja-jpy-two-rates",
+        low_resolution,
+        "90 dpi greyscale with strong JPEG compression (a fax-like copy) of invoice B.",
+    ),
+    (
+        "S-fr-eur-skewed-scan",
+        "A-fr-eur-discount",
+        skewed,
+        "Scan of invoice A turned 3.5°, 150 dpi, light blur and noise.",
+    ),
+    (
+        "T-en-usd-phone-photo",
+        "I-en-usd-exact-match",
+        phone_photo,
+        "Phone photo of invoice I on a desk: perspective, shadow across one corner, blur, JPEG quality 50.",
+    ),
+]
+
+
+def calibration_set() -> None:
+    """The documents added for the confidence calibration. Generated alone with --calibration,
+    so the other files keep their bytes (their SHA-256 identifies them in the stored results)."""
+    doc_p()
+    doc_q()
+    degraded_copies()
+
+
+def degraded_copies() -> None:
+    """Each copy keeps its original's expected result. On the live pipeline, a copy sent after its
+    original would also be flagged as a possible duplicate (same supplier and number, another file):
+    these copies are for the extraction calibration (scripts/calibrate.sh) only."""
+    for doc_id, original, make, note in DEGRADED:
+        src = json.loads((OUT / f"{original}.expected.json").read_text())
+        file = f"{doc_id}.jpg"
+        (OUT / file).write_bytes(make(OUT / src["file"]))
+        save_expected(doc_id, file, src["email"], src["expect"], note, calibration_only=True)
+
+
+# =====================================================================================
 # Review-page samples (core service test fixtures, not part of the end-to-end set)
 # =====================================================================================
 def review_samples() -> None:
@@ -957,6 +1316,10 @@ if __name__ == "__main__" and sys.argv[1:] == ["--e2e"]:
     e2e_set()
     for p in sorted(E2E_FIXTURES.iterdir()):
         print(f"{p.stat().st_size:>8}  {p.name}")
+elif __name__ == "__main__" and sys.argv[1:] == ["--calibration"]:
+    calibration_set()
+    for p in sorted(OUT.glob("[PQRST]-*")):
+        print(f"{p.stat().st_size:>8}  {p.name}")
 elif __name__ == "__main__":
     OUT.mkdir(exist_ok=True)
     for old in OUT.glob("*"):
@@ -974,6 +1337,7 @@ elif __name__ == "__main__":
     doc_i_k(us)
     doc_l_m()
     doc_n_o()
+    calibration_set()
     if FIXTURES.is_dir():
         review_samples()
         bank_change_samples()

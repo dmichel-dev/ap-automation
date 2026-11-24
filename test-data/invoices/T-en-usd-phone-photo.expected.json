@@ -1,0 +1,22 @@
+{
+  "id": "T-en-usd-phone-photo",
+  "file": "T-en-usd-phone-photo.jpg",
+  "email": {
+    "subject": "Invoice QM-1042 – Quillmoor Paper Supply LLC",
+    "body": "Hello,\n\nplease find attached invoice QM-1042 for USD 641.24, due 12/18/2026.\n\nBest regards,\nQuillmoor Paper Supply LLC (fictional test supplier)"
+  },
+  "expect": {
+    "status": "ready",
+    "reasons": [],
+    "document_type": "invoice",
+    "invoice_number": "QM-1042",
+    "currency": "USD",
+    "total": "641.24",
+    "invoice_date": "2026-11-18",
+    "due_date": "2026-12-18",
+    "supplier_country": "US",
+    "min_lines": 2
+  },
+  "calibration_only": true,
+  "note": "Phone photo of invoice I on a desk: perspective, shadow across one corner, blur, JPEG quality 50."
+}

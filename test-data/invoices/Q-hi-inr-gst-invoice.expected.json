@@ -1,0 +1,21 @@
+{
+  "id": "Q-hi-inr-gst-invoice",
+  "file": "Q-hi-inr-gst-invoice.pdf",
+  "email": {
+    "subject": "कर बीजक KST/2026-27/0418 / Tax invoice KST/2026-27/0418",
+    "body": "Dear Sir or Madam,\n\nPlease find attached tax invoice KST/2026-27/0418 for ₹1,35,818.00, due 21/12/2026.\n\nधन्यवाद,\nKalindra Stationers Pvt. Ltd. (fictional test supplier)"
+  },
+  "expect": {
+    "status": "ready",
+    "reasons": [],
+    "document_type": "invoice",
+    "invoice_number": "KST/2026-27/0418",
+    "currency": "INR",
+    "total": "135818.00",
+    "invoice_date": "2026-11-21",
+    "due_date": "2026-12-21",
+    "supplier_country": "IN",
+    "min_lines": 3
+  },
+  "note": "Devanagari and English on the same page, GSTIN and HSN/SAC codes, CGST 9 % + SGST 9 % as two tax lines, Indian digit grouping (1,35,818.00); day-first dates with a day above 12."
+}
