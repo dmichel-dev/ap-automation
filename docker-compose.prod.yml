@@ -1,0 +1,67 @@
+# AP Automation: server settings, layered on docker-compose.yml.
+# On the server, .env sets COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml, so every
+# `docker compose` command (and the scripts) uses both files. See docs/deployment.md.
+#
+# Only Caddy is published on the public interface (80/443). n8n and the review page keep their
+# loopback-only ports: the review page is reached through an SSH tunnel, never through the proxy.
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  postgres:
+    logging: *logging
+
+  n8n:
+    environment:
+      N8N_HOST: ${N8N_PUBLIC_HOST:?set N8N_PUBLIC_HOST in .env}
+      N8N_PROTOCOL: https
+      WEBHOOK_URL: https://${N8N_PUBLIC_HOST}/
+      N8N_EDITOR_BASE_URL: https://${N8N_PUBLIC_HOST}/   # OAuth callback: <this>/rest/oauth2-credential/callback
+      N8N_SECURE_COOKIE: "true"
+      N8N_PROXY_HOPS: 1                                  # trust one proxy (Caddy) for the client address
+    networks: [backend, frontend]
+    logging: *logging
+
+  core:
+    logging: *logging
+
+  review-web:
+    logging: *logging
+
+  # HTTPS reverse proxy for n8n only (editor, OAuth callback, webhooks). Certificates from
+  # Let's Encrypt, renewed automatically. It sits on its own network with n8n, so it can't
+  # reach the database, the core or the review page.
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    depends_on: [n8n]
+    environment:
+      N8N_PUBLIC_HOST: ${N8N_PUBLIC_HOST:?set N8N_PUBLIC_HOST in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data       # certificates and ACME account: keep it, or Let's Encrypt limits may apply
+      - caddy_config:/config
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 128m
+    logging: *logging
+    networks: [frontend]
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+networks:
+  frontend:

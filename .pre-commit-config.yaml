@@ -23,3 +23,9 @@ repos:
         language: system
         files: ^n8n/
         pass_filenames: false
+      - id: deploy-config
+        name: server compose file and Caddyfile are valid
+        entry: scripts/check_deploy_config.sh
+        language: system
+        files: ^(docker-compose.*\.yml|deploy/|\.env\.example$|scripts/check_deploy_config\.sh$)
+        pass_filenames: false

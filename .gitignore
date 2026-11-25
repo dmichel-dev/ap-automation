@@ -238,3 +238,5 @@ backups/
 
 # Local end-to-end run outputs
 test-data/results/*.json
+# Credential IDs of one n8n instance, used when importing workflows
+cred_ids*.json

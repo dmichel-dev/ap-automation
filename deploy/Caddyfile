@@ -1,0 +1,19 @@
+# HTTPS reverse proxy for n8n: the editor, the OAuth callback and the webhooks.
+# The host name and the Let's Encrypt account e-mail come from .env (docker-compose.prod.yml).
+# The review page is deliberately not proxied: it is reached through an SSH tunnel (docs/security.md).
+{
+	email {$ACME_EMAIL}
+	admin off
+}
+
+{$N8N_PUBLIC_HOST} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		-Server
+	}
+	reverse_proxy n8n:5678
+}

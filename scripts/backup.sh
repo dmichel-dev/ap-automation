@@ -5,6 +5,9 @@
 #   scripts/backup.sh            # consistent backup: stops n8n and core during the dump
 #   scripts/backup.sh --online   # no downtime (pg_dumpall is consistent per database)
 #
+# On the server it runs every night from cron, and BACKUP_KEEP_DAYS prunes old copies
+# (docs/deployment.md).
+#
 # Restore into an EMPTY Postgres data volume (see docs/operations.md):
 #   psql -U postgres -d postgres -f backups/<file>.sql
 set -eu
@@ -29,3 +32,10 @@ docker run --rm -v ap-automation_n8n_data:/src:ro -v "$PWD/backups":/dst alpine:
   sh -c "tar czf /dst/n8n_data_$TS.tgz -C /src . && chown $(id -u):$(id -g) /dst/n8n_data_$TS.tgz && chmod 600 /dst/n8n_data_$TS.tgz"
 
 ls -l "backups/pg_dumpall_$TS.sql" "backups/n8n_data_$TS.tgz"
+
+# Retention (BACKUP_KEEP_DAYS in .env; empty keeps everything). Reached only after a complete
+# backup, so a failing night never deletes the older copies.
+if [ -n "${BACKUP_KEEP_DAYS:-}" ]; then
+  find backups -maxdepth 1 -type f \( -name 'pg_dumpall_*.sql' -o -name 'n8n_data_*.tgz' \) \
+    -mtime +"$BACKUP_KEEP_DAYS" -print -delete
+fi
