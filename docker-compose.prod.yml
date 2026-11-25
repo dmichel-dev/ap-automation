@@ -24,6 +24,9 @@ services:
       N8N_SECURE_COOKIE: "true"
       N8N_PROXY_HOPS: 1                                  # trust one proxy (Caddy) for the client address
     networks: [backend, frontend]
+    # Measured on the server: about 630 MB right after start (Node heap capped at 512 MB by
+    # NODE_OPTIONS, plus native memory, binary buffers and the task runner process).
+    mem_limit: 1g
     logging: *logging
 
   core:
