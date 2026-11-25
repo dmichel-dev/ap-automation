@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 ENV_FILE=$(mktemp)
 trap 'rm -f "$ENV_FILE"' EXIT
 # Every key of .env.example, plus the server-only keys the override requires
-grep -E '^[A-Z_]+=' .env.example > "$ENV_FILE"
+grep -E '^[A-Z0-9_]+=' .env.example > "$ENV_FILE"
 printf 'N8N_PUBLIC_HOST=n8n.example.com\nACME_EMAIL=ops@example.com\n' >> "$ENV_FILE"
 
 docker compose --env-file "$ENV_FILE" -f docker-compose.yml -f docker-compose.prod.yml config --quiet
