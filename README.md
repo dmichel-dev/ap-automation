@@ -116,7 +116,7 @@ docs/                Architecture and data-format documentation
 - [x] Day 1: Email intake, Mistral OCR extraction, validation, duplicate check
 - [x] Day 2: QuickBooks bills, Plaid bank matching and bill payments
 - [x] Day 3: Human review, fraud alert, error handling, daily summary, daily end-to-end test
-- [ ] Day 4: Google Drive intake, foreign-currency bank matching, test set of 20 invoices and confidence calibration
+- [x] Day 4: Google Drive intake, foreign-currency bank matching, test set of 20 invoices and confidence calibration
 - [ ] Day 5: VPS deployment (Caddy, HTTPS)
 - [ ] Day 6: Public demo page
 - [ ] Day 7: Video, architecture diagram, case study

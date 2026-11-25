@@ -4,14 +4,23 @@ All notable changes to this project. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-25
+
+A second intake channel (Google Drive), bank matching for bills in foreign currencies, and a larger test set with Arabic, Hindi and degraded scans to calibrate the confidence threshold.
+
 ### Added
 
+- **Google Drive intake:** files dropped in the Drive folder *AP Automation/Inbox* go through the same extraction, checks, duplicate detection and review as email attachments. The folder is the queue: n8n lists it every minute, the core decides per file (process, wait or error), and each file moves to *Processed* or *Error* once it has an answer. A file being processed is leased for 15 minutes, so overlapping runs never call the OCR service twice. Failures use the same retry policy as email. The exact-duplicate check works across channels (the same file by email and by Drive is caught).
 - **Foreign-currency bank matching:** a bill in EUR, JPY, GBP… is matched with a payment from the USD bank account at the ECB reference rate of the payment date (Frankfurter API, ECB only, fetched by the bank workflow), within 3 %. The bill payment settles the whole bill at the bank's actual rate (bank amount ÷ bill amount, at the 7 decimals QuickBooks keeps), and QuickBooks posts the exchange gain or loss. An exchange difference is never written off. A payment outside the tolerance, or a currency without a usable rate (e.g. AED, SAR), goes to review with the expected and actual amounts.
 - **Daily summary: bank amounts not booked to the cent.** On a foreign-currency bill over 100,000 units, QuickBooks' 7-decimal rate can leave the bank account a few cents off the bank amount; each case is listed (bill, bank amount, amount booked, gap) to be fixed by a journal entry. A documented known limit.
+- **Test set of 21 documents**, now including a UAE tax invoice in Arabic and English (AED, TRN), an Indian GST invoice in Hindi and English (INR, GSTIN, CGST + SGST, Indian digit grouping), and three degraded copies of earlier invoices: a 90 dpi fax-like copy, a skewed scan and a phone photo with perspective and shadow. Right-to-left Arabic and Devanagari are shaped with HarfBuzz.
+- **Read-only calibration run** (`scripts/calibrate.sh`): each test document goes through the core's own extraction and checks, and is compared with its expected result. Nothing is stored.
+- **Second confidence calibration** ([docs/calibration.md](docs/calibration.md)): 20 of the 20 documents with an expected result came out correct, the degraded copies included. Degraded copies scored within 0.004 of their originals and none was misread. The 0.85 threshold and the green badge from 0.95 are kept.
 
 ### Changed
 
 - Bills in another currency than the bank account are no longer left aside (`fx_match_pending`): they are matched (rule version `m2`). Rules for bills in the bank account's currency are unchanged.
+- One file-type rule for email and Drive (PDF or image), instead of one per channel.
 
 ## [0.3.0] - 2026-11-24
 
@@ -69,6 +78,8 @@ Email intake, OCR extraction, validation and routing.
 - **Routing:** `rejected` only when a person could do nothing with the document; everything fixable goes to `needs_review` with a reason. Ambiguous dates come with a suggested reading from the supplier's country.
 - **Audit trail:** append-only processing log, original files kept with a retention date, idempotent processing.
 
+[Unreleased]: https://github.com/dmichel-dev/ap-automation/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/dmichel-dev/ap-automation/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/dmichel-dev/ap-automation/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/dmichel-dev/ap-automation/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/dmichel-dev/ap-automation/releases/tag/v0.1.0
