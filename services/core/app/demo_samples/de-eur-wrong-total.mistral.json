@@ -1,0 +1,18 @@
+{
+ "model": "mistral-ocr-latest",
+ "usage_info": {
+  "pages_processed": 1,
+  "doc_size_bytes": 23255
+ },
+ "document_annotation": "{\"document_kind\":\"invoice\",\"supplier_name\":\"Kranich & Söhne Feinmechanik GmbH\",\"supplier_tax_id\":\"DE000000000\",\"supplier_address\":\"Erfundene Straße 12, 70173 Stuttgart, Deutschland\",\"supplier_country_code\":\"DE\",\"buyer_name\":\"Example Buyer Inc.\",\"buyer_tax_id\":null,\"invoice_number\":\"RE-2026-0311\",\"related_invoice_number\":null,\"invoice_date\":\"18.11.2026\",\"due_date\":\"18.12.2026\",\"service_period_start\":null,\"service_period_end\":null,\"currency\":\"€\",\"line_items\":[{\"kind\":\"item\",\"description\":\"Präzisionswelle Ø 12 mm\",\"quantity\":\"12\",\"unit_price\":\"48,50 €\",\"amount\":\"582,00 €\",\"tax_rate\":null},{\"kind\":\"item\",\"description\":\"Lagerbuchse Messing\",\"quantity\":\"40\",\"unit_price\":\"3,25 €\",\"amount\":\"130,00 €\",\"tax_rate\":null},{\"kind\":\"shipping\",\"description\":\"Versandkosten\",\"quantity\":\"1\",\"unit_price\":\"15,00 €\",\"amount\":\"15,00 €\",\"tax_rate\":null}],\"adjustments\":[],\"tax_lines\":[{\"tax_type\":\"vat\",\"label\":\"zzgl. 19 % USt.\",\"rate\":\"19 %\",\"taxable_base\":\"727,00 €\",\"amount\":\"138,13 €\"}],\"subtotal\":\"727,00 €\",\"tax_total\":\"138,13 €\",\"total\":\"875,13 €\",\"language\":\"de\",\"bank_accounts\":[],\"bank_details_change_notice\":false}",
+ "pages": [
+  {
+   "index": 0,
+   "markdown": "# Kranich & Söhne Feinmechanik GmbH\n\nErfundene Straße 12, 70173 Stuttgart, Deutschland\n\nUSt-IdNr.: DE000000000 · Amtsgericht Stuttgart HRB 000000\n\n## RECHNUNG Nr. RE-2026-0311\n\nRechnungsdatum: 18.11.2026 Fällig am: 18.12.2026\n\nRechnungsempfänger: Example Buyer Inc., 100 Sample Street, Springfield, OR 97477, USA\n\n|  Bezeichnung | Menge | Einzelpreis | Gesamt  |\n| --- | --- | --- | --- |\n|  Präzisionswelle Ø 12 mm | 12 | 48,50 € | 582,00 €  |\n|  Lagerbuchse Messing | 40 | 3,25 € | 130,00 €  |\n|  Versandkosten | 1 | 15,00 € | 15,00 €  |\n|   | Nettobetrag |  | 727,00 €  |\n|   | zzgl. 19 % USt. |  | 138,13 €  |\n|   | **Rechnungsbetrag** |  | **875,13 €**  |\n\nZahlbar innerhalb von 30 Tagen ohne Abzug. Fiktives Dokument für eine Demo.",
+   "confidence_scores": {
+    "average_page_confidence_score": 0.9825328914083792,
+    "minimum_page_confidence_score": 0.32464832631463175
+   }
+  }
+ ]
+}

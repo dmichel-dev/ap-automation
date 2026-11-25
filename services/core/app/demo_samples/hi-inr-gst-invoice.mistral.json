@@ -1,0 +1,18 @@
+{
+ "model": "mistral-ocr-latest",
+ "usage_info": {
+  "pages_processed": 1,
+  "doc_size_bytes": 46466
+ },
+ "document_annotation": "{\"document_kind\":\"invoice\",\"supplier_name\":\"Kalindra Stationers Pvt. Ltd.\",\"supplier_tax_id\":\"27AAAAA0000A1Z5\",\"supplier_address\":\"21 Example Road, Pune 411000, Maharashtra, India\",\"supplier_country_code\":\"IN\",\"buyer_name\":\"Example Buyer Inc., India branch office, Pune\",\"buyer_tax_id\":\"27BBBBB0000B1Z3\",\"invoice_number\":\"KST/2026-27/0418\",\"related_invoice_number\":null,\"invoice_date\":\"21/11/2026\",\"due_date\":\"21/12/2026\",\"service_period_start\":null,\"service_period_end\":null,\"currency\":\"₹\",\"line_items\":[{\"kind\":\"item\",\"description\":\"A4 copier paper (ream) ए4 कॉपियर पेपर (रीम)\",\"quantity\":\"60\",\"unit_price\":\"285.00\",\"amount\":\"17,100.00\",\"tax_rate\":null},{\"kind\":\"item\",\"description\":\"Ballpoint pens (box of 50) बॉलपॉइंट पेन (50 का डिब्बा)\",\"quantity\":\"25\",\"unit_price\":\"120.00\",\"amount\":\"3,000.00\",\"tax_rate\":null},{\"kind\":\"item\",\"description\":\"Printer repair, on-site visit प्रिंटर मरम्मत, साइट पर\",\"quantity\":\"1\",\"unit_price\":\"95,000.00\",\"amount\":\"95,000.00\",\"tax_rate\":null}],\"adjustments\":[],\"tax_lines\":[{\"tax_type\":\"vat\",\"label\":\"CGST @ 9%\",\"rate\":\"9%\",\"taxable_base\":\"₹ 1,15,100.00\",\"amount\":\"₹ 10,359.00\"},{\"tax_type\":\"vat\",\"label\":\"SGST @ 9%\",\"rate\":\"9%\",\"taxable_base\":\"₹ 1,15,100.00\",\"amount\":\"₹ 10,359.00\"}],\"subtotal\":\"₹ 1,15,100.00\",\"tax_total\":\"₹ 20,718.00\",\"total\":\"₹ 1,35,818.00\",\"language\":\"en\",\"bank_accounts\":[],\"bank_details_change_notice\":false}",
+ "pages": [
+  {
+   "index": 0,
+   "markdown": "Kalindra Stationers Pvt. Ltd.\n\n21 Example Road, Pune 411000, Maharashtra, India\n\nGSTIN 27AAAAA0000A1Z5 · +91 20 0000 0000\n\nकालिन्दा स्टेशनर्स प्रा. लि.\n\n21 उदाहरण रोड, पुणे, महाराष्ट्र\n\nजीएसटीआईएन 27AAAAA0000A1Z5\n\n# TAX INVOICE\n\nInvoice No.: KST/2026-27/0418\n\nInvoice date: 21/11/2026\n\nDue date: 21/12/2026\n\nPlace of supply: Maharashtra (27)\n\nBill to: Example Buyer Inc., India branch office, Pune · GSTIN 27BBBBB0000B1Z3\n\n# कर बीजक\n\nबीजक संख्या\n\nबीजक तिथि\n\nदेय तिथि\n\nआपूर्ति का स्थान\n\nप्राप्तकर्ता\n\n|  Description | HSN/SAC | Qty | Rate (₹) | Taxable value (₹)  |\n| --- | --- | --- | --- | --- |\n|  विवरण | एचएसएन | मात्रा | दर | कर योग्य मूल्य  |\n|  A4 copier paper (ream) ए4 कॉपियर पेपर (रीम) | 4802 | 60 | 285.00 | 17,100.00  |\n|  Ballpoint pens (box of 50) बॉलपॉइंट पेन (50 का डिब्बा) | 9608 | 25 | 120.00 | 3,000.00  |\n|  Printer repair, on-site visit प्रिंटर मरम्मत, साइट पर | 998719 | 1 | 95,000.00 | 95,000.00  |\n|  Taxable amount |   |   | ₹ 1,15,100.00 | कर योग्य राशि  |\n|  CGST @ 9% |   |   | ₹ 10,359.00 | केंद्रीय जीएसटी @ 9%  |\n|  SGST @ 9% |   |   | ₹ 10,359.00 | राज्य जीएसटी @ 9%  |\n|  **Total invoice value** |   |   | **₹ 1,35,818.00** | **कुल बीजक मूल्य**  |\n\nRupees One Lakh Thirty-Five Thousand Eight Hundred Eighteen Only\n\nएक लाख पैंतीस हजार आठ सौ अठारह रुपये मात्र\n\nPayment within 30 days by NEFT/RTGS.\n\nभुगतान 30 दिनों के भीतर।\n\nFictional document generated for a demo project.\n\nयह डेमो के लिए बनाया गया काल्पनिक बीजक है।",
+   "confidence_scores": {
+    "average_page_confidence_score": 0.9815239061971622,
+    "minimum_page_confidence_score": 0.2716477089306849
+   }
+  }
+ ]
+}

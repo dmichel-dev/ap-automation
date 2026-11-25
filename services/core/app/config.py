@@ -47,6 +47,20 @@ class Settings(BaseSettings):
     match_fx_pct_tolerance: str = "0.03"  # 3 % of the bill converted at the reference rate
     match_fx_max_rate_age_days: int = 4  # a rate older than this before the transaction can't be used
 
+    # Public demo (docs/demo.md): off unless switched on, and nothing starts without a hash key
+    demo_enabled: bool = False
+    demo_hash_key: SecretStr = SecretStr("")  # keys the client-address and sender digests
+    demo_session_minutes: int = 60
+    demo_starts_per_hour: int = 3  # per client address
+    demo_starts_per_day: int = 10
+    demo_active_sessions: int = 30
+    demo_files_per_session: int = 5  # all channels together
+    demo_max_file_bytes: int = 5 * 1024 * 1024
+    demo_max_pages: int = 3
+    demo_pages_per_day: int = 200  # OCR pages for visitors' own files (samples cost nothing)
+    demo_pages_per_month: int = 2000
+    demo_emails_per_sender_day: int = 10
+
 
 @lru_cache
 def get_settings() -> Settings:

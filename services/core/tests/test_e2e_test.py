@@ -15,7 +15,7 @@ from app.main import app
 from fastapi.testclient import TestClient
 from psycopg.types.json import Jsonb
 
-from .conftest import AUTH, query
+from .conftest import AUTH, query, set_scope
 from .test_accounting import bank_page, claim, make_invoice, plaid_tx, post_ok, register_bank, run, sql
 from .test_processing import FakeProvider, env, post  # noqa: F401  (fixture)
 
@@ -37,7 +37,7 @@ def start(cfg):
 
 def scoped_invoice(cfg, scope, number="E2E-1001", **kw):
     inv = make_invoice(cfg, number=number, **kw)
-    sql(cfg, "UPDATE ap.invoices SET scope = %s WHERE id = %s", scope, inv)
+    set_scope(cfg.database_url, inv, scope)
     return inv
 
 

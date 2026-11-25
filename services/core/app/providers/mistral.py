@@ -67,10 +67,13 @@ class MistralOcrProvider:
         }
 
     def extract(self, content: bytes, mime_type: str) -> ProviderResult:
+        return self.parse_response(self.fetch(content, mime_type))
+
+    def fetch(self, content: bytes, mime_type: str) -> dict[str, Any]:
+        """Mistral's answer as it came (extract parses it)."""
         body = self.build_request(content, mime_type)
         body = {k: v for k, v in body.items() if v is not None}
-        response = self._post_with_retry(body)
-        return self.parse_response(response)
+        return self._post_with_retry(body)
 
     def _post_with_retry(self, body: dict[str, Any]) -> dict[str, Any]:
         headers = {"Authorization": f"Bearer {self._api_key}"}
@@ -107,7 +110,8 @@ class MistralOcrProvider:
             return ProviderError("server", f"Mistral OCR server error HTTP {r.status_code}", True)
         return ProviderError("bad_request", f"Mistral OCR HTTP {r.status_code}: {detail}", False)
 
-    def parse_response(self, data: dict[str, Any]) -> ProviderResult:
+    @staticmethod
+    def parse_response(data: dict[str, Any]) -> ProviderResult:
         pages = data.get("pages")
         if not isinstance(pages, list):
             raise ProviderError("invalid_response", "Mistral OCR response has no pages", False)

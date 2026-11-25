@@ -1,0 +1,18 @@
+{
+ "model": "mistral-ocr-latest",
+ "usage_info": {
+  "pages_processed": 1,
+  "doc_size_bytes": 22505
+ },
+ "document_annotation": "{\"document_kind\":\"invoice\",\"supplier_name\":\"Wrenfold Hosting LLC\",\"supplier_tax_id\":\"00-0000003\",\"supplier_address\":\"77 Example Parkway, Bend, OR 97701, USA\",\"supplier_country_code\":\"US\",\"buyer_name\":\"Example Buyer Inc.\",\"buyer_tax_id\":null,\"invoice_number\":\"WH-2026-1001\",\"related_invoice_number\":null,\"invoice_date\":\"10/01/2026\",\"due_date\":\"10/31/2026\",\"service_period_start\":null,\"service_period_end\":null,\"currency\":\"USD\",\"line_items\":[{\"kind\":\"item\",\"description\":\"Managed hosting, Business plan (monthly)\",\"quantity\":\"1\",\"unit_price\":\"$129.00\",\"amount\":\"$129.00\",\"tax_rate\":null},{\"kind\":\"item\",\"description\":\"Extra backup storage, 50 GB\",\"quantity\":\"2\",\"unit_price\":\"$9.50\",\"amount\":\"$19.00\",\"tax_rate\":null}],\"adjustments\":[],\"tax_lines\":[{\"tax_type\":\"sales_tax\",\"label\":\"Sales tax 8.5%\",\"rate\":\"8.5%\",\"taxable_base\":\"$148.00\",\"amount\":\"$12.58\"}],\"subtotal\":\"$148.00\",\"tax_total\":\"$12.58\",\"total\":\"USD 160.58\",\"language\":\"en\",\"bank_accounts\":[{\"iban\":null,\"bic\":null,\"account_number\":\"0000-FAKE-0031\",\"routing_code\":\"000000000\",\"account_holder\":null}],\"bank_details_change_notice\":false}",
+ "pages": [
+  {
+   "index": 0,
+   "markdown": "# Wrenfold Hosting LLC\n\n77 Example Parkway, Bend, OR 97701, USA\n\nEIN 00-0000003 · (541) 555-0163 · billing@example.com\n\n## INVOICE No. WH-2026-1001\n\nInvoice date: 10/01/2026      Due date: 10/31/2026\n\nBill to: Example Buyer Inc., 100 Sample Street, Springfield, OR 97477, USA\n\n|  Description | Qty | Unit price | Amount  |\n| --- | --- | --- | --- |\n|  Managed hosting, Business plan (monthly) | 1 | $129.00 | $129.00  |\n|  Extra backup storage, 50 GB | 2 | $9.50 | $19.00  |\n|   | Subtotal |  | $148.00  |\n|   | Sales tax 8.5% |  | $12.58  |\n|   | **Total due** |  | **USD 160.58**  |\n\nPayment by ACH to:\n\nBank: Fictional Savings Bank (test)\n\nRouting number: 000000000   Account number: 0000-FAKE-0031\n\n(Fictional document for a demo.)",
+   "confidence_scores": {
+    "average_page_confidence_score": 0.9794038740704395,
+    "minimum_page_confidence_score": 0.32900979643367306
+   }
+  }
+ ]
+}

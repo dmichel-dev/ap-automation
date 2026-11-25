@@ -133,11 +133,39 @@ def _build_document(conn: Conn, inv: Row, cfg: AccountingConfig) -> Row:
     return body
 
 
+def bill_preview(conn: Conn, invoice_id: str, cfg: AccountingConfig) -> Row:
+    """What posting a ready invoice would send, without sending anything (the public demo): the same
+    document as a real posting, the vendor it would use or create, and the accounts' names."""
+    inv = db.one(conn, "SELECT * FROM invoices WHERE id = %s", (invoice_id,))
+    preview: Row = {"object_type": _object_type(inv)}
+    try:
+        document = _build_document(conn, inv, cfg)
+    except postings.PostingError as e:
+        return preview | {"error": e.code, "message": str(e)}
+    ids = sorted({ln["AccountBasedExpenseLineDetail"]["AccountRef"]["value"] for ln in document["Line"]})
+    names = conn.execute("SELECT external_id, name FROM qbo_accounts WHERE external_id = ANY(%s)", (ids,)).fetchall()
+    link = conn.execute(
+        "SELECT display_name FROM vendor_links WHERE supplier_key = %s AND currency = %s",
+        (inv["supplier_key"], inv["currency"]),
+    ).fetchone()
+    vendor = (
+        {"name": link["display_name"], "action": "existing"}
+        if link
+        else {"name": inv["supplier_name"], "action": "create"}
+    )
+    return preview | {
+        "vendor": vendor,
+        "document": document,
+        "account_names": {r["external_id"]: r["name"] for r in names},
+    }
+
+
 def _create_missing_postings(conn: Conn, cfg: AccountingConfig, limit: int) -> None:
-    """A posting row is created BEFORE any API call: that row is what prevents double posting."""
+    """A posting row is created BEFORE any API call: that row is what prevents double posting.
+    Demo invoices are never posted: the demo page shows their bill preview instead."""
     rows = conn.execute(
         """SELECT i.* FROM invoices i
-            WHERE i.status = 'ready' AND i.posting_excluded_reason IS NULL
+            WHERE i.status = 'ready' AND i.posting_excluded_reason IS NULL AND i.scope <> 'demo'
               AND NOT EXISTS (SELECT 1 FROM accounting_postings p WHERE p.invoice_id = i.id)
             ORDER BY i.created_at LIMIT %s FOR UPDATE OF i SKIP LOCKED""",
         (limit,),

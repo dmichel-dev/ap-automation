@@ -1,0 +1,18 @@
+{
+ "model": "mistral-ocr-latest",
+ "usage_info": {
+  "pages_processed": 1,
+  "doc_size_bytes": 23323
+ },
+ "document_annotation": "{\"document_kind\":\"invoice\",\"supplier_name\":\"Ateliers Verlibreux SARL\",\"supplier_tax_id\":\"FR00 999 999 999\",\"supplier_address\":\"12 rue des Imaginaires, 69002 Lyon, France\",\"supplier_country_code\":\"FR\",\"buyer_name\":\"Example Buyer Inc.\",\"buyer_tax_id\":null,\"invoice_number\":\"AV-2026-0147\",\"related_invoice_number\":null,\"invoice_date\":\"23/11/2026\",\"due_date\":\"23/12/2026\",\"service_period_start\":null,\"service_period_end\":null,\"currency\":\"€\",\"line_items\":[{\"kind\":\"item\",\"description\":\"Reliure artisanale (lot de 10)\",\"quantity\":\"8\",\"unit_price\":\"145,00 €\",\"amount\":\"1 160,00 €\",\"tax_rate\":\"20 %\"},{\"kind\":\"item\",\"description\":\"Papier recyclé A4, ramette\",\"quantity\":\"20\",\"unit_price\":\"6,40 €\",\"amount\":\"128,00 €\",\"tax_rate\":\"20 %\"},{\"kind\":\"item\",\"description\":\"Ouvrages techniques reliés\",\"quantity\":\"4\",\"unit_price\":\"32,50 €\",\"amount\":\"130,00 €\",\"tax_rate\":\"5,5 %\"}],\"adjustments\":[{\"kind\":\"discount\",\"label\":\"Remise commerciale 5 %\",\"amount\":\"-70,90 €\",\"position\":\"before_tax\"}],\"tax_lines\":[{\"tax_type\":\"vat\",\"label\":\"TVA 20 %\",\"rate\":\"20 %\",\"taxable_base\":\"1 223,60 €\",\"amount\":\"244,72 €\"},{\"tax_type\":\"vat\",\"label\":\"TVA 5,5 %\",\"rate\":\"5,5 %\",\"taxable_base\":\"123,50 €\",\"amount\":\"6,79 €\"}],\"subtotal\":\"1 347,10 €\",\"tax_total\":\"251,51 €\",\"total\":\"1 598,61 €\",\"language\":\"fr\",\"bank_accounts\":[],\"bank_details_change_notice\":false}",
+ "pages": [
+  {
+   "index": 0,
+   "markdown": "# Ateliers Verlibreux SARL\n\n12 rue des Imaginaires, 69002 Lyon, France\n\nSIRET 000 000 000 00000 · TVA intracommunautaire : FR00 999 999 999\n\nTél. +33 4 00 00 00 00 · facturation@example.com\n\n## FACTURE N° AV-2026-0147\n\nDate de facture : 23/11/2026 Date d'échéance : 23/12/2026\n\nClient : Example Buyer Inc., 100 Sample Street, Springfield, OR 97477, USA\n\n|  Désignation | Qté | Prix unitaire HT | TVA | Montant HT  |\n| --- | --- | --- | --- | --- |\n|  Reliure artisanale (lot de 10) | 8 | 145,00 € | 20 % | 1 160,00 €  |\n|  Papier recyclé A4, ramette | 20 | 6,40 € | 20 % | 128,00 €  |\n|  Ouvrages techniques reliés | 4 | 32,50 € | 5,5 % | 130,00 €  |\n|   | Total HT avant remise |   |   | 1 418,00 €  |\n|   | Remise commerciale 5 % |   |   | -70,90 €  |\n|   | Total HT |   |   | 1 347,10 €  |\n|   | TVA 20 % sur 1 223,60 € |   |   | 244,72 €  |\n|   | TVA 5,5 % sur 123,50 € |   |   | 6,79 €  |\n|   | **Total TTC** |   |   | **1 598,61 €**  |\n\nPaiement par virement à 30 jours. Pénalités de retard : 3 fois le taux d'intérêt légal.\n\nDocument fictif généré pour un projet de démonstration.",
+   "confidence_scores": {
+    "average_page_confidence_score": 0.9828537002776087,
+    "minimum_page_confidence_score": 0.30371796495953
+   }
+  }
+ ]
+}

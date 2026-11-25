@@ -18,8 +18,10 @@ from .validation import DUPLICATE_DATE_WINDOW_DAYS, Duplicate, SupplierStatus, V
 Row = dict[str, Any]
 Conn = psycopg.Connection[Row]  # every connection returns rows as dicts
 # Whose data a row is: live, the daily end-to-end test, or the public demo. Every comparison with
-# earlier documents (duplicates, bank details) stays within one scope.
+# earlier documents (same file, duplicates, bank details) stays within one scope, and for the demo
+# within one session (demo_session_id; NULL for the other scopes).
 Scope = Literal["live", "e2e", "demo"]
+SAME_SESSION = "demo_session_id IS NOT DISTINCT FROM %(session)s::uuid"
 
 
 def jsonable(value: Any) -> Any:
@@ -61,11 +63,13 @@ def find_by_source(conn: Conn, channel: str, source_ref: str) -> dict[str, Any] 
     ).fetchone()
 
 
-def find_same_file(conn: Conn, sha256: str, scope: Scope = "live") -> dict[str, Any] | None:
-    """Earliest earlier document of the scope with the same bytes (exact duplicate file)."""
+def find_same_file(conn: Conn, sha256: str, scope: Scope = "live", session: str | None = None) -> dict[str, Any] | None:
+    """Earliest earlier document of the scope (and demo session) with the same bytes (exact duplicate file)."""
     return conn.execute(
-        "SELECT id, status FROM invoices WHERE file_sha256 = %s AND scope = %s ORDER BY created_at LIMIT 1",
-        (sha256, scope),
+        "SELECT id, status FROM invoices WHERE file_sha256 = %(sha)s AND scope = %(scope)s AND "
+        + SAME_SESSION
+        + " ORDER BY created_at LIMIT 1",
+        {"sha": sha256, "scope": scope, "session": session},
     ).fetchone()
 
 
@@ -75,9 +79,9 @@ def supplier_key(inv: CommonInvoice) -> str | None:
 
 
 def find_possible_duplicates(
-    conn: Conn, inv: CommonInvoice, exclude_id: str | None = None, scope: Scope = "live"
+    conn: Conn, inv: CommonInvoice, exclude_id: str | None = None, scope: Scope = "live", session: str | None = None
 ) -> list[Duplicate]:
-    """Earlier documents of the same scope, supplier and type (rejected ones don't count) with
+    """Earlier documents of the same scope (and demo session), supplier and type (rejected ones don't count) with
     - the same number (same_number), or
     - the same total and currency, dated within DUPLICATE_DATE_WINDOW_DAYS, and a different number
       (same_amount_near_date: the same bill sent again with a new number, or a typo in the number)."""
@@ -89,7 +93,9 @@ def find_possible_duplicates(
                   CASE WHEN invoice_number_norm = %(number)s THEN 'same_number' ELSE 'same_amount_near_date' END AS rule
              FROM invoices
             WHERE supplier_key = %(key)s AND document_type = %(type)s AND status <> 'rejected'
-              AND scope = %(scope)s AND id IS DISTINCT FROM %(exclude)s::uuid
+              AND scope = %(scope)s AND """
+        + SAME_SESSION
+        + """ AND id IS DISTINCT FROM %(exclude)s::uuid
               AND (invoice_number_norm = %(number)s
                    OR (%(total)s::numeric IS NOT NULL AND total = %(total)s AND currency = %(currency)s
                        AND invoice_date BETWEEN %(day)s::date - %(days)s AND %(day)s::date + %(days)s
@@ -105,6 +111,7 @@ def find_possible_duplicates(
             "days": DUPLICATE_DATE_WINDOW_DAYS,
             "exclude": exclude_id,
             "scope": scope,
+            "session": session,
         },
     ).fetchall()
     return [Duplicate(str(r["id"]), r["status"], r["rule"]) for r in rows]
@@ -129,8 +136,11 @@ def supplier_status(conn: Conn, inv: CommonInvoice) -> SupplierStatus:
     return SupplierStatus(True, "accounting_vendor_name") if name and same_name == 1 else SupplierStatus(False)
 
 
-def bank_baseline(conn: Conn, inv: CommonInvoice, scope: Scope = "live") -> list[KnownAccount]:
-    """The accounts on this supplier's earlier invoices of the scope, for the bank-details comparison. Not counted:
+def bank_baseline(
+    conn: Conn, inv: CommonInvoice, scope: Scope = "live", session: str | None = None
+) -> list[KnownAccount]:
+    """The accounts on this supplier's earlier invoices of the scope (and demo session), for the
+    bank-details comparison. Not counted:
     rejected invoices, and invoices that were flagged as a possible change themselves (even if a
     reviewer later verified them: verified details are not a trusted record)."""
     key = supplier_key(inv)
@@ -139,10 +149,13 @@ def bank_baseline(conn: Conn, inv: CommonInvoice, scope: Scope = "live") -> list
     rows = conn.execute(
         """SELECT a->>'fingerprint' AS fingerprint, min(a->>'label') AS label
              FROM invoices i, jsonb_array_elements(i.bank_accounts) a
-            WHERE i.supplier_key = %s AND i.scope = %s AND i.status <> 'rejected' AND a->>'fingerprint' IS NOT NULL
+            WHERE i.supplier_key = %(key)s AND i.scope = %(scope)s AND i."""
+        + SAME_SESSION
+        + """
+              AND i.status <> 'rejected' AND a->>'fingerprint' IS NOT NULL
               AND NOT i.status_reasons @> '[{"code": "possible_bank_detail_change"}]'
             GROUP BY 1 ORDER BY min(i.created_at)""",
-        (key, scope),
+        {"key": key, "scope": scope, "session": session},
     ).fetchall()
     return [KnownAccount(r["fingerprint"], r["label"]) for r in rows]
 
@@ -173,6 +186,7 @@ def insert_invoice(
     expense_account_id: str | None = None,
     bank_accounts: list[dict[str, Any]] | None = None,
     scope: Scope = "live",
+    demo_session_id: str | None = None,
 ) -> None:
     """expense_account_id: the supplier's default account, recorded on a ready invoice (audit trail).
     bank_accounts: the stored form (masked numbers and fingerprints, bank_details.stored_form)."""
@@ -203,6 +217,7 @@ def insert_invoice(
         "expense_account_source": "supplier_default" if expense_account_id else None,
         "bank_accounts": Jsonb(bank_accounts or []),
         "scope": scope,
+        "demo_session_id": demo_session_id,
     }
     if inv is not None:
         d = inv.dates

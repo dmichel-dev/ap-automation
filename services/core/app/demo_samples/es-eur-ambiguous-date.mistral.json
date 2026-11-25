@@ -1,0 +1,18 @@
+{
+ "model": "mistral-ocr-latest",
+ "usage_info": {
+  "pages_processed": 1,
+  "doc_size_bytes": 22448
+ },
+ "document_annotation": "{\"document_kind\":\"invoice\",\"supplier_name\":\"Estudio Nubeazul S.L.\",\"supplier_tax_id\":\"B00000000\",\"supplier_address\":\"Calle Inventada 7, 28001 Madrid, España\",\"supplier_country_code\":\"ES\",\"buyer_name\":\"Example Buyer Inc.\",\"buyer_tax_id\":null,\"invoice_number\":\"2026/045\",\"related_invoice_number\":null,\"invoice_date\":\"03/04/2026\",\"due_date\":null,\"service_period_start\":null,\"service_period_end\":null,\"currency\":\"€\",\"line_items\":[{\"kind\":\"item\",\"description\":\"Diseño de identidad visual\",\"quantity\":\"1\",\"unit_price\":\"1.200,00 €\",\"amount\":\"1.200,00 €\",\"tax_rate\":null},{\"kind\":\"item\",\"description\":\"Maquetación de folleto (horas)\",\"quantity\":\"8\",\"unit_price\":\"45,00 €\",\"amount\":\"360,00 €\",\"tax_rate\":null}],\"adjustments\":[{\"kind\":\"other\",\"label\":\"Retención IRPF 15 %\",\"amount\":\"-234,00 €\",\"position\":\"after_tax\"}],\"tax_lines\":[{\"tax_type\":\"vat\",\"label\":\"IVA 21 %\",\"rate\":\"21 %\",\"taxable_base\":\"1.560,00 €\",\"amount\":\"327,60 €\"}],\"subtotal\":\"1.560,00 €\",\"tax_total\":\"327,60 €\",\"total\":\"1.653,60 €\",\"language\":\"es\",\"bank_accounts\":[],\"bank_details_change_notice\":false}",
+ "pages": [
+  {
+   "index": 0,
+   "markdown": "# Estudio Nubeazul S.L.\n\nCalle Inventada 7, 28001 Madrid, España\n\nNIF: B00000000 · hola@example.com\n\n## FACTURA N° 2026/045\n\nFecha: 03/04/2026\n\nCliente: Example Buyer Inc., 100 Sample Street, Springfield, OR 97477, USA\n\n|  Concepto | Cantidad | Precio | Importe  |\n| --- | --- | --- | --- |\n|  Diseño de identidad visual | 1 | 1.200,00 € | 1.200,00 €  |\n|  Maquetación de folleto (horas) | 8 | 45,00 € | 360,00 €  |\n|   | Base imponible |  | 1.560,00 €  |\n|   | IVA 21 % |  | 327,60 €  |\n|   | Retención IRPF 15 % |  | -234,00 €  |\n|   | **Total factura** |  | **1.653,60 €**  |\n\nPago mediante transferencia bancaria. Documento ficticio para una demostración.",
+   "confidence_scores": {
+    "average_page_confidence_score": 0.9813493652347253,
+    "minimum_page_confidence_score": 0.41467436922307455
+   }
+  }
+ ]
+}

@@ -347,7 +347,13 @@ def _apply_changes(conn: db.Conn, item: db.Row, inv: db.Row, values: dict[str, A
 def _add_duplicate_reasons(conn: db.Conn, item: db.Row, inv: db.Row) -> list[str]:
     """After a correction (number, supplier, total, date), the duplicate check runs again; new
     matches are added to the item's reasons so the reviewer sees them before approving."""
-    found = db.find_possible_duplicates(conn, stored_invoice(conn, inv), exclude_id=str(inv["id"]), scope=inv["scope"])
+    found = db.find_possible_duplicates(
+        conn,
+        stored_invoice(conn, inv),
+        exclude_id=str(inv["id"]),
+        scope=inv["scope"],
+        session=str(inv["demo_session_id"]) if inv.get("demo_session_id") else None,
+    )
     known = {r.get("message") for r in item["reasons"]}
     new = [
         Issue(

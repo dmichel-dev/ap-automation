@@ -11,7 +11,7 @@ from app.main import app
 from fastapi.testclient import TestClient
 from psycopg.types.json import Jsonb
 
-from .conftest import AUTH, WRITE_OFF_ACCOUNT, query
+from .conftest import AUTH, WRITE_OFF_ACCOUNT, query, set_scope
 from .test_accounting import bank_page, make_invoice, plaid_tx, posted_bill, register_bank, run, sql
 from .test_settlement import pay, review, write_off_flow
 
@@ -278,8 +278,7 @@ def test_test_and_demo_data_stay_out(acfg):
     for scope in ("e2e", "demo"):
         inv = make_invoice(acfg, number=f"{scope}-1", status="needs_review", account=None)
         open_review(acfg, inv)
-        sql(acfg, "UPDATE ap.invoices SET scope = %s WHERE id = %s", scope, inv)
-        sql(acfg, "UPDATE ap.review_queue SET scope = %s WHERE invoice_id = %s", scope, inv)
+        set_scope(acfg.database_url, inv, scope)
     out = email(acfg)
     assert out["text"].startswith(daily_summary.NOTHING)
 

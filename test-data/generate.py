@@ -31,6 +31,7 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 OUT = Path(__file__).parent / "invoices"
 FIXTURES = Path("/app/tests/fixtures")  # core-test container: services/core is mounted at /app
 E2E_FIXTURES = Path("/app/app/e2e_fixtures")
+DEMO_SAMPLES = Path("/app/app/demo_samples")  # the public demo's samples (services/core/app/demo_samples.py)
 FONT = "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf"
 FONT_BOLD = "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf"
 FONT_CJK = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"  # index 0 = Japanese
@@ -1312,7 +1313,45 @@ def e2e_set() -> None:
     )
 
 
-if __name__ == "__main__" and sys.argv[1:] == ["--e2e"]:
+# =====================================================================================
+# Public demo samples (services/core/app/demo_samples.py lists them and what each shows)
+# =====================================================================================
+DEMO_FROM_TEST_SET = {
+    "fr-eur-discount": "A-fr-eur-discount.pdf",
+    "de-eur-wrong-total": "C-de-eur-wrong-total.pdf",
+    "es-eur-ambiguous-date": "D-es-eur-ambiguous-date.pdf",
+    "ar-aed-tax-invoice": "P-ar-aed-uae-tax-invoice.pdf",
+    "hi-inr-gst-invoice": "Q-hi-inr-gst-invoice.pdf",
+}
+
+
+def demo_set() -> None:
+    """Copies of five test-set invoices, and a pair from one supplier whose second invoice quietly names
+    another bank account (no notice, same layout): sent in order in one session, only the comparison
+    with the first one can catch it, and it raises the fraud alert."""
+    DEMO_SAMPLES.mkdir(exist_ok=True)
+    for key, name in DEMO_FROM_TEST_SET.items():
+        (DEMO_SAMPLES / f"{key}.pdf").write_bytes((OUT / name).read_bytes())
+    lines = [
+        ("Managed hosting, Business plan (monthly)", 1, D("129.00")),
+        ("Extra backup storage, 50 GB", 2, D("9.50")),
+    ]
+    bank = "    Bank: Fictional Savings Bank (test)\n    Routing number: 000000000    Account number: 0000-FAKE-{}\n"
+    footer = "Payment by ACH to:\n" + bank.format("0031") + "(Fictional document for a demo.)"
+    pdf, total = us_invoice(WRENFOLD, "WH-2026-1001", ("10/01/2026", "10/31/2026"), lines, footer=footer)
+    assert total == D("160.58")
+    (DEMO_SAMPLES / "us-hosting-october.pdf").write_bytes(pdf)
+    footer = "Payment by ACH to:\n" + bank.format("0058") + "(Fictional document for a demo.)"
+    pdf, total = us_invoice(WRENFOLD, "WH-2026-1101", ("11/01/2026", "11/30/2026"), lines, footer=footer)
+    assert total == D("160.58")
+    (DEMO_SAMPLES / "us-hosting-november-other-account.pdf").write_bytes(pdf)
+
+
+if __name__ == "__main__" and sys.argv[1:] == ["--demo"]:
+    demo_set()
+    for p in sorted(DEMO_SAMPLES.glob("*.pdf")):
+        print(f"{p.stat().st_size:>8}  {p.name}")
+elif __name__ == "__main__" and sys.argv[1:] == ["--e2e"]:
     e2e_set()
     for p in sorted(E2E_FIXTURES.iterdir()):
         print(f"{p.stat().st_size:>8}  {p.name}")

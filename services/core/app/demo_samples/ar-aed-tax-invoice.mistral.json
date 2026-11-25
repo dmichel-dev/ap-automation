@@ -1,0 +1,18 @@
+{
+ "model": "mistral-ocr-latest",
+ "usage_info": {
+  "pages_processed": 1,
+  "doc_size_bytes": 48939
+ },
+ "document_annotation": "{\"document_kind\":\"invoice\",\"supplier_name\":\"Qasrwind Office Supplies L.L.C.\",\"supplier_tax_id\":\"100000000000003\",\"supplier_address\":\"Office 1204, Example Tower, Dubai, United Arab Emirates\",\"supplier_country_code\":\"AE\",\"buyer_name\":\"Example Buyer Inc.\",\"buyer_tax_id\":null,\"invoice_number\":\"QW-INV-2026-0311\",\"related_invoice_number\":null,\"invoice_date\":\"18/11/2026\",\"due_date\":\"18/12/2026\",\"service_period_start\":null,\"service_period_end\":null,\"currency\":\"AED\",\"line_items\":[{\"kind\":\"item\",\"description\":\"Toner cartridge, black خرطوشة حبر، أسود\",\"quantity\":\"6\",\"unit_price\":\"420.00\",\"amount\":\"2,520.00\",\"tax_rate\":\"5%\"},{\"kind\":\"item\",\"description\":\"A4 copy paper (box of 5 reams) ورق نسخ A4 (صندوق 5 رزم)\",\"quantity\":\"15\",\"unit_price\":\"95.00\",\"amount\":\"1,425.00\",\"tax_rate\":\"5%\"},{\"kind\":\"item\",\"description\":\"Whiteboard markers (pack of 12) أقلام سبورة بيضاء (عبوة 12)\",\"quantity\":\"10\",\"unit_price\":\"28.50\",\"amount\":\"285.00\",\"tax_rate\":\"5%\"}],\"adjustments\":[],\"tax_lines\":[{\"tax_type\":\"vat\",\"label\":\"VAT 5%\",\"rate\":\"5%\",\"taxable_base\":\"AED 4,230.00\",\"amount\":\"AED 211.50\"}],\"subtotal\":\"AED 4,230.00\",\"tax_total\":\"AED 211.50\",\"total\":\"AED 4,441.50\",\"language\":\"en\",\"bank_accounts\":[],\"bank_details_change_notice\":false}",
+ "pages": [
+  {
+   "index": 0,
+   "markdown": "# Qasrwind Office Supplies L.L.C.\n\nOffice 1204, Example Tower, Dubai, United Arab Emirates\n\nTRN 100000000000003 · +971 4 000 0000\n\n# قصرويند للوازم المكتبية ذ.م.م\n\nمكتب 1204، برج المنال، دبي، الإمارات\n\nالرقم الضريبي 100000000000003\n\n## TAX INVOICE\n\nInvoice No.: QW-INV-2026-0311\n\nInvoice date: 18/11/2026\n\nDue date: 18/12/2026\n\nCustomer: Example Buyer Inc., 100 Sample Street, Springfield, OR 97477, USA\n\n## فاتورة ضريبية\n\nرقم الفاتورة\n\nتاريخ الفاتورة\n\nتاريخ الاستحقاق\n\nالعميل\n\n|  Description الوصف | Qty الكمية | Unit price سعر الوحدة | VAT الضريبة | Amount (AED) المبلغ (درهم)  |\n| --- | --- | --- | --- | --- |\n|  Toner cartridge, black خرطوشة حبر، أسود | 6 | 420.00 | 5% | 2,520.00  |\n|  A4 copy paper (box of 5 reams) ورق نسخ A4 (صندوق 5 رزم) | 15 | 95.00 | 5% | 1,425.00  |\n|  Whiteboard markers (pack of 12) أقلام سبورة بيضاء (عبوة 12) | 10 | 28.50 | 5% | 285.00  |\n|  Total excluding VAT |  | AED 4,230.00 |  | الإجمالي غير شامل الضريبة  |\n|  VAT 5% |  | AED 211.50 |  | ضريبة القيمة المضافة  |\n|  **Total including VAT** |  | **AED 4,441.50** |  | **الإجمالي شامل الضريبة**  |\n\nPayment by bank transfer within 30 days.\n\nFictional document generated for a demo project.\n\nالدفع بالتحويل المصرفي خلال 30 يوماً.\n\nمستند وهمي لأغراض العرض فقط.",
+   "confidence_scores": {
+    "average_page_confidence_score": 0.9773457500954467,
+    "minimum_page_confidence_score": 0.27657184945706514
+   }
+  }
+ ]
+}

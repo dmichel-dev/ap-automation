@@ -21,6 +21,11 @@ Daily end-to-end test (e2e_test.py; n8n puts the messages in Gmail and does the 
   POST /e2e/runs/{id}/verify          what Gmail shows → every check, pass or fail, and the alert to send
   POST /e2e/runs/{id}/abort           the workflow could not finish: the run fails, with the alert
 
+Public demo (demo.py; the demo page queues files, n8n processes them and runs the clean-up):
+  POST /demo/uploads/{id}/process     a queued sample or upload → processed in its session (scope demo)
+  POST /demo/cleanup                  expired sessions deleted with their invoices → what Gmail/Drive should trash
+  POST /demo/trash/done               trashed in Gmail or Drive: off the list
+
 Accounting and bank (n8n does the QuickBooks/Plaid calls; the core keeps state and rules):
   GET  /invoices/{id}/file               original file, for the accounting attachment
   POST /invoices/{id}/exclude-from-posting
@@ -43,7 +48,7 @@ Accounting and bank (n8n does the QuickBooks/Plaid calls; the core keeps state a
 import hmac
 import logging
 from dataclasses import asdict
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
@@ -60,6 +65,7 @@ from . import (
     actors,
     daily_summary,
     db,
+    demo,
     drive_intake,
     e2e_test,
     files,
@@ -128,70 +134,6 @@ def health() -> JSONResponse:
     return JSONResponse({"status": "ok" if status == 200 else "degraded", "db": db}, status_code=status)
 
 
-def get_processing_config() -> processing.Config:
-    s = get_settings()
-    bank_key = s.bank_fingerprint_key.get_secret_value()
-    if not bank_key:
-        raise RuntimeError("BANK_FINGERPRINT_KEY is not set: see .env.example")
-    return processing.Config(
-        database_url=s.ap_database_url.get_secret_value(),
-        storage_dir=Path(s.file_storage_dir),
-        retention_days=s.file_retention_days,
-        confidence_threshold=s.confidence_threshold,
-        bank_fingerprint_key=bank_key.encode(),
-        policy=Policy(
-            home_currency=s.home_currency,
-            cutoff_materiality=Decimal(s.cutoff_materiality),
-            capex_threshold=Decimal(s.capex_threshold),
-        ),
-    )
-
-
-@app.post("/invoices/process", response_model=processing.ProcessOutcome, dependencies=[Depends(require_token)])
-def process_invoice(
-    file: Annotated[UploadFile, File(description="PDF, PNG, JPEG, WebP or TIFF")],
-    channel: Annotated[Literal["email", "drive", "upload"], Form()],
-    source_ref: Annotated[str, Form(min_length=1, max_length=500, description="e.g. gmail:<messageId>:<attachmentId>")],
-    provider: Annotated[ExtractionProvider, Depends(get_provider)],
-    cfg: Annotated[processing.Config, Depends(get_processing_config)],
-    received_at: Annotated[datetime | None, Form()] = None,
-    n8n_execution_id: Annotated[str | None, Form(max_length=100)] = None,
-    email_text: Annotated[
-        str | None, Form(max_length=intake.EMAIL_TEXT_MAX, description="subject + body; checked, never stored")
-    ] = None,
-    message_id: Annotated[str | None, Form(max_length=200, description="email or Drive file, for the re-check")] = None,
-    scope: Annotated[Literal["live", "e2e"], Form(description="the screening's answer")] = "live",
-) -> processing.ProcessOutcome:
-    """The shared core for every channel: extract → normalize → check → store. Idempotent per source_ref."""
-    content = file.file.read(files.MAX_FILE_BYTES + 1)
-    req = processing.ProcessRequest(
-        content=content,
-        file_name=(file.filename or "unnamed")[:255],
-        channel=channel,
-        source_ref=source_ref,
-        received_at=received_at,
-        execution_id=n8n_execution_id,
-        email_text=email_text,
-        message_id=message_id or None,
-        scope=scope,
-    )
-    return processing.process(req, provider, cfg)
-
-
-@app.post("/extract", response_model=CommonInvoice, dependencies=[Depends(require_token)])
-def extract(
-    file: Annotated[UploadFile, File(description="PDF, PNG, JPEG, WebP or TIFF")],
-    provider: Annotated[ExtractionProvider, Depends(get_provider)],
-) -> CommonInvoice:
-    content = file.file.read(files.MAX_FILE_BYTES + 1)
-    prepared = files.prepare(content)
-    result = provider.extract(prepared.content, prepared.mime_type)
-    return build_common_invoice(result, provider.name)
-
-
-# =====================================================================================
-# Accounting postings, bank sync, matching
-# =====================================================================================
 def get_accounting_config() -> accounting.AccountingConfig:
     s = get_settings()
     return accounting.AccountingConfig(
@@ -209,6 +151,106 @@ def get_accounting_config() -> accounting.AccountingConfig:
     )
 
 
+def get_demo_limits() -> demo.Limits:
+    s = get_settings()
+    return demo.Limits(
+        enabled=s.demo_enabled,
+        hash_key=s.demo_hash_key.get_secret_value().encode(),
+        session_minutes=s.demo_session_minutes,
+        starts_per_hour=s.demo_starts_per_hour,
+        starts_per_day=s.demo_starts_per_day,
+        active_sessions=s.demo_active_sessions,
+        files_per_session=s.demo_files_per_session,
+        max_file_bytes=s.demo_max_file_bytes,
+        max_pages=s.demo_max_pages,
+        pages_per_day=s.demo_pages_per_day,
+        pages_per_month=s.demo_pages_per_month,
+        emails_per_sender_day=s.demo_emails_per_sender_day,
+    )
+
+
+def get_processing_config() -> processing.Config:
+    s = get_settings()
+    bank_key = s.bank_fingerprint_key.get_secret_value()
+    if not bank_key:
+        raise RuntimeError("BANK_FINGERPRINT_KEY is not set: see .env.example")
+    return processing.Config(
+        database_url=s.ap_database_url.get_secret_value(),
+        storage_dir=Path(s.file_storage_dir),
+        retention_days=s.file_retention_days,
+        confidence_threshold=s.confidence_threshold,
+        bank_fingerprint_key=bank_key.encode(),
+        policy=Policy(
+            home_currency=s.home_currency,
+            cutoff_materiality=Decimal(s.cutoff_materiality),
+            capex_threshold=Decimal(s.capex_threshold),
+        ),
+        demo=get_demo_limits(),
+    )
+
+
+@app.post("/invoices/process", response_model=processing.ProcessOutcome, dependencies=[Depends(require_token)])
+def process_invoice(
+    file: Annotated[UploadFile, File(description="PDF, PNG, JPEG, WebP or TIFF")],
+    channel: Annotated[Literal["email", "drive", "upload"], Form()],
+    source_ref: Annotated[str, Form(min_length=1, max_length=500, description="e.g. gmail:<messageId>:<attachmentId>")],
+    provider: Annotated[ExtractionProvider, Depends(get_provider)],
+    cfg: Annotated[processing.Config, Depends(get_processing_config)],
+    acfg: Annotated[accounting.AccountingConfig, Depends(get_accounting_config)],
+    received_at: Annotated[datetime | None, Form()] = None,
+    n8n_execution_id: Annotated[str | None, Form(max_length=100)] = None,
+    email_text: Annotated[
+        str | None, Form(max_length=intake.EMAIL_TEXT_MAX, description="subject + body; checked, never stored")
+    ] = None,
+    message_id: Annotated[str | None, Form(max_length=200, description="email or Drive file, for the re-check")] = None,
+    scope: Annotated[Literal["live", "e2e", "demo"], Form(description="the screening's answer")] = "live",
+    demo_session_id: Annotated[str | None, Form(max_length=36, description="scope demo: the screening's")] = None,
+) -> processing.ProcessOutcome:
+    """The shared core for every channel: extract → normalize → check → store. Idempotent per source_ref."""
+    if (scope == "demo") != bool(demo_session_id):
+        raise HTTPException(status_code=422, detail="demo_session_id goes with scope demo, and only with it")
+    content = file.file.read(files.MAX_FILE_BYTES + 1)
+    req = processing.ProcessRequest(
+        content=content,
+        file_name=(file.filename or "unnamed")[:255],
+        channel=channel,
+        source_ref=source_ref,
+        received_at=received_at,
+        execution_id=n8n_execution_id,
+        email_text=email_text,
+        message_id=message_id or None,
+        scope=scope,
+        demo_session_id=demo_session_id,
+    )
+    outcome = processing.process(req, provider, cfg)
+    _demo_preview(req, outcome, acfg)
+    return outcome
+
+
+def _demo_preview(
+    req: processing.ProcessRequest, outcome: processing.ProcessOutcome, acfg: accounting.AccountingConfig
+) -> None:
+    """A ready demo invoice: the bill it would post, kept for the demo page (nothing is sent)."""
+    if req.scope != "demo" or outcome.status != "ready" or outcome.already_processed:
+        return
+    with db.connect(acfg.database_url) as conn:
+        demo.store_preview(conn, outcome.invoice_id, accounting.bill_preview(conn, outcome.invoice_id, acfg))
+
+
+@app.post("/extract", response_model=CommonInvoice, dependencies=[Depends(require_token)])
+def extract(
+    file: Annotated[UploadFile, File(description="PDF, PNG, JPEG, WebP or TIFF")],
+    provider: Annotated[ExtractionProvider, Depends(get_provider)],
+) -> CommonInvoice:
+    content = file.file.read(files.MAX_FILE_BYTES + 1)
+    prepared = files.prepare(content)
+    result = provider.extract(prepared.content, prepared.mime_type)
+    return build_common_invoice(result, provider.name)
+
+
+# =====================================================================================
+# Accounting postings, bank sync, matching
+# =====================================================================================
 def get_rules() -> matching.Rules:
     s = get_settings()
     return matching.Rules(
@@ -348,6 +390,7 @@ class EmailToScreen(BaseModel):
     attachments: list[EmailAttachment] = Field(default=[], max_length=100)
     text: str = Field(default="", max_length=intake.EMAIL_TEXT_MAX)  # subject + body: checked, never stored
     subject: str = Field(default="", max_length=2000)  # names the end-to-end run, for test emails
+    sender: str = Field(default="", max_length=500)  # From: counted per day for demo emails, never stored
     message_id: str | None = Field(default=None, max_length=200)  # for the re-check
     execution_id: str | None = Field(default=None, max_length=100)
 
@@ -364,13 +407,39 @@ def screen_email(body: EmailToScreen, cfg: AcctCfg) -> JsonDict:
         text=body.text,
         subject=body.subject,
     )
-    if screening.scope != "e2e" and not (body.message_id and screening.route != "process"):
+    if screening.scope == "live" and not (body.message_id and screening.route != "process"):
         return asdict(screening)  # nothing to look up or record
     with db.connect(cfg.database_url) as conn:
         screening = e2e_test.confirm_scope(conn, screening)
+        _confirm_demo(conn, screening, body)
         if body.message_id and screening.route != "process":
             intake_failures.resolve(conn, "email", body.message_id, body.execution_id)
     return asdict(screening)
+
+
+def _confirm_demo(conn: db.Conn, screening: intake.Screening, body: EmailToScreen) -> None:
+    """Mail to invoices+CODE@: its live session, or refused (no attachment goes to processing)."""
+    if screening.scope != "demo" or not screening.demo_code:
+        return
+    try:
+        session = demo.email_session(
+            conn, get_demo_limits(), screening.demo_code, body.sender, body.message_id, datetime.now(UTC)
+        )
+    except demo.Refused as exc:
+        screening.route, screening.reason, screening.accepted = "demo_refused", f"demo_{exc.code}", []
+        db.log(
+            conn,
+            step="intake",
+            level="warning",
+            message="demo email refused",
+            channel="email",
+            source_ref=f"gmail:{body.message_id}" if body.message_id else None,
+            execution_id=body.execution_id,
+            details={"reason": exc.code},
+            scope="demo",
+        )
+        return
+    screening.demo_session_id = session.id
 
 
 class DriveFileIn(BaseModel):
@@ -870,3 +939,74 @@ def e2e_abort(run_id: int, body: E2eAbort, cfg: AcctCfg) -> JsonDict:
     with db.connect(cfg.database_url) as conn:
         run = e2e_test.abort(conn, run_id, body.step, body.message, body.execution_id)
         return _run_result(conn, run)
+
+
+# =====================================================================================
+# Public demo (demo.py): the demo page queues files; n8n processes them and runs the clean-up
+# =====================================================================================
+class DemoRun(BaseModel):
+    execution_id: str | None = Field(default=None, max_length=100)
+
+
+@app.post("/demo/uploads/{upload_id}/process", response_model=processing.ProcessOutcome, dependencies=Auth)
+def process_demo_upload(
+    upload_id: int,
+    provider: Annotated[ExtractionProvider, Depends(get_provider)],
+    cfg: Annotated[processing.Config, Depends(get_processing_config)],
+    acfg: AcctCfg,
+    body: DemoRun | None = None,
+) -> processing.ProcessOutcome:
+    """A queued sample or upload → the same processing as every channel (scope demo, its session)."""
+    with db.connect(cfg.database_url) as conn:
+        upload = demo.claim_upload(conn, upload_id)
+    if upload is None:
+        raise HTTPException(status_code=409, detail="this file is not waiting for processing")
+    req = processing.ProcessRequest(
+        content=upload.content,
+        file_name=upload.file_name,
+        channel="upload",
+        source_ref=f"demo-upload:{upload.id}",
+        execution_id=body.execution_id if body else None,
+        scope="demo",
+        demo_session_id=upload.session_id,
+    )
+    try:
+        outcome = processing.process(req, provider, cfg)
+    except files.UnsupportedFile as exc:
+        _finish_upload(cfg, upload.id, None, exc.code)
+        raise
+    except ProviderError as exc:
+        _finish_upload(cfg, upload.id, None, f"provider_{exc.kind}")
+        raise
+    _finish_upload(cfg, upload.id, outcome.invoice_id)
+    _demo_preview(req, outcome, acfg)
+    return outcome
+
+
+def _finish_upload(cfg: processing.Config, upload_id: int, invoice_id: str | None, error: str | None = None) -> None:
+    with db.connect(cfg.database_url) as conn:
+        demo.finish_upload(conn, upload_id, invoice_id, error)
+
+
+@app.post("/demo/cleanup", dependencies=Auth)
+def demo_cleanup(cfg: AcctCfg) -> JsonDict:
+    """Expired sessions deleted with their invoices and stored files; what Gmail/Drive should trash."""
+    with db.connect(cfg.database_url) as conn:
+        purged = demo.purge_expired(conn, datetime.now(UTC))
+    for rel_path in purged.files:
+        accounting.delete_stored_file(cfg.storage_dir, rel_path)
+    with db.connect(cfg.database_url) as conn:
+        trash = demo.trash_due(conn)
+    return {"sessions": purged.sessions, "invoices": purged.invoices, "files": len(purged.files), "trash": trash}
+
+
+class DemoTrashed(BaseModel):
+    channel: Literal["email", "drive"]
+    item_ids: list[str] = Field(min_length=1, max_length=100)
+
+
+@app.post("/demo/trash/done", dependencies=Auth)
+def demo_trash_done(body: DemoTrashed, cfg: AcctCfg) -> JsonDict:
+    """Trashed in Gmail or Drive (or already gone there): off the clean-up's list."""
+    with db.connect(cfg.database_url) as conn:
+        return {"removed": demo.trash_done(conn, body.channel, body.item_ids)}

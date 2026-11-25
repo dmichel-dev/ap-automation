@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 from pydantic import ValidationError
 
-from .conftest import FIXTURES, known_supplier, query, seed_accounts
+from .conftest import FIXTURES, known_supplier, query, seed_accounts, set_scope
 from .test_processing import FakeProvider, env, post  # noqa: F401  (env is a fixture)
 
 INTERNAL = "https://localhost:8081"
@@ -96,8 +96,7 @@ def items(env, cfg):  # noqa: F811
     live = post(content=PDF).json()
     env[0]["provider"] = FakeProvider(invoice_number="QM-2000", supplier_name="Other Paper Co")
     demo = post(content=PDF + b"\n%demo copy\n", source_ref="gmail:m2:a2").json()
-    for table, key in (("invoices", "id"), ("review_queue", "invoice_id")):
-        q(cfg.database_url, f"UPDATE ap.{table} SET scope = 'demo' WHERE {key} = %s", demo["invoice_id"])
+    set_scope(cfg.database_url, demo["invoice_id"], "demo")
     add_user(cfg.database_url)
     c = browser(settings(cfg.database_url, cfg.storage_dir), INTERNAL)
     assert sign_in(c).status_code == 303

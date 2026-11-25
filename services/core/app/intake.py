@@ -9,12 +9,17 @@ Scope: mail to the alias is live. Mail to its "+e2e" sub-address is the daily en
 if its subject names a run ("[E2E run 12]"), and the core then checks that this run is in progress
 (e2e_test.confirm_scope). Anything else sent there is processed as live, so a real invoice sent to
 that address is never hidden among test data.
+
+Mail to "+CODE" (eight characters of the demo alphabet) belongs to that public demo session. The code
+is read from Delivered-To only: Google sets it on delivery, while To and Cc are whatever the sender
+wrote. The core then checks that the session is live (main.screen_email, demo.admit_email).
 """
 
 import re
 from dataclasses import dataclass, field
 
 from .bank_details import change_wording
+from .demo import CODE_PATTERN
 
 SUPPORTED_MIME = frozenset({"application/pdf", "image/png", "image/jpeg", "image/webp", "image/tiff"})
 MIME_BY_EXTENSION = {
@@ -43,13 +48,15 @@ class Attachment:
 
 @dataclass
 class Screening:
-    route: str  # process | no_valid_attachment | bank_detail_notice | not_for_alias
+    route: str  # process | no_valid_attachment | bank_detail_notice | not_for_alias | demo_refused
     reason: str | None = None
     accepted: list[dict[str, str | int]] = field(default_factory=list)  # key, index, mime, size
     skipped: list[dict[str, str | int]] = field(default_factory=list)  # type, size, why
     attachments: int = 0
-    scope: str = "live"  # live | e2e
+    scope: str = "live"  # live | e2e | demo
     e2e_run: int | None = None  # the end-to-end run the subject names (confirmed by the core)
+    demo_code: str | None = None  # the demo session Delivered-To names (checked by the core)
+    demo_session_id: str | None = None  # set by the core once the session is found live
 
 
 def size_in_bytes(size: str | int | None) -> int:
@@ -83,10 +90,21 @@ def _addressed_to(address: str, recipients: list[str], delivered_to: str) -> boo
     return address in [r.lower() for r in recipients] or address in delivered_to.lower()
 
 
+def demo_code(delivered_to: str, alias: str) -> str | None:
+    """The demo session code of a "+CODE" address in Delivered-To (never To or Cc: the sender writes
+    those). None unless exactly one code is named."""
+    local, domain = alias.lower().split("@", 1)
+    pattern = rf"(?<![\w.+-]){re.escape(local)}\+({CODE_PATTERN})@{re.escape(domain)}(?![\w.-])"
+    codes = set(re.findall(pattern, delivered_to.lower()))
+    return codes.pop() if len(codes) == 1 else None
+
+
 def addressed_scope(
     recipients: list[str], delivered_to: str, alias: str, subject: str
 ) -> tuple[str, int | None] | None:
     """(scope, end-to-end run named in the subject), or None when the email isn't for the alias."""
+    if demo_code(delivered_to, alias):
+        return "demo", None
     if _addressed_to(alias.lower(), recipients, delivered_to):
         return "live", None
     if not _addressed_to(sub_address(alias, E2E_TAG), recipients, delivered_to):
@@ -112,6 +130,8 @@ def screen_email(
         return Screening("not_for_alias", "not_addressed_to_alias")
     files = sorted((a for a in attachments if a.key.startswith("attachment_")), key=lambda a: _index(a.key))
     screening = Screening("process", attachments=len(files), scope=addressed[0], e2e_run=addressed[1])
+    if screening.scope == "demo":
+        screening.demo_code = demo_code(delivered_to, alias)
     for a in files:
         mime, size = file_mime(a.mime_type, a.file_name), size_in_bytes(a.size)
         if not mime:

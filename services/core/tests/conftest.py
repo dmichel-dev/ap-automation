@@ -5,12 +5,14 @@ from typing import Any
 
 import psycopg
 import pytest
-from app import accounting
+from app import accounting, demo
 from app.main import app, get_accounting_config
 from psycopg.rows import dict_row
 
 MIGRATIONS = Path("/migrations")
 TABLES = (
+    "demo_trash, demo_messages, demo_uploads, demo_bill_previews, demo_senders, demo_budget, demo_starts, "
+    "demo_sessions, "
     "e2e_qbo_objects, e2e_runs, intake_failures, intake_leases, write_offs, run_requests, matches, bank_transactions, "
     "bank_sync_state, accounting_postings, fx_rates, fx_unsupported, "
     "vendor_links, supplier_defaults, "
@@ -43,6 +45,24 @@ ACCOUNTS = (
     ("1", "Services", "Income"),  # not an account an invoice can be coded to
 )
 QUILLMOOR_KEY = "000000000"  # supplier_key of base_annotation's supplier (its tax ID, normalized)
+
+
+def set_scope(url: str, invoice_id: Any, scope: str) -> None:
+    """Moves an invoice and its review items to another scope. A demo invoice gets a session of its
+    own (every demo invoice belongs to one)."""
+    session = None
+    if scope == "demo":
+        [row] = query(
+            url,
+            """INSERT INTO ap.demo_sessions (code, token_digest, client_digest, expires_at)
+               VALUES (%s, %s, %s, now() + interval '1 hour') RETURNING id""",
+            demo.new_code(),
+            os.urandom(32),
+            "0" * 64,
+        )
+        session = row["id"]
+    query(url, "UPDATE ap.invoices SET scope = %s, demo_session_id = %s WHERE id = %s", scope, session, invoice_id)
+    query(url, "UPDATE ap.review_queue SET scope = %s WHERE invoice_id = %s", scope, invoice_id)
 
 
 def seed_accounts(url: str) -> None:
