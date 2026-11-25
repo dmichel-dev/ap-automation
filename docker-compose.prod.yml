@@ -2,8 +2,9 @@
 # On the server, .env sets COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml, so every
 # `docker compose` command (and the scripts) uses both files. See docs/deployment.md.
 #
-# Only Caddy is published on the public interface (80/443). n8n and the review page keep their
-# loopback-only ports: the review page is reached through an SSH tunnel, never through the proxy.
+# Nothing of n8n is served on the internet: its editor, sign-in and OAuth callback are reached
+# through an SSH tunnel, like the review page. Caddy is the only service published on the public
+# interface (80/443), and it serves no n8n route today (deploy/Caddyfile).
 
 x-logging: &logging
   driver: json-file
@@ -17,13 +18,14 @@ services:
 
   n8n:
     environment:
-      N8N_HOST: ${N8N_PUBLIC_HOST:?set N8N_PUBLIC_HOST in .env}
-      N8N_PROTOCOL: https
-      WEBHOOK_URL: https://${N8N_PUBLIC_HOST}/
-      N8N_EDITOR_BASE_URL: https://${N8N_PUBLIC_HOST}/   # OAuth callback: <this>/rest/oauth2-credential/callback
-      N8N_SECURE_COOKIE: "true"
-      N8N_PROXY_HOPS: 1                                  # trust one proxy (Caddy) for the client address
-    networks: [backend, frontend]
+      # Editor through the tunnel: ssh -N -L 5679:127.0.0.1:5678 <server>, then http://localhost:5679.
+      # The OAuth redirect URL follows it: http://localhost:5679/rest/oauth2-credential/callback
+      N8N_HOST: localhost
+      N8N_PROTOCOL: http
+      N8N_EDITOR_BASE_URL: http://localhost:5679/
+      # Webhooks are only reachable on the server itself (scripts/run_now.py's default URL)
+      WEBHOOK_URL: http://localhost:5678/
+      N8N_SECURE_COOKIE: "true"   # browsers accept secure cookies on http://localhost
     # Measured on the server: about 630 MB right after start (Node heap capped at 512 MB by
     # NODE_OPTIONS, plus native memory, binary buffers and the task runner process).
     mem_limit: 1g
@@ -35,15 +37,13 @@ services:
   review-web:
     logging: *logging
 
-  # HTTPS reverse proxy for n8n only (editor, OAuth callback, webhooks). Certificates from
-  # Let's Encrypt, renewed automatically. It sits on its own network with n8n, so it can't
-  # reach the database, the core or the review page.
+  # HTTPS front door. Certificates from Let's Encrypt, renewed automatically. It sits alone on
+  # its own network: it can't reach n8n, the database, the core or the review page.
   caddy:
     image: caddy:2.10.2-alpine
     restart: unless-stopped
-    depends_on: [n8n]
     environment:
-      N8N_PUBLIC_HOST: ${N8N_PUBLIC_HOST:?set N8N_PUBLIC_HOST in .env}
+      RETIRED_HOSTS: ${RETIRED_HOSTS:?set RETIRED_HOSTS in .env}
       ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
     ports:
       - "80:80"

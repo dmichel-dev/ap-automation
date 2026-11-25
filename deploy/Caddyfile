@@ -1,19 +1,28 @@
-# HTTPS reverse proxy for n8n: the editor, the OAuth callback and the webhooks.
-# The host name and the Let's Encrypt account e-mail come from .env (docker-compose.prod.yml).
-# The review page is deliberately not proxied: it is reached through an SSH tunnel (docs/security.md).
+# Public HTTPS front door. Host names and the Let's Encrypt account e-mail come from .env
+# (docker-compose.prod.yml).
+#
+# No n8n route is served: n8n's editor, sign-in and OAuth callback are reached through an SSH
+# tunnel (docs/deployment.md), and so is the review page's internal listener (docs/security.md).
+# A public n8n webhook, if one is ever needed, gets a host of its own that forwards only exact
+# POST paths; scripts/check_deploy_config.sh refuses any proxy route without a path matcher.
 {
 	email {$ACME_EMAIL}
 	admin off
 }
 
-{$N8N_PUBLIC_HOST} {
-	encode zstd gzip
+(hardening) {
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
-		Referrer-Policy "strict-origin-when-cross-origin"
+		Referrer-Policy "no-referrer"
 		X-Frame-Options "DENY"
 		-Server
 	}
-	reverse_proxy n8n:5678
+}
+
+# Names that no longer serve anything (e.g. a former public name of the n8n editor): an empty
+# 404 on every path, until the DNS record is removed.
+{$RETIRED_HOSTS} {
+	import hardening
+	respond 404
 }
