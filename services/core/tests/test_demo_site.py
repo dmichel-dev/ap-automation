@@ -295,7 +295,7 @@ def test_every_page_has_the_footer_and_the_security_headers(site):
 
 def test_privacy_notice_names_the_processor_the_deletion_and_the_contact(site):
     text = visitor(site).get("/privacy").text
-    assert "Mistral AI" in text and "60 minutes" in text and "mailto:david@davidmichel.dev" in text
+    assert "Mistral AI" in text and "60 minutes" in text and "mailto:contact@davidmichel.dev" in text
 
 
 def test_no_page_sends_a_document_back():
