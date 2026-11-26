@@ -14,8 +14,8 @@
 <section class="demo-section" aria-labelledby="send-title">
   <h2 id="send-title">Send an invoice</h2>
   {% if full %}<p class="note" role="status">This session has used all its files. Its results stay here until it ends.</p>{% endif %}
-  <div class="demo-box">
-    <p class="demo-box-title">A sample, in one tap</p>
+  <details class="demo-box demo-fold">
+    <summary>Send a sample invoice ({{ samples | length }})</summary>
     <ul class="demo-samples">
       {% for sample, sent in samples %}
       <li>
@@ -26,7 +26,7 @@
       </li>
       {% endfor %}
     </ul>
-  </div>
+  </details>
 
   {% if not full %}
   <form class="demo-box demo-upload" method="post" action="/s/{{ session.code }}/uploads" enctype="multipart/form-data">

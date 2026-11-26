@@ -202,3 +202,12 @@ button.send:hover { border-color: var(--accent); background: var(--accent-soft);
   .demo-compare p { padding: 16px 18px; }
   .foot { font-size: 12.5px; padding-bottom: 44px; }
 }
+
+/* Foldable box (<details>): the summary is the box's title and its own focusable control */
+details.demo-fold { display: block; padding: 0; }
+.demo-fold > summary { display: flex; align-items: center; gap: 12px; padding: 16px 20px; cursor: pointer; list-style: none; border-radius: var(--radius-m); }
+.demo-fold > summary::-webkit-details-marker { display: none; }
+.demo-fold > summary::before { content: ""; flex: none; width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); transition: transform 0.15s ease; }
+.demo-fold[open] > summary::before { transform: rotate(45deg); }
+.demo-fold > .demo-samples { margin: 0; }
+@media (prefers-reduced-motion: reduce) { .demo-fold > summary::before { transition: none; } }
