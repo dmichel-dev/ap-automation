@@ -83,16 +83,16 @@ class Refused(Exception):
 # What each refusal means, in plain words (the demo page shows them; a rejected invoice's reason)
 REFUSALS = {
     "demo_paused": "The demo is paused for now.",
-    "too_many_starts": "Too many demo sessions from this network: try again later.",
-    "demo_full": "The demo is busy: every session slot is in use. Try again in a few minutes.",
+    "too_many_starts": "Too many demo sessions from this network. Please try again later.",
+    "demo_full": "The demo is busy right now: all session slots are in use. Try again in a few minutes.",
     "session_expired": "This demo session has ended.",
     "file_limit": "This demo session has used all its files.",
     "file_too_large": "The file is larger than the demo accepts.",
     "too_many_pages": "The file has more pages than the demo accepts.",
-    "unreadable_file": "The file can't be read (damaged or protected).",
+    "unreadable_file": "The file can't be read: it may be damaged or protected.",
     "unsupported_type": "Only PDF, PNG, JPEG, WebP and TIFF files are accepted.",
     "empty_file": "The file is empty.",
-    "budget_reached": "The demo's reading budget is used up for now: the samples still work.",
+    "budget_reached": "The demo's OCR budget is used up for now, but the samples still work.",
     "sender_limit": "Too many demo emails from this sender today.",
 }
 

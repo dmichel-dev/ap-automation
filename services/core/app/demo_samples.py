@@ -78,12 +78,12 @@ CATALOG: tuple[Sample, ...] = (
     Sample(
         "us-hosting-october",
         "Hosting invoice, October",
-        "Ready to post; its bank account is remembered",
+        "Ready to post, and its bank account is remembered",
         "Hosting & Cloud Services",
     ),
     Sample(
         "us-hosting-november-other-account",
-        "Hosting invoice, November: same supplier, another bank account",
+        "Hosting invoice, November: same supplier, different bank account",
         "Review: bank details changed? (sent after October)",
         "Hosting & Cloud Services",
     ),

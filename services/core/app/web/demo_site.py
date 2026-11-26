@@ -49,13 +49,13 @@ UPLOAD_ERRORS = {"provider_server": "The OCR service didn't answer. Try again in
 ENDED = "This demo session has ended, or it opens only in the browser that started it."
 PDF = "application/pdf"
 READ_ONLY_REVIEW = (
-    "This is the review page a reviewer uses. Here they would check the invoice against the original, then "
-    "approve it with an expense account, correct a field, or reject it. In the demo these controls are switched "
-    "off: nothing is posted."
+    "This is the page a reviewer works from. They would check the invoice against the original, then approve it "
+    "with an expense account, correct a field, or reject it. In the demo, these controls are switched off and "
+    "nothing is posted."
 )
 OWN_FILE_NOT_SHOWN = (
-    "Your own file isn't shown here: the demo never shows a visitor's document back. In the live system, the "
-    "original sits on this side, next to the data read from it."
+    "Your file isn't shown here: the demo never displays a visitor's document. In the live system, the original "
+    "appears on this side, next to the data read from it."
 )
 # The review page's policy, plus fetch to this origin (the session page refreshes its cards) and the
 # demo's self-hosted fonts
@@ -130,7 +130,7 @@ def _read_step(item: db.Row) -> str:
     if item["confidence"] is None:
         return f"Read: {item['lines']} lines{source}"
     percent = round(float(item["confidence"]) * 100)
-    return f"Read: {item['lines']} lines · confidence {percent} % (OCR × fields found){source}"
+    return f"Read: {item['lines']} lines · confidence {percent}% (OCR × fields found){source}"
 
 
 def _invoice_steps(item: db.Row) -> list[tuple[str, str]]:
@@ -139,7 +139,7 @@ def _invoice_steps(item: db.Row) -> list[tuple[str, str]]:
         return [*steps, ("stop", "Not processed further")]
     steps.append(("done", _read_step(item)))
     if item["status"] == "ready":
-        steps.append(("done", "Every check passed"))
+        steps.append(("done", "All checks passed"))
     else:
         labels = ", ".join(reasons.explain(r["code"]).label for r in item["reasons"])
         steps.append(("stop", f"Sent to review: {labels}"))
@@ -175,7 +175,9 @@ def _upload_card(item: db.Row) -> dict[str, Any]:
     failed = item["status"] == "failed"
     reading = "Reading (stored OCR result)" if item["sample"] else "Reading with Mistral OCR (a few seconds)"
     now = {"queued": "Waiting to be read", "processing": reading}.get(item["status"], "")
-    last = ("stop", UPLOAD_ERRORS.get(item["error"] or "", "It couldn't be processed.")) if failed else ("now", now)
+    last = (
+        ("stop", UPLOAD_ERRORS.get(item["error"] or "", "This file couldn't be processed.")) if failed else ("now", now)
+    )
     return {
         "title": item["file_name"],
         "sub": "sample" if item["sample"] else "your file",

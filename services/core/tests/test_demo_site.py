@@ -82,11 +82,11 @@ def site(demo_env):  # noqa: F811
 def test_start_page_starts_and_links_the_privacy_notice_without_listing_the_samples(site):
     r = visitor(site).get("/")
     assert r.status_code == 200
-    assert "Start a demo session" in r.text and 'href="/privacy"' in r.text
+    assert "Start a demo session" in r.text and 'href="/privacy"' in r.text and "One click: no account" in r.text
     assert "Review: bank details changed? (sent after October)" not in r.text  # the session page lists them
     text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", r.text))
-    assert "Today: supplier invoices land in an inbox or a shared folder." in text
-    assert "Automated: invoices are collected where they already arrive" in text
+    assert "Today: someone types each invoice in by hand" in text
+    assert "Automated: invoices are picked up where they arrive" in text
     assert text.index("Today:") < text.index("Automated:") < text.index("Start a demo session")
 
 
@@ -134,7 +134,8 @@ def test_a_browser_with_a_live_session_goes_back_to_it(site):
     code = start(c)
     again = c.post("/start")
     assert again.headers["location"] == f"/s/{code}" and "set-cookie" not in again.headers
-    assert "Back to your session" in c.get("/").text
+    back = c.get("/").text
+    assert "Back to your session" in back and "demo-facts" not in back  # the start page's facts go
     assert query(site, "SELECT count(*) AS n FROM ap.demo_sessions")[0]["n"] == 1
 
 
@@ -188,8 +189,8 @@ def test_a_sample_goes_from_queued_to_ready_with_its_bill(site, live_now):  # no
     process_queued(site)
     page = c.get(f"/s/{code}").text
     assert "Ateliers Verlibreux SARL" in page and "Ready to post" in page and 'data-pending="no"' in page
-    assert "Every check passed" in page and "coded to Office Supplies" in page
-    assert "confidence 98 % (OCR × fields found)" in page
+    assert "All checks passed" in page and "coded to Office Supplies" in page
+    assert "confidence 98% (OCR × fields found)" in page
     assert "Sent</span>" in page  # the sample's button is gone
     [invoice] = query(site, "SELECT id FROM ap.invoices")
     bill = c.get(f"/s/{code}/bills/{invoice['id']}")
@@ -246,7 +247,7 @@ def test_a_review_card_opens_the_review_page_read_only(site):
     # The review page's own content and design: its stylesheet, not the demo's palette
     assert 'class="decision"' in page and "Extracted data (OCR)" in page and "/static/demo.css" not in page
     assert "The lines and tax don&#39;t add up to the invoice total." in page
-    assert "This is the review page a reviewer uses." in page and "nothing is posted." in page
+    assert "This is the page a reviewer works from." in page and "nothing is posted." in page
     # Read-only: no form, no token, every control inside a disabled fieldset
     assert "<form" not in page and 'name="csrf"' not in page and "<fieldset disabled>" in page
     assert f'<a class="back" href="/s/{code}#invoices">Your invoices</a>' in page
@@ -289,7 +290,7 @@ def test_a_visitors_own_file_is_never_shown_on_the_review_page(site):
         conn.execute("UPDATE ap.demo_uploads SET sample = NULL, kind = 'upload'")
     url = f"/s/{code}/review/{ids['de-eur-wrong-total']}"
     page = c.get(url).text
-    assert "Your own file isn&#39;t shown here" in page and "<img" not in page
+    assert "Your file isn&#39;t shown here" in page and "<img" not in page
     assert c.get(f"{url}/pages/1").status_code == 404
 
 

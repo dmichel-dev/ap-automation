@@ -7,7 +7,7 @@
 <div class="demo">
 <section class="demo-intro">
   <h1>Your demo session</h1>
-  <p class="muted">Session <strong class="demo-code">{{ session.code }}</strong> · this page updates by itself. It opens only in this browser.</p>
+  <p class="muted">Session <strong class="demo-code">{{ session.code }}</strong> · this page updates on its own. It only opens in this browser.</p>
 </section>
 {% if error %}<p class="note error" role="alert">{{ error }}</p>{% endif %}
 
@@ -39,7 +39,7 @@
   <div class="demo-box">
     <p class="demo-box-title">Or by email, as an attachment</p>
     <p class="demo-address"><code id="demo-address">{{ address }}</code> <button class="quiet" type="button" data-copy="demo-address" hidden>Copy</button></p>
-    <p class="muted">Arrives here within a minute or two. The email is deleted with the session.</p>
+    <p class="muted">It shows up here within a minute or two. The email is deleted with the session.</p>
   </div>
   {% endif %}
 </section>

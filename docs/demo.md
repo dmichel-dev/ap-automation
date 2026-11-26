@@ -6,7 +6,7 @@ A visitor tries the whole pipeline at **demo.davidmichel.dev**: one click starts
 
 | Way in | How | OCR cost |
 |---|---|---|
-| **Sample** | Click one of 7 fictional invoices: French (discount), German (total doesn't add up), Spanish (ambiguous date), Arabic (AED), Hindi (INR), and two hosting invoices from the same supplier, the second paid to another bank account | None: each sample has its stored OCR result |
+| **Sample** | Click one of 7 fictional invoices: French (discount), German (total doesn't add up), Spanish (ambiguous date), Arabic (AED), Hindi (INR), and two hosting invoices from the same supplier, the second paid to a different bank account | None: each sample has its stored OCR result |
 | **Upload** | A PDF or image of their own, up to 5 MB and 3 pages | Mistral OCR |
 | **Email** | To `invoices+CODE@davidmichel.dev`, where CODE is the session's 8-letter code shown on the page | Mistral OCR |
 

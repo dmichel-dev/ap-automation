@@ -5,12 +5,12 @@
 <div class="demo">
 <section class="demo-intro">
   <h1>Send an invoice. Watch it become a QuickBooks bill.</h1>
-  <p class="muted">An invoice is read by OCR, checked by fixed rules (totals, tax, dates, duplicates, bank details) and either prepared as a bill or sent to a person for review. You see every step.</p>
+  <p class="muted">Each invoice is read by OCR, checked against fixed rules (totals, tax, dates, duplicates, bank details), then either prepared as a bill or sent to a person for review. You see every step.</p>
 </section>
 
 <section class="demo-compare" aria-label="Before and after automation">
-  <p class="compare-today"><span class="compare-label">Today:</span> supplier invoices land in an inbox or a shared folder. Someone opens each one, types it into the accounting software, and checks the totals, tax and bank details by eye. It's slow, and a changed bank account is easy to miss.</p>
-  <p class="compare-auto"><span class="compare-label">Automated:</span> invoices are collected where they already arrive, read, and checked against fixed rules before anything reaches your books. Clean invoices go straight through. The rest go to a person, with the reason flagged.</p>
+  <p class="compare-today"><span class="compare-label">Today:</span> someone <strong>types each invoice in by hand</strong> and checks totals, tax and bank details by eye. It's slow, and a <strong>changed bank account</strong> is easy to miss.</p>
+  <p class="compare-auto"><span class="compare-label">Automated:</span> invoices are picked up where they arrive and <strong>checked by fixed rules</strong>. Clean ones <strong>go straight through</strong>; the rest go to a person, with the reason.</p>
 </section>
 
 <section class="demo-panel">
@@ -22,11 +22,13 @@
   {% else %}
   <form method="post" action="/start"><button class="go demo-go">Start a demo session</button></form>
   {% endif %}
+  {% if not current %}
   <ul class="demo-facts">
     <li>One click: no account, no sign-in, nothing to type.</li>
     <li>{{ limits.session_minutes }} minutes, up to {{ limits.files_per_session }} files.</li>
     <li>Nothing is posted to QuickBooks: you get the bill it would receive.</li>
   </ul>
+  {% endif %}
 </section>
 
 <section class="demo-section">
