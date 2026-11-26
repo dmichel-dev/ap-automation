@@ -152,21 +152,7 @@ def get_accounting_config() -> accounting.AccountingConfig:
 
 
 def get_demo_limits() -> demo.Limits:
-    s = get_settings()
-    return demo.Limits(
-        enabled=s.demo_enabled,
-        hash_key=s.demo_hash_key.get_secret_value().encode(),
-        session_minutes=s.demo_session_minutes,
-        starts_per_hour=s.demo_starts_per_hour,
-        starts_per_day=s.demo_starts_per_day,
-        active_sessions=s.demo_active_sessions,
-        files_per_session=s.demo_files_per_session,
-        max_file_bytes=s.demo_max_file_bytes,
-        max_pages=s.demo_max_pages,
-        pages_per_day=s.demo_pages_per_day,
-        pages_per_month=s.demo_pages_per_month,
-        emails_per_sender_day=s.demo_emails_per_sender_day,
-    )
+    return get_settings().demo_limits()
 
 
 def get_processing_config() -> processing.Config:

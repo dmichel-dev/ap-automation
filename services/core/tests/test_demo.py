@@ -536,3 +536,14 @@ def test_every_sample_has_its_recorded_result_and_fits_the_limits():
         stored = demo_samples.stored_result(hashlib.sha256(content).hexdigest())
         assert stored is not None and stored.annotation, s.key
         assert demo.check_file(content, LIMITS) == stored.pages
+
+
+def test_demo_limits_come_from_the_environment(monkeypatch):
+    """One definition, read by the core and the demo pages."""
+    from app.config import DemoSettings
+
+    monkeypatch.setenv("DEMO_ENABLED", "true")
+    monkeypatch.setenv("DEMO_HASH_KEY", "k" * 32)
+    monkeypatch.setenv("DEMO_FILES_PER_SESSION", "2")
+    limits = DemoSettings().demo_limits()
+    assert limits.open and limits.files_per_session == 2 and limits.session_minutes == 60
