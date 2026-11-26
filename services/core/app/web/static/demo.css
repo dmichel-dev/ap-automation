@@ -105,7 +105,6 @@ main { padding-top: 32px; }
 .go.demo-go { display: block; width: 100%; min-height: 50px; text-align: center; font-size: 1.0625rem; text-decoration: none; }
 a.go { display: inline-flex; align-items: center; justify-content: center; color: var(--accent-ink); text-decoration: none; }
 .go.demo-go-small { align-self: flex-start; min-height: 44px; padding: 0 18px; font-size: 0.9375rem; }
-.demo-facts { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; color: var(--ink-2); font-size: 0.875rem; }
 
 /* Start page: today versus automated, each led by a small label */
 .demo-compare { display: grid; gap: 12px; margin-top: -8px; }

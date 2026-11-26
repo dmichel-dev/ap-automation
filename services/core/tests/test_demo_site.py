@@ -82,7 +82,7 @@ def site(demo_env):  # noqa: F811
 def test_start_page_starts_and_links_the_privacy_notice_without_listing_the_samples(site):
     r = visitor(site).get("/")
     assert r.status_code == 200
-    assert "Start a demo session" in r.text and 'href="/privacy"' in r.text and "One click: no account" in r.text
+    assert "Start a demo session" in r.text and 'href="/privacy"' in r.text and "demo-facts" not in r.text
     assert "Review: bank details changed? (sent after October)" not in r.text  # the session page lists them
     text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", r.text))
     assert "Today: in many companies, invoices arrive through several channels" in text
@@ -135,7 +135,7 @@ def test_a_browser_with_a_live_session_goes_back_to_it(site):
     again = c.post("/start")
     assert again.headers["location"] == f"/s/{code}" and "set-cookie" not in again.headers
     back = c.get("/").text
-    assert "Back to your session" in back and "demo-facts" not in back  # the start page's facts go
+    assert "Back to your session" in back and "demo-facts" not in back
     assert query(site, "SELECT count(*) AS n FROM ap.demo_sessions")[0]["n"] == 1
 
 

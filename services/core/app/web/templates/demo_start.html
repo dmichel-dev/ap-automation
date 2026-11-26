@@ -23,13 +23,6 @@
   {% else %}
   <form method="post" action="/start"><button class="go demo-go">Start a demo session</button></form>
   {% endif %}
-  {% if not current %}
-  <ul class="demo-facts">
-    <li>One click: no account, no sign-in, nothing to type.</li>
-    <li>{{ limits.session_minutes }} minutes, up to {{ limits.files_per_session }} files.</li>
-    <li>Nothing is posted to QuickBooks: you see the QuickBooks bill it would create.</li>
-  </ul>
-  {% endif %}
 </section>
 
 <section class="demo-section">
