@@ -46,6 +46,7 @@ KEEP_STARTS = timedelta(days=2)  # longer than the daily limit's window
 KEEP_SENDERS_DAYS = 2
 KEEP_DAILY_BUDGET_DAYS = 40  # the month's figure is its own row
 STALE_UPLOAD = timedelta(minutes=1)  # still queued after this: its processing call was missed
+GONE = frozenset({200, 204, 404})  # a delete request's answers that mean the item is gone
 
 
 @dataclass(frozen=True)
@@ -545,8 +546,28 @@ def deletions_due(conn: db.Conn, limit: int = 50) -> list[db.Row]:
     ).fetchall()
 
 
-def deletions_done(conn: db.Conn, channel: str, item_ids: list[str]) -> int:
-    """Deleted (or already gone) in Gmail, Drive or n8n: off the list."""
-    return conn.execute(
-        "DELETE FROM demo_deletions WHERE channel = %s AND item_id = ANY(%s)", (channel, item_ids)
+@dataclass(frozen=True)
+class DeletionResult:
+    item_id: str
+    status_code: int  # the service's answer to the delete request; 0: none (network error)
+
+
+def deletions_done(conn: db.Conn, channel: str, results: list[DeletionResult]) -> dict[str, int]:
+    """Deleted now, or already gone (404): off the list. Any other answer: kept for the next
+    clean-up, and logged."""
+    gone = [r.item_id for r in results if r.status_code in GONE]
+    failed = sorted({r.status_code for r in results if r.status_code not in GONE})
+    removed = conn.execute(
+        "DELETE FROM demo_deletions WHERE channel = %s AND item_id = ANY(%s)", (channel, gone)
     ).rowcount
+    kept = len(results) - len(gone)
+    if kept:
+        db.log(
+            conn,
+            step="demo",
+            level="warning",
+            message="demo deletion failed; the next clean-up tries again",
+            details={"channel": channel, "items": kept, "status_codes": failed},
+            scope="demo",
+        )
+    return {"removed": removed, "kept": kept}

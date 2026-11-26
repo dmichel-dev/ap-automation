@@ -25,6 +25,7 @@ BUILDERS = (
     "build_e2e_test",
     "build_e2e_cleanup",
     "build_demo_processing",
+    "build_demo_cleanup",
 )
 Box = tuple[int, int, int, int]  # x, y, width, height
 GAP = 20  # minimum free space between two nodes

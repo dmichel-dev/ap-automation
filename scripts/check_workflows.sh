@@ -10,7 +10,7 @@ for pair in build_email_intake.py:ap-email-intake.json build_post_qbo.py:ap-post
     build_run_now.py:ap-run-now.json build_error_log.py:ap-error-log.json \
     build_daily_summary.py:ap-daily-summary.json build_e2e_test.py:ap-daily-e2e-test.json \
     build_e2e_cleanup.py:ap-e2e-quickbooks-cleanup.json build_drive_intake.py:ap-drive-intake.json \
-    build_demo_processing.py:ap-demo-processing.json; do
+    build_demo_processing.py:ap-demo-processing.json build_demo_cleanup.py:ap-demo-cleanup.json; do
   if ! python3 "n8n/${pair%%:*}" | cmp -s - "n8n/workflows/${pair#*:}"; then
     echo "n8n/workflows/${pair#*:} differs from the output of n8n/${pair%%:*}"; status=1
   fi

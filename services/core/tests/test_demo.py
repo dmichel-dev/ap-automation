@@ -536,10 +536,27 @@ def test_expired_sessions_go_with_their_invoices_and_files(demo_env, live_now, m
     logs = query(url, "SELECT count(*) AS n FROM ap.processing_log WHERE scope = 'demo'")[0]["n"]
     assert logs > 0  # the audit trail stays (it never holds document content)
 
-    for channel, item in (("email", "gmail-msg-1"), ("n8n", "7")):
-        done = TestClient(app).post("/demo/deletions/done", headers=AUTH, json={"channel": channel, "item_ids": [item]})
-        assert done.json() == {"removed": 1}
+    for channel, item, answer in (("email", "gmail-msg-1", 204), ("n8n", "7", 200)):
+        done = deleted(channel, item, answer)
+        assert done.json() == {"removed": 1, "kept": 0}
     assert query(url, "SELECT count(*) AS n FROM ap.demo_deletions")[0]["n"] == 0
+
+
+def deleted(channel: str, item_id: str, status_code: int):
+    body = {"channel": channel, "results": [{"item_id": item_id, "status_code": status_code}]}
+    return TestClient(app).post("/demo/deletions/done", headers=AUTH, json=body)
+
+
+@pytest.mark.parametrize(("answer", "gone"), [(204, True), (404, True), (0, False), (403, False), (500, False)])
+def test_what_a_delete_answer_means(cfg, answer, gone):
+    with db.connect(cfg.database_url) as conn:
+        demo.delete_soon(conn, "email", "m9")
+    assert deleted("email", "m9", answer).json() == {"removed": int(gone), "kept": int(not gone)}
+    left = query(cfg.database_url, "SELECT count(*) AS n FROM ap.demo_deletions")[0]["n"]
+    assert left == (0 if gone else 1)  # kept: the next clean-up tries again
+    logs = query(cfg.database_url, "SELECT details FROM ap.processing_log WHERE level = 'warning'")
+    expected = [] if gone else [{"channel": "email", "items": 1, "status_codes": [answer]}]
+    assert [log["details"] for log in logs] == expected
 
 
 def test_a_run_shared_by_two_sessions_goes_with_the_first_that_ends(clean_db):
@@ -567,8 +584,7 @@ def test_uploads_still_queued_after_a_minute_are_swept(demo_env, live_now):
 
 
 def test_only_known_channels_go_off_the_deletion_list(cfg):
-    r = TestClient(app).post("/demo/deletions/done", headers=AUTH, json={"channel": "s3", "item_ids": ["x"]})
-    assert r.status_code == 422
+    assert deleted("s3", "x", 204).status_code == 422
 
 
 def test_every_sample_has_its_recorded_result_and_fits_the_limits():

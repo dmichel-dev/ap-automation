@@ -25,7 +25,7 @@ Public demo (demo.py; the demo page queues files, n8n processes them and runs th
   POST /demo/uploads/{id}/process     a queued sample or upload → processed in its session (scope demo)
   POST /demo/cleanup                  expired sessions deleted with their invoices → what to delete in
                                       Gmail, Drive and n8n, and the uploads whose processing call was missed
-  POST /demo/deletions/done           deleted in Gmail, Drive or n8n (or already gone): off the list
+  POST /demo/deletions/done           the answers to the delete requests: gone → off the list, else retried
 
 Accounting and bank (n8n does the QuickBooks/Plaid calls; the core keeps state and rules):
   GET  /invoices/{id}/file               original file, for the accounting attachment
@@ -995,13 +995,20 @@ def demo_cleanup(cfg: AcctCfg) -> JsonDict:
     }
 
 
+class DemoDeletionResult(BaseModel):
+    item_id: str = Field(min_length=1, max_length=200)
+    status_code: int = 0  # the service's HTTP answer to the delete request; 0: none
+
+
 class DemoDeleted(BaseModel):
     channel: Literal["email", "drive", "n8n"]
-    item_ids: list[str] = Field(min_length=1, max_length=100)
+    results: list[DemoDeletionResult] = Field(min_length=1, max_length=100)
 
 
 @app.post("/demo/deletions/done", dependencies=Auth)
 def demo_deletions_done(body: DemoDeleted, cfg: AcctCfg) -> JsonDict:
-    """Deleted in Gmail, Drive or n8n (or already gone there): off the clean-up's list."""
+    """Gmail's, Drive's or n8n's answers to the clean-up's delete requests: the core decides which
+    items are gone (off the list) and which are tried again."""
+    results = [demo.DeletionResult(r.item_id, r.status_code) for r in body.results]
     with db.connect(cfg.database_url) as conn:
-        return {"removed": demo.deletions_done(conn, body.channel, body.item_ids)}
+        return dict(demo.deletions_done(conn, body.channel, results))

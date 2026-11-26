@@ -1,0 +1,537 @@
+{
+  "active": false,
+  "connections": {
+    "Answered?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "One item per deletion",
+            "type": "main"
+          },
+          {
+            "index": 0,
+            "node": "One item per missed file",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Stop: no answer",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Clean up (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Answered?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Delete email (Gmail API)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Report answer (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Delete run record (n8n API)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Report answer (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Every 5 minutes": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Clean up (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "One item per deletion": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Which service?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "One item per missed file": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Process missed file",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Which service?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Delete email (Gmail API)",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Delete run record (n8n API)",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "AP – Demo clean-up",
+  "nodes": [
+    {
+      "id": "note-demo-clean-up",
+      "name": "Note: Demo clean-up",
+      "parameters": {
+        "color": 5,
+        "content": "## Demo clean-up\nEvery 5 minutes, what a **public demo session** leaves behind is deleted once it ends (60 minutes after it starts).\n\nThe **core** deletes the session's invoices, files and data, and lists what is held elsewhere: its Gmail messages and the records of the n8n runs that handled its files. n8n deletes them **permanently** (no trash) and reports each answer; the core decides what is gone and what is tried again. A refused demo email is listed at once.",
+        "height": 350,
+        "width": 1620
+      },
+      "position": [
+        -40,
+        -150
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-ask-the-core",
+      "name": "Note: Ask the core",
+      "parameters": {
+        "color": 7,
+        "content": "## Ask the core\nEnded sessions are deleted in the database; the answer lists what to delete elsewhere and the files still waiting.",
+        "height": 350,
+        "width": 660
+      },
+      "position": [
+        -40,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-delete-permanently",
+      "name": "Note: Delete permanently",
+      "parameters": {
+        "color": 7,
+        "content": "## Delete permanently\nGmail API: the message is deleted, not moved to the trash. n8n API: the run record and its stored files. The **status code** goes to the core (404 = already gone).",
+        "height": 550,
+        "width": 900
+      },
+      "position": [
+        680,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-missed-files",
+      "name": "Note: Missed files",
+      "parameters": {
+        "color": 7,
+        "content": "## Missed files\nA file still queued a minute after it was sent (the demo page's call didn't reach n8n) is processed now, one run each.",
+        "height": 350,
+        "width": 420
+      },
+      "position": [
+        680,
+        850
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-no-answer",
+      "name": "Note: No answer",
+      "parameters": {
+        "color": 3,
+        "content": "## No answer\nThe core did not answer: the run fails (logged by the error workflow); the next run tries again.",
+        "height": 350,
+        "width": 420
+      },
+      "position": [
+        -40,
+        850
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "every-5-minutes",
+      "name": "Every 5 minutes",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "position": [
+        0,
+        400
+      ],
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "clean-up-core",
+      "maxTries": 3,
+      "name": "Clean up (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "url": "http://core:8000/demo/cleanup"
+      },
+      "position": [
+        240,
+        400
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "answered",
+      "name": "Answered?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.statusCode === 200 }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        480,
+        400
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "one-item-per-deletion",
+      "name": "One item per deletion",
+      "parameters": {
+        "jsCode": "// One item per thing to delete ({ channel, item_id }); none: the run ends here\nreturn $input.first().json.body.deletions.map(d => ({ json: d }));",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        720,
+        400
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "which-service",
+      "name": "Which service?",
+      "parameters": {
+        "options": {},
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.channel === 'email' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "email",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $json.channel === 'n8n' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                }
+              },
+              "outputKey": "n8n",
+              "renameOutput": true
+            }
+          ]
+        }
+      },
+      "position": [
+        960,
+        400
+      ],
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2
+    },
+    {
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail – david@davidmichel.dev"
+        }
+      },
+      "id": "delete-email-gmail-api",
+      "maxTries": 3,
+      "name": "Delete email (Gmail API)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "method": "DELETE",
+        "nodeCredentialType": "gmailOAuth2",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchInterval": 200,
+              "batchSize": 1
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "url": "=https://gmail.googleapis.com/gmail/v1/users/me/messages/{{ encodeURIComponent($json.item_id) }}"
+      },
+      "position": [
+        1200,
+        400
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "credentials": {
+        "n8nApi": {
+          "name": "n8n API (this instance)"
+        }
+      },
+      "id": "delete-run-record-n8n-api",
+      "maxTries": 3,
+      "name": "Delete run record (n8n API)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "method": "DELETE",
+        "nodeCredentialType": "n8nApi",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchInterval": 200,
+              "batchSize": 1
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "url": "=http://localhost:5678/api/v1/executions/{{ encodeURIComponent($json.item_id) }}"
+      },
+      "position": [
+        1200,
+        600
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "report-answer-core",
+      "maxTries": 3,
+      "name": "Report answer (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ channel: $('Which service?').item.json.channel, results: [{ item_id: $('Which service?').item.json.item_id, status_code: $json.statusCode ?? 0 }] }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "http://core:8000/demo/deletions/done"
+      },
+      "position": [
+        1440,
+        400
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "one-item-per-missed-file",
+      "name": "One item per missed file",
+      "parameters": {
+        "jsCode": "// One item per file still queued after a minute; none: the run ends here\nreturn $input.first().json.body.stale_uploads.map(id => ({ json: { upload_id: id } }));",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        720,
+        1000
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "process-missed-file",
+      "name": "Process missed file",
+      "parameters": {
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": false
+        },
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "apDemoProcess001"
+        }
+      },
+      "position": [
+        960,
+        1000
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2
+    },
+    {
+      "id": "stop-no-answer",
+      "name": "Stop: no answer",
+      "parameters": {
+        "errorMessage": "={{ 'demo clean-up: the core answered ' + ($json.statusCode ?? 'nothing') }}"
+      },
+      "position": [
+        0,
+        1000
+      ],
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1
+    }
+  ],
+  "pinData": {},
+  "settings": {
+    "errorWorkflow": "apErrorLog000001",
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "timezone": "Europe/Paris"
+  }
+}
