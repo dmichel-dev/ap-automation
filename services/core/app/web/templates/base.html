@@ -3,13 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}Review{% endblock %} | AP review</title>
+<title>{% block title %}Review{% endblock %} | {% block site %}AP review{% endblock %}</title>
 <link rel="icon" href="/static/favicon.svg">
 <link rel="stylesheet" href="/static/app.css">
-<script src="/static/app.js" defer></script>
+{% block scripts %}<script src="/static/app.js" defer></script>{% endblock %}
 </head>
 <body>
 <header class="top">
+  {% block header %}
   <a class="brand" href="/items">AP review</a>
   {% if viewer %}
   <div class="who">
@@ -21,6 +22,7 @@
     <button class="quiet">Sign out</button>
   </form>
   {% endif %}
+  {% endblock %}
 </header>
 <main>{% block main %}{% endblock %}</main>
 <footer class="foot"><a href="https://davidmichel.dev">© David Michel</a></footer>

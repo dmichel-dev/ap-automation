@@ -17,6 +17,8 @@ from urllib.parse import urlsplit
 from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings
 
+from ..config import DemoSettings
+
 Listener = Literal["internal", "public"]
 Environment = Literal["production", "test"]
 LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "[::1]"})
@@ -28,6 +30,19 @@ def _origin_parts(origin: str) -> tuple[str, str]:
     if parts.scheme not in ("http", "https") or not parts.netloc or parts.path or parts.query or parts.fragment:
         raise ValueError(f"not an origin (scheme://host[:port]): {origin!r}")
     return parts.scheme, parts.netloc
+
+
+def _origins(value: str) -> tuple[str, ...]:
+    return tuple(o.strip().rstrip("/") for o in value.split(",") if o.strip())
+
+
+def _hosts(origins: tuple[str, ...]) -> frozenset[str]:
+    """Host header values accepted (the host[:port] of each origin)."""
+    return frozenset(_origin_parts(o)[1] for o in origins)
+
+
+def _addresses(value: str) -> frozenset[str]:
+    return frozenset(p.strip() for p in value.split(",") if p.strip())
 
 
 def _is_loopback(netloc: str) -> bool:
@@ -50,16 +65,15 @@ class WebSettings(BaseSettings):
 
     @cached_property
     def origins(self) -> tuple[str, ...]:
-        return tuple(o.strip().rstrip("/") for o in self.review_origins.split(",") if o.strip())
+        return _origins(self.review_origins)
 
     @cached_property
     def hosts(self) -> frozenset[str]:
-        """Host header values accepted (the host[:port] of each origin)."""
-        return frozenset(_origin_parts(o)[1] for o in self.origins)
+        return _hosts(self.origins)
 
     @cached_property
     def trusted_proxies(self) -> frozenset[str]:
-        return frozenset(p.strip() for p in self.review_trusted_proxies.split(",") if p.strip())
+        return _addresses(self.review_trusted_proxies)
 
     @model_validator(mode="after")
     def _consistent(self) -> "WebSettings":
@@ -79,4 +93,37 @@ class WebSettings(BaseSettings):
             ip_address(p)  # ValueError if not an IP address
         if not 0 < self.confidence_threshold <= self.review_confidence_high <= 1:
             raise ValueError("confidence bands: 0 < CONFIDENCE_THRESHOLD <= REVIEW_CONFIDENCE_HIGH <= 1")
+        return self
+
+
+class DemoWebSettings(DemoSettings):
+    """The public demo pages (web/demo_site.py): behind the reverse proxy over HTTPS. A loopback http
+    origin is accepted for running the pages on a workstation. The demo's limits come from DEMO_*."""
+
+    ap_database_url: SecretStr
+    demo_origins: str  # comma-separated, e.g. https://demo.example.com
+    demo_trusted_proxies: str = ""  # proxy addresses whose X-Forwarded-For names the client
+    intake_email_alias: str = "invoices@davidmichel.dev"  # the demo address is its +CODE form
+
+    @cached_property
+    def origins(self) -> tuple[str, ...]:
+        return _origins(self.demo_origins)
+
+    @cached_property
+    def hosts(self) -> frozenset[str]:
+        return _hosts(self.origins)
+
+    @cached_property
+    def trusted_proxies(self) -> frozenset[str]:
+        return _addresses(self.demo_trusted_proxies)
+
+    @model_validator(mode="after")
+    def _consistent(self) -> "DemoWebSettings":
+        if not self.origins:
+            raise ValueError("DEMO_ORIGINS is empty")
+        for scheme, netloc in (_origin_parts(o) for o in self.origins):
+            if scheme != "https" and not _is_loopback(netloc):
+                raise ValueError("the demo pages serve HTTPS origins only (or loopback, on a workstation)")
+        for p in self.trusted_proxies:
+            ip_address(p)  # ValueError if not an IP address
         return self

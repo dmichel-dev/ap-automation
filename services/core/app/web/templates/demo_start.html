@@ -1,0 +1,49 @@
+{% extends "demo_base.html" %}
+{% block title %}Accounts payable, from inbox to QuickBooks{% endblock %}
+{% block main %}
+<div class="demo">
+<section class="demo-intro">
+  <h1>Send an invoice. Watch it become a QuickBooks bill.</h1>
+  <p class="muted">An invoice is read by OCR, checked by fixed rules (totals, tax, dates, duplicates, bank details) and either prepared as a bill or sent to a person for review. You see every step.</p>
+</section>
+
+<section class="demo-panel">
+  {% if error %}<p class="note error" role="alert">{{ error }}</p>{% endif %}
+  {% if current %}
+  <a class="go demo-go" href="/s/{{ current.code }}">Back to your session</a>
+  {% elif paused %}
+  <p class="note" role="status">The demo is paused for now. Please come back later.</p>
+  {% else %}
+  <form method="post" action="/start"><button class="go demo-go">Start a demo session</button></form>
+  {% endif %}
+  <ul class="demo-facts">
+    <li>One click: no account, no sign-in, nothing to type.</li>
+    <li>{{ limits.session_minutes }} minutes, up to {{ limits.files_per_session }} files.</li>
+    <li>Nothing is posted to QuickBooks: you get the bill it would receive.</li>
+  </ul>
+</section>
+
+<section class="demo-section">
+  <h2>What happens to each invoice</h2>
+  <ol class="demo-steps">
+    <li><span class="step-no" aria-hidden="true">1</span><div><p class="step-name">Received</p><p class="muted">From this page or by email, picked up by an n8n workflow.</p></div></li>
+    <li><span class="step-no" aria-hidden="true">2</span><div><p class="step-name">Read</p><p class="muted">Mistral OCR turns it into structured data, in any language or script.</p></div></li>
+    <li><span class="step-no" aria-hidden="true">3</span><div><p class="step-name">Checked</p><p class="muted">By deterministic code, never by the AI: the document can't talk its way through.</p></div></li>
+    <li><span class="step-no" aria-hidden="true">4</span><div><p class="step-name">Routed</p>
+      <p class="demo-badges"><span class="badge tone-ready">Ready to post</span> <span class="badge tone-review">Needs review</span> <span class="badge tone-closed">Rejected</span></p></div></li>
+  </ol>
+</section>
+
+<section class="demo-section">
+  <h2>Sample invoices to try</h2>
+  <p class="muted">Fictional companies, six languages (the Arabic and Hindi invoices also print English), three scripts, four currencies. Send them from your session, or bring your own invoice.</p>
+  <ul class="demo-samples-short">
+    {% for s in samples %}<li><span>{{ s.title }}</span><span class="muted">{{ s.shows }}</span></li>{% endfor %}
+  </ul>
+</section>
+
+<p class="note"><strong>Use fictional invoices only.</strong> Your own files are read by Mistral (OCR) and deleted with the session. They are never shown back or shared. <a href="/privacy">Privacy notice</a></p>
+
+<p class="muted demo-small">Want this for your accounts payable? <a href="https://davidmichel.dev">davidmichel.dev</a></p>
+</div>
+{% endblock %}

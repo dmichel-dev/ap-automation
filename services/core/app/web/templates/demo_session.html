@@ -1,0 +1,54 @@
+{% extends "demo_base.html" %}
+{% block title %}Your demo session{% endblock %}
+{% block header_right %}
+<span class="who"><span class="who-name">{{ minutes_left }} min left</span><span class="who-role">{{ used }} of {{ limits.files_per_session }} files</span></span>
+{% endblock %}
+{% block main %}
+<div class="demo">
+<section class="demo-intro">
+  <h1>Your demo session</h1>
+  <p class="muted">Session <strong class="demo-code">{{ session.code }}</strong> · this page updates by itself. It opens only in this browser.</p>
+</section>
+{% if error %}<p class="note error" role="alert">{{ error }}</p>{% endif %}
+
+<section class="demo-section" aria-labelledby="send-title">
+  <h2 id="send-title">Send an invoice</h2>
+  {% if full %}<p class="note" role="status">This session has used all its files. Its results stay here until it ends.</p>{% endif %}
+  <div class="demo-box">
+    <p class="demo-box-title">A sample, in one tap</p>
+    <ul class="demo-samples">
+      {% for sample, sent in samples %}
+      <li>
+        <div><p class="sample-title">{{ sample.title }}</p><p class="muted">{{ sample.shows }}</p></div>
+        {% if sent %}<span class="muted">Sent</span>
+        {% elif not full %}<form method="post" action="/s/{{ session.code }}/samples/{{ sample.key }}"><button class="send">Send</button></form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  {% if not full %}
+  <form class="demo-box demo-upload" method="post" action="/s/{{ session.code }}/uploads" enctype="multipart/form-data">
+    <label for="upload">Your own invoice</label>
+    <input id="upload" name="file" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.tif,.tiff,application/pdf,image/*" required>
+    <p class="muted">PDF, PNG, JPEG, WebP or TIFF · up to {{ (limits.max_file_bytes / 1048576) | round | int }} MB and {{ limits.max_pages }} pages · fictional data only.</p>
+    <button class="send">Send the file</button>
+  </form>
+
+  <div class="demo-box">
+    <p class="demo-box-title">Or by email, as an attachment</p>
+    <p class="demo-address"><code id="demo-address">{{ address }}</code> <button class="quiet" type="button" data-copy="demo-address" hidden>Copy</button></p>
+    <p class="muted">Arrives here within a minute or two. The email is deleted with the session.</p>
+  </div>
+  {% endif %}
+</section>
+
+<section class="demo-section" aria-labelledby="invoices-title" id="invoices">
+  <h2 id="invoices-title">Your invoices</h2>
+  <div id="demo-items" data-refresh="/s/{{ session.code }}/items">{% include "demo_items.html" %}</div>
+</section>
+
+<p class="note quiet-note">Everything in this session is deleted when it ends: files, emails and results. The decisions above are made by fixed rules in code; the AI only reads the document. <a href="/privacy">Privacy notice</a></p>
+</div>
+{% endblock %}

@@ -1,0 +1,292 @@
+"""The public demo pages: one-click start, the session page (cookie AND code), samples and uploads
+queued, the cards after processing, the bill preview (own session only), refusals, the privacy
+notice, the footer and the security headers. Real Postgres; processing by the core's own endpoint."""
+
+import re
+from typing import Any
+
+import pytest
+from app.main import app as core_app
+from app.web.demo_site import DEMO_CSP, SESSION_COOKIE, create_app, router
+from app.web.guard import SECURITY_HEADERS
+from app.web.settings import DemoWebSettings
+from fastapi.responses import FileResponse
+from fastapi.routing import APIRoute
+from fastapi.testclient import TestClient
+from pydantic import ValidationError
+
+from .conftest import AUTH, query
+from .test_demo import LIMITS, UPLOAD, demo_env, live_now, pdf_with_pages  # noqa: F401  (fixtures)
+from .test_processing import env  # noqa: F401  (fixture)
+
+ORIGIN = "https://demo.test"
+FOOTER = '<a href="https://davidmichel.dev">© David Michel</a>'
+
+
+def site_settings(url: str, **overrides: Any) -> DemoWebSettings:
+    values: dict[str, Any] = {
+        "ap_database_url": url,
+        "demo_origins": ORIGIN,
+        "demo_enabled": True,
+        "demo_hash_key": LIMITS.hash_key.decode(),
+    } | overrides
+    return DemoWebSettings(**values)
+
+
+def visitor(url: str, peer: str = "203.0.113.9", **overrides) -> TestClient:
+    """A browser on the demo: sends Origin, keeps cookies, doesn't follow redirects."""
+    return TestClient(
+        create_app(site_settings(url, **overrides)),
+        base_url=ORIGIN,
+        headers={"Origin": ORIGIN},
+        client=(peer, 50000),
+        follow_redirects=False,
+    )
+
+
+def start(c: TestClient) -> str:
+    r = c.post("/start")
+    assert r.status_code == 303, r.text
+    code = r.headers["location"].removeprefix("/s/")
+    assert re.fullmatch(r"[a-z2-9]{8}", code)
+    return code
+
+
+def process_queued(url: str) -> None:
+    """What the workflow does: process every queued file through the core."""
+    for row in query(url, "SELECT id FROM ap.demo_uploads WHERE status = 'queued' ORDER BY id"):
+        r = TestClient(core_app).post(f"/demo/uploads/{row['id']}/process", headers=AUTH, json={})
+        assert r.status_code == 200, r.text
+
+
+@pytest.fixture
+def site(demo_env):  # noqa: F811
+    _state, _pcfg, cfg = demo_env
+    return cfg.database_url
+
+
+# =====================================================================================
+# Start
+# =====================================================================================
+def test_start_page_lists_the_samples_and_links_the_privacy_notice(site):
+    r = visitor(site).get("/")
+    assert r.status_code == 200
+    assert "Start a demo session" in r.text and 'href="/privacy"' in r.text
+    assert "Review: bank details changed? (sent after October)" in r.text
+    assert r.text.count("<li><span>") == 7
+
+
+def test_one_click_starts_a_session_with_a_secure_cookie(site):
+    c = visitor(site)
+    r = c.post("/start")
+    assert r.status_code == 303
+    cookie = r.headers["set-cookie"]
+    assert cookie.startswith(f"{SESSION_COOKIE}=") and "HttpOnly" in cookie and "Secure" in cookie
+    assert "samesite=strict" in cookie.lower() and "Path=/" in cookie and "Domain" not in cookie
+    page = c.get(r.headers["location"])
+    assert page.status_code == 200 and "Your demo session" in page.text
+    assert "invoices+" + r.headers["location"].removeprefix("/s/") + "@davidmichel.dev" in page.text
+
+
+def test_a_browser_with_a_live_session_goes_back_to_it(site):
+    c = visitor(site)
+    code = start(c)
+    again = c.post("/start")
+    assert again.headers["location"] == f"/s/{code}" and "set-cookie" not in again.headers
+    assert "Back to your session" in c.get("/").text
+    assert query(site, "SELECT count(*) AS n FROM ap.demo_sessions")[0]["n"] == 1
+
+
+def test_the_code_alone_opens_nothing(site):
+    code = start(visitor(site))
+    stranger = visitor(site, peer="198.51.100.20")
+    r = stranger.get(f"/s/{code}")
+    assert r.status_code == 404 and "Start a new demo session" in r.text
+    assert stranger.get(f"/s/{code}/items").status_code == 404
+    assert stranger.post(f"/s/{code}/samples/fr-eur-discount").status_code == 404
+    assert query(site, "SELECT count(*) AS n FROM ap.demo_uploads")[0]["n"] == 0
+
+
+def test_another_sessions_cookie_does_not_open_this_page(site):
+    first, second = visitor(site), visitor(site, peer="198.51.100.21")
+    code = start(first)
+    start(second)
+    assert second.get(f"/s/{code}").status_code == 404
+
+
+def test_a_cross_site_start_is_refused(site):
+    evil = TestClient(create_app(site_settings(site)), base_url=ORIGIN, headers={"Origin": "https://evil.test"})
+    assert evil.post("/start").status_code == 403
+    assert query(site, "SELECT count(*) AS n FROM ap.demo_sessions")[0]["n"] == 0
+
+
+def test_too_many_starts_from_one_address(site):
+    for _ in range(LIMITS.starts_per_hour):
+        start(visitor(site))  # a new browser each time, same address
+    r = visitor(site).post("/start")
+    assert r.status_code == 429 and int(r.headers["retry-after"]) > 0
+    assert "Too many demo sessions" in r.text
+
+
+def test_paused_demo_offers_no_start(site):
+    c = visitor(site, demo_enabled=False)
+    assert "The demo is paused" in c.get("/").text
+    assert c.post("/start").status_code == 503
+
+
+# =====================================================================================
+# Samples, uploads, cards
+# =====================================================================================
+def test_a_sample_goes_from_queued_to_ready_with_its_bill(site, live_now):  # noqa: F811
+    c = visitor(site)
+    code = start(c)
+    assert c.post(f"/s/{code}/samples/fr-eur-discount").status_code == 303
+    queued = c.get(f"/s/{code}/items").text
+    assert "In progress" in queued and 'data-pending="yes"' in queued
+
+    process_queued(site)
+    page = c.get(f"/s/{code}").text
+    assert "Ateliers Verlibreux SARL" in page and "Ready to post" in page and 'data-pending="no"' in page
+    assert "Every check passed" in page and "coded to Office Supplies" in page
+    assert "confidence 98 % (OCR × fields found)" in page
+    assert "Sent</span>" in page  # the sample's button is gone
+    [invoice] = query(site, "SELECT id FROM ap.invoices")
+    bill = c.get(f"/s/{code}/bills/{invoice['id']}")
+    assert bill.status_code == 200
+    assert "existing vendor" in bill.text and "AV-2026-0147" in bill.text and "1,598.61 EUR" in bill.text
+    assert "nothing is sent" in bill.text and "&#34;DocNumber&#34;: &#34;AV-2026-0147&#34;" in bill.text
+
+
+def test_a_review_card_says_why_in_the_review_page_words(site):
+    c = visitor(site)
+    code = start(c)
+    c.post(f"/s/{code}/samples/de-eur-wrong-total")
+    process_queued(site)
+    page = c.get(f"/s/{code}").text
+    assert "Needs review" in page and "The lines and tax don&#39;t add up to the invoice total." in page
+    assert "total 875.13 ≠ lines + adjustments + tax 865.13" in page
+    assert "Sent to review: Total doesn&#39;t add up" in page and "See the bill preview" not in page
+
+
+def test_a_bill_of_another_session_is_not_found(site):
+    first, second = visitor(site), visitor(site, peer="198.51.100.22")
+    first_code, second_code = start(first), start(second)
+    first.post(f"/s/{first_code}/samples/us-hosting-october")
+    process_queued(site)
+    [invoice] = query(site, "SELECT id FROM ap.invoices")
+    assert first.get(f"/s/{first_code}/bills/{invoice['id']}").status_code == 200
+    assert second.get(f"/s/{second_code}/bills/{invoice['id']}").status_code == 404
+    assert second.get(f"/s/{second_code}/bills/not-a-uuid").status_code == 422
+
+
+def test_unknown_sample_is_not_found(site):
+    c = visitor(site)
+    code = start(c)
+    assert c.post(f"/s/{code}/samples/no-such-sample").status_code == 404
+
+
+def test_upload_is_queued_with_its_bytes_only_until_processed(site):
+    c = visitor(site)
+    code = start(c)
+    r = c.post(f"/s/{code}/uploads", files={"file": ("my-invoice.pdf", UPLOAD, "application/pdf")})
+    assert r.status_code == 303, r.text
+    [row] = query(site, "SELECT kind, file_name, size, status FROM ap.demo_uploads")
+    assert (row["kind"], row["file_name"], row["size"], row["status"]) == (
+        "upload",
+        "my-invoice.pdf",
+        len(UPLOAD),
+        "queued",
+    )
+    assert "my-invoice.pdf" in c.get(f"/s/{code}").text
+
+
+def test_upload_over_the_page_limit_is_refused_with_the_reason(site):
+    c = visitor(site)
+    code = start(c)
+    r = c.post(
+        f"/s/{code}/uploads", files={"file": ("long.pdf", pdf_with_pages(LIMITS.max_pages + 1), "application/pdf")}
+    )
+    assert r.status_code == 422 and "more pages than the demo accepts" in r.text
+    assert query(site, "SELECT count(*) AS n FROM ap.demo_uploads")[0]["n"] == 0
+
+
+def test_a_body_larger_than_the_file_limit_is_refused_before_it_is_read(site):
+    c = visitor(site)
+    code = start(c)
+    big = b"%PDF-1.4\n" + b"0" * (LIMITS.max_file_bytes + 70 * 1024)
+    assert c.post(f"/s/{code}/uploads", files={"file": ("big.pdf", big, "application/pdf")}).status_code == 413
+
+
+def test_a_full_session_offers_no_more_sends(site):
+    c = visitor(site, demo_files_per_session=1)
+    code = start(c)
+    c.post(f"/s/{code}/samples/us-hosting-october")
+    page = c.get(f"/s/{code}").text
+    assert "used all its files" in page and 'action="/s/' + code + "/samples/" not in page
+    refused = c.post(f"/s/{code}/samples/fr-eur-discount")
+    assert refused.status_code == 409 and "used all its files" in refused.text
+
+
+# =====================================================================================
+# Every page
+# =====================================================================================
+def test_every_page_has_the_footer_and_the_security_headers(site):
+    c = visitor(site)
+    code = start(c)
+    c.post(f"/s/{code}/samples/us-hosting-october")
+    process_queued(site)
+    [invoice] = query(site, "SELECT id FROM ap.invoices")
+    pages = ["/", "/privacy", f"/s/{code}", f"/s/{code}/bills/{invoice['id']}", "/s/zzzzzzzz"]
+    for path in pages:
+        r = c.get(path)
+        assert FOOTER in r.text, path
+        assert re.search(r"<script(?![^>]*\bsrc=)", r.text) is None and " style=" not in r.text, path
+        expected = SECURITY_HEADERS | {"Content-Security-Policy": DEMO_CSP}
+        for name, value in expected.items():
+            assert r.headers.get(name) == value, (path, name)
+        assert "connect-src 'self'" in r.headers["content-security-policy"]
+
+
+def test_privacy_notice_names_the_processor_the_deletion_and_the_contact(site):
+    text = visitor(site).get("/privacy").text
+    assert "Mistral AI" in text and "60 minutes" in text and "mailto:david@davidmichel.dev" in text
+
+
+def test_no_page_sends_a_document_back():
+    """The pages show processing results only: no route serves a file."""
+    routes = [r for r in router.routes if isinstance(r, APIRoute)]
+    assert len(routes) == len(router.routes)
+    paths = {r.path for r in routes}
+    assert paths == {
+        "/health",
+        "/",
+        "/start",
+        "/s/{code}",
+        "/s/{code}/items",
+        "/s/{code}/samples/{key}",
+        "/s/{code}/uploads",
+        "/s/{code}/bills/{invoice_id}",
+        "/privacy",
+    }
+    assert all(r.response_class is not FileResponse for r in routes)
+
+
+def test_unknown_host_is_refused(site):
+    c = TestClient(create_app(site_settings(site)), base_url="https://other.test")
+    assert c.get("/").status_code == 400
+
+
+@pytest.mark.parametrize("origins", ["http://demo.example.com", ""])
+def test_settings_refuse_plain_http_and_empty_origins(origins):
+    with pytest.raises(ValidationError):
+        DemoWebSettings(ap_database_url="postgresql://x@y/z", demo_origins=origins)
+
+
+def test_loopback_http_origin_is_accepted_for_a_workstation():
+    assert DemoWebSettings(ap_database_url="postgresql://x@y/z", demo_origins="http://localhost:8082").hosts == {
+        "localhost:8082"
+    }
+
+
+def test_session_limits_follow_the_settings(site):
+    assert create_app(site_settings(site, demo_files_per_session=2)).state.limits.files_per_session == 2

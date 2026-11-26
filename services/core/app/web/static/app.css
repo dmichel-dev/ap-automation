@@ -281,3 +281,88 @@ textarea { resize: vertical; }
 }
 .narrow form input { margin-top: 6px; font-weight: 400; }
 .card p + p, .card .muted + form { margin-top: 12px; }
+
+/* ---- Public demo pages (web/demo_site.py): the review page's tokens, one column, mobile first ---- */
+.brand-sub { color: var(--ink-2); font-weight: 400; }
+.top-link { font-size: 0.8125rem; }
+.demo { max-width: 680px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+.demo-intro { display: flex; flex-direction: column; gap: 10px; }
+.demo-intro h1 { font-size: 1.75rem; line-height: 1.2; }
+.demo-section { display: flex; flex-direction: column; gap: 12px; }
+.demo-section ul, .demo-section ol { margin: 0; }
+.demo-small { font-size: 0.8125rem; }
+.demo-code { color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
+.demo-panel, .demo-box { padding: 16px 18px; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius-m); display: flex; flex-direction: column; gap: 12px; }
+.demo-panel form { margin: 0; }
+.go.demo-go { display: block; width: 100%; min-height: 48px; text-align: center; font-size: 1.0625rem; text-decoration: none; }
+a.go { display: inline-flex; align-items: center; color: var(--accent-ink); text-decoration: none; }
+.go.demo-go-small { align-self: flex-start; min-height: 44px; padding: 0 16px; }
+.demo-facts { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; color: var(--ink-2); font-size: 0.875rem; }
+.demo-steps { padding: 0; list-style: none; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius-m); overflow: hidden; }
+.demo-steps li { display: flex; gap: 12px; padding: 14px 16px; }
+.demo-steps li + li { border-top: 1px solid var(--rule); }
+.demo-steps .muted { font-size: 0.875rem; }
+.step-no { flex: 0 0 26px; height: 26px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 0.8125rem; display: flex; align-items: center; justify-content: center; }
+.step-name { font-weight: 600; }
+.demo-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.demo-samples-short { padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 0.875rem; }
+.demo-samples-short li { display: flex; flex-direction: column; }
+.demo-samples-short li > span:first-child { font-weight: 600; }
+
+/* Session page */
+.demo-box-title { font-weight: 600; font-size: 0.875rem; }
+.demo-samples { margin: 0 -18px -16px; padding: 0; list-style: none; }
+.demo-samples li { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-top: 1px solid var(--rule); }
+.demo-samples li > div { flex: 1; min-width: 0; }
+.demo-samples form { margin: 0; }
+.demo-samples .muted, .demo-box > .muted { font-size: 0.8125rem; }
+.sample-title { font-weight: 600; font-size: 0.875rem; }
+button.send { min-height: 44px; padding: 8px 14px; border: 1px solid var(--accent); border-radius: var(--radius-s); background: var(--surface); color: var(--accent); font-weight: 650; font-size: 0.875rem; }
+button.send:hover { background: var(--accent-soft); }
+.demo-upload { margin: 0; }
+.demo-upload label { font-weight: 600; font-size: 0.875rem; }
+.demo-upload input[type=file] { font: inherit; font-size: 0.875rem; max-width: 100%; }
+.demo-upload .send { align-self: flex-start; }
+.demo-address { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.demo-address code { flex: 1; min-width: 0; padding: 8px 10px; background: var(--grey-bg); border-radius: var(--radius-s); font-size: 0.875rem; overflow-wrap: anywhere; }
+.demo-address button { min-height: 44px; }
+.quiet-note { background: var(--grey-bg); border-color: var(--grey-rule); font-size: 0.8125rem; color: var(--ink-2); }
+.demo-cards { display: flex; flex-direction: column; gap: 12px; }
+.demo-card { padding: 14px 16px; background: var(--surface); border: 1px solid var(--rule); border-left: 4px solid var(--grey-rule); border-radius: var(--radius-m); display: flex; flex-direction: column; gap: 10px; }
+.demo-card.tone-review { border-left-color: var(--amber-rule); }
+.demo-card.tone-fraud { border-left-color: var(--red-rule); }
+.demo-card.tone-ready { border-left-color: var(--green-rule); }
+.demo-card > .badge { align-self: flex-start; }
+.demo-card .why { margin: 0; }
+.demo-card .why-sentence { font-size: 1rem; }
+.card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.card-who { min-width: 0; }
+.card-who .muted { font-size: 0.8125rem; }
+.card-title { font-weight: 600; overflow-wrap: anywhere; }
+.card-amount { font-weight: 600; }
+.card-steps { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 0.8125rem; }
+.card-steps li { padding-left: 20px; position: relative; }
+.card-steps li::before { position: absolute; left: 0; font-weight: 700; }
+.card-steps .step-done::before { content: "✓"; color: var(--green); }
+.card-steps .step-now::before { content: "…"; color: var(--accent); }
+.card-steps .step-stop::before { content: "!"; color: var(--amber); }
+
+/* Bill preview */
+.demo-bill-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.demo-bill-facts > div:first-child, .demo-bill-facts > div:nth-child(2) { grid-column: 1 / -1; }
+.demo-lines { padding: 0; list-style: none; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius-m); overflow: hidden; }
+.demo-lines li { padding: 12px 16px; display: flex; flex-direction: column; gap: 2px; }
+.demo-lines li + li { border-top: 1px solid var(--rule); }
+.line-head, .line-total { display: flex; justify-content: space-between; gap: 12px; }
+.line-head { font-weight: 600; }
+.demo-lines .line-total { flex-direction: row; background: #f7f8f7; font-weight: 700; font-size: 1.0625rem; }
+.demo-next { padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 0.875rem; }
+.demo-json { margin: 0; padding: 12px; background: var(--ink); color: var(--bg); border-radius: var(--radius-s); font-size: 0.75rem; line-height: 1.45; overflow-x: auto; }
+
+/* Privacy notice */
+.demo-text ul { padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+
+@media (max-width: 720px) {
+  .demo-intro h1 { font-size: 1.5rem; }
+  .demo-bill-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

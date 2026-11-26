@@ -1,0 +1,23 @@
+<div class="demo-cards" data-pending="{{ 'yes' if pending else 'no' }}">
+{% for c in cards %}
+<article class="demo-card tone-{{ c.tone }}">
+  <div class="card-head">
+    <div class="card-who"><p class="card-title">{{ c.title }}</p><p class="muted">{{ c.sub }}</p></div>
+    {% if c.amount %}<span class="num card-amount">{{ c.amount }}</span>{% endif %}
+  </div>
+  <span class="badge tone-{{ c.tone }}">{{ c.label }}</span>
+  {% if c.reasons %}
+  <div class="why tone-{{ c.tone }}">
+    <ul>{% for r in c.reasons %}<li><p class="why-sentence">{{ r.sentence }}</p>{% if r.detail %}<p class="why-detail">{{ r.detail }}</p>{% endif %}</li>{% endfor %}</ul>
+  </div>
+  {% if c.tone in ("review", "fraud") %}<p class="muted demo-small">Here a reviewer would check it against the original and correct, verify or reject it. Nothing is posted until then.</p>{% endif %}
+  {% endif %}
+  <ol class="card-steps">
+    {% for state, text in c.steps %}<li class="step-{{ state }}"><span class="sr">{{ {"done": "Done:", "now": "In progress:", "stop": "Stopped:"}[state] }} </span>{{ text }}</li>{% endfor %}
+  </ol>
+  {% if c.bill %}<a class="go demo-go-small" href="/s/{{ session.code }}/bills/{{ c.bill }}">See the bill preview</a>{% endif %}
+</article>
+{% else %}
+<p class="empty">Nothing sent yet. Send a sample above: its result appears here in a few seconds.</p>
+{% endfor %}
+</div>

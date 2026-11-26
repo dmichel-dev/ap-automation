@@ -1,0 +1,47 @@
+{% extends "demo_base.html" %}
+{% block title %}Privacy notice{% endblock %}
+{% block main %}
+<div class="demo demo-text">
+<section class="demo-intro">
+  <h1>Privacy notice</h1>
+  <p class="muted">Demo at demo.davidmichel.dev, run by David Michel, freelancer. Contact: <a href="mailto:david@davidmichel.dev">david@davidmichel.dev</a></p>
+</section>
+
+<p class="note"><strong>Send fictional invoices only.</strong> Please don't send real invoices or anyone's personal data.</p>
+
+<section class="demo-section">
+  <h2>What the demo receives</h2>
+  <ul>
+    <li>The files you upload or email.</li>
+    <li>For an email: the sender's address, the subject and the text, used to find your session and to spot bank-detail change notices.</li>
+    <li>Your network address and the sender's address, only to apply the demo's limits. They are stored as keyed hashes, never as written, and deleted after 2 days.</li>
+    <li>One cookie that keeps your session open in this browser. No analytics, no advertising, no tracking.</li>
+  </ul>
+</section>
+
+<section class="demo-section">
+  <h2>What happens to your files</h2>
+  <ul>
+    <li>Your own files are read by the OCR service of Mistral AI (France), under its API terms. The sample invoices are not sent to Mistral.</li>
+    <li>The results are shown only on your session page, which opens only in the browser that started it.</li>
+    <li>Nothing is posted to QuickBooks or any other system. Nothing is shared or sold.</li>
+  </ul>
+</section>
+
+<section class="demo-section">
+  <h2>How long it is kept</h2>
+  <ul>
+    <li>A session ends 60 minutes after it starts. Its files, results and session data are then deleted.</li>
+    <li>Emails are moved to the mailbox's trash, which empties itself after 30 days.</li>
+    <li>An emailed file also stays in the workflow tool's run history (n8n) for 14 days.</li>
+    <li>The server's nightly backup (03:20 UTC) can hold a session that was open at that moment. Backups are kept for 14 days.</li>
+    <li>The processing log keeps dates, statuses and counts, never a document's content.</li>
+  </ul>
+</section>
+
+<section class="demo-section">
+  <h2>Your rights</h2>
+  <p>Write to <a href="mailto:david@davidmichel.dev">david@davidmichel.dev</a> to ask what is held about you or to have it deleted. You can also complain to a data protection authority (in France, the CNIL).</p>
+</section>
+</div>
+{% endblock %}
