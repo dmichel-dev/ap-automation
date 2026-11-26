@@ -207,7 +207,7 @@ def process_invoice(
         email_text=email_text,
         message_id=message_id or None,
         scope=scope,
-        demo_session_id=demo_session_id,
+        demo_session_id=demo_session_id or None,  # n8n sends an empty field for a live email
     )
     outcome = processing.process(req, provider, cfg)
     _demo_preview(req, outcome, acfg)

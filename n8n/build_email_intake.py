@@ -86,7 +86,8 @@ const files = $('Email in').all();
 const out = [];
 $input.all().forEach((screen, i) => {
   const mail = emails[i].json, s = screen.json.body;
-  const base = { message_id: mail.message_id, thread_id: mail.thread_id, labels, scope: s?.scope ?? null };
+  const base = { message_id: mail.message_id, thread_id: mail.thread_id, labels, scope: s?.scope ?? null,
+                 demo_session_id: s?.demo_session_id ?? null };
   if (screen.json.statusCode !== 200) {  // the screening itself failed: what was seen, for the core
     out.push({ json: { ...base, route: 'error', stage: 'screen', source_ref: `gmail:${mail.message_id}`,
                        status_code: screen.json.statusCode ?? null, error: s?.error ?? null,
@@ -251,6 +252,7 @@ def _processing_nodes() -> list[Node]:
                 ("n8n_execution_id", "$execution.id"),
                 ("email_text", "$json.email_text"),
                 ("scope", "$json.scope"),
+                ("demo_session_id", "$json.demo_session_id ?? ''"),  # a demo email's session, from the screening
             ],
         ),
         route_by_status(),

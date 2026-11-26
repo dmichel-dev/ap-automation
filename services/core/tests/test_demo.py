@@ -428,6 +428,22 @@ def test_a_demo_file_needs_its_session_and_only_demo_files_have_one(demo_env):
     assert stray.status_code == 422
 
 
+def test_an_email_passes_its_screened_session_or_an_empty_field(demo_on, demo_env, live_now):
+    """What the email intake sends: the screening's session for a demo email, an empty field for a live one."""
+    session = start(demo_on.database_url, now=live_now).session
+    screened = screen(session.code)
+    c = TestClient(app)
+    for scope, session_id, ref in (("demo", screened["demo_session_id"], "gmail:m1:0"), ("live", "", "gmail:m2:0")):
+        data = {"channel": "email", "source_ref": ref, "scope": scope, "demo_session_id": session_id}
+        r = c.post("/invoices/process", headers=AUTH, files={"file": ("i.pdf", UPLOAD)}, data=data)
+        assert r.status_code == 200, r.text
+    rows = query(demo_on.database_url, "SELECT source_ref, demo_session_id FROM ap.invoices ORDER BY source_ref")
+    assert [(r["source_ref"], r["demo_session_id"] and str(r["demo_session_id"])) for r in rows] == [
+        ("gmail:m1:0", session.id),
+        ("gmail:m2:0", None),
+    ]
+
+
 def test_an_upload_is_processed_once(demo_env, live_now):
     _state, _pcfg, cfg = demo_env
     session = start(cfg.database_url, now=live_now).session
