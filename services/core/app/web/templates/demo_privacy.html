@@ -20,9 +20,16 @@
 </section>
 
 <section class="demo-section">
+  <h2>Why, and on what legal basis</h2>
+  <p>To run the demo you start, and to protect it from abuse (limits, OCR budget). The legal basis is legitimate interest (GDPR, Article 6(1)(f)): running and protecting the demo.</p>
+</section>
+
+<section class="demo-section">
   <h2>What happens to your files</h2>
   <ul>
-    <li>Your own files are read by the OCR service of Mistral AI (France), under its API terms. The sample invoices are not sent to Mistral.</li>
+    <li>Your own files are read by the OCR service of Mistral AI (Paris, France) on my behalf. The sample invoices are not sent to Mistral.</li>
+    <li>By default, Mistral AI keeps API inputs and outputs for 30 rolling days to monitor abuse, unless zero data retention is active. For that purpose, Mistral AI is an independent controller: see <a href="https://legal.mistral.ai/terms/privacy-policy">Mistral AI's privacy policy</a>. Zero data retention is not active for this demo.</li>
+    <li>Emails reach the demo through Google Workspace (Gmail), and the demo runs on a server hosted by OVHcloud. Both act on my behalf.</li>
     <li>The results are shown only on your session page, which opens only in the browser that started it.</li>
     <li>Nothing is posted to QuickBooks or any other system. Nothing is shared or sold.</li>
   </ul>
@@ -31,9 +38,9 @@
 <section class="demo-section">
   <h2>How long it is kept</h2>
   <ul>
-    <li>A session ends 60 minutes after it starts. Its files, results and session data are then deleted.</li>
-    <li>Emails are moved to the mailbox's trash, which empties itself after 30 days.</li>
-    <li>An emailed file also stays in the workflow tool's run history (n8n) for 14 days.</li>
+    <li>A session ends 60 minutes after it starts. Within a few minutes, its files, results and session data are deleted.</li>
+    <li>Its emails are then deleted permanently from the mailbox (not moved to the trash). An email the demo can't accept (session over, limit reached) is deleted at once.</li>
+    <li>The workflow tool's (n8n) records of the session's runs are deleted at the same time. A run that fails before it reaches your session can stay in that history for up to 14 days.</li>
     <li>The server's nightly backup (03:20 UTC) can hold a session that was open at that moment. Backups are kept for 14 days.</li>
     <li>The processing log keeps dates, statuses and counts, never a document's content.</li>
   </ul>
@@ -41,7 +48,7 @@
 
 <section class="demo-section">
   <h2>Your rights</h2>
-  <p>Write to <a href="mailto:david@davidmichel.dev">david@davidmichel.dev</a> to ask what is held about you or to have it deleted. You can also complain to a data protection authority (in France, the CNIL).</p>
+  <p>Write to <a href="mailto:david@davidmichel.dev">david@davidmichel.dev</a> to ask what is held about you, to have it deleted, or to object to its processing. You can also complain to a data protection authority (in France, the CNIL).</p>
 </section>
 </div>
 {% endblock %}
