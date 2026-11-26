@@ -124,3 +124,13 @@ def coding_account(conn: db.Conn, account_id: str) -> db.Row | None:
         f"FROM qbo_accounts WHERE external_id = %(id)s AND {_CODING}",
         {**_CODING_PARAMS, "id": account_id},
     ).fetchone()
+
+
+def coding_account_named(conn: db.Conn, name: str) -> db.Row | None:
+    """The one account an invoice can be coded to with this full name, else None (none, or several)."""
+    rows = conn.execute(
+        "SELECT external_id AS id, fully_qualified_name AS name, account_type AS type "
+        f"FROM qbo_accounts WHERE fully_qualified_name = %(name)s AND {_CODING}",
+        {**_CODING_PARAMS, "name": name},
+    ).fetchall()
+    return rows[0] if len(rows) == 1 else None

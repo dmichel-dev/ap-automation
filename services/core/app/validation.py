@@ -56,11 +56,12 @@ class SupplierStatus:
     """What the company already knows about the supplier (looked up in the database).
 
     known: a default account was set, the supplier is linked to a vendor in the accounting
-    system, or exactly one active vendor there has the same normalized name.
+    system, or exactly one active vendor there has the same normalized name. In the public demo:
+    the supplier of one of its samples (demo_samples.supplier_status).
     """
 
     known: bool
-    basis: str | None = None  # supplier_default | vendor_link | accounting_vendor_name
+    basis: str | None = None  # supplier_default | vendor_link | accounting_vendor_name | demo_sample_supplier
     default_account_id: str | None = None
 
 

@@ -1,18 +1,20 @@
 """The public demo: sessions (cookie AND code), limits, the OCR budget, samples with stored results,
 session-scoped checks (duplicates, bank details), the bill preview, no posting, and the clean-up."""
 
+import hashlib
 import io
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 from app import accounting, db, demo, demo_samples, main
+from app.extraction import build_common_invoice
 from app.intake import Attachment, demo_code, screen_email
 from app.main import app
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from .conftest import AUTH, FIXTURES, known_supplier, query
+from .conftest import AUTH, FIXTURES, QUILLMOOR_KEY, known_supplier, query
 from .test_accounting import OPEN_BOOKS
 from .test_processing import FakeProvider, env  # noqa: F401  (fixture)
 
@@ -181,11 +183,27 @@ def test_budget_per_day_and_month_and_release(clean_db):
 # =====================================================================================
 # Processing: samples, uploads, session-scoped checks
 # =====================================================================================
+def seed_demo_accounts(url: str) -> None:
+    """The accounts the samples' suppliers are coded to, as the QuickBooks sync stores them (those
+    the shared seed already has are kept). Nothing else about the suppliers is in the database."""
+    names = sorted({s.account for s in demo_samples.CATALOG})
+    for i, name in enumerate(names):
+        query(
+            url,
+            """INSERT INTO ap.qbo_accounts (external_id, name, fully_qualified_name, account_type, active)
+               SELECT %s, %s, %s, 'Expense', true WHERE NOT EXISTS (SELECT 1 FROM ap.qbo_accounts WHERE name = %s)""",
+            f"90{i}",
+            name,
+            name,
+            name,
+        )
+
+
 @pytest.fixture
 def demo_env(env, cfg):  # noqa: F811
-    """Processing and accounting on the test database; the hosting supplier is known (account 20)."""
+    """Processing and accounting on the test database, with the accounts the samples need."""
     state, pcfg = env
-    known_supplier(cfg.database_url, WRENFOLD_KEY)
+    seed_demo_accounts(cfg.database_url)
     pcfg.demo = LIMITS
     return state, pcfg, cfg
 
@@ -227,11 +245,80 @@ def test_sample_uses_its_stored_result_and_gets_a_bill_preview(demo_env, live_no
     assert inv["extraction_provider"] == demo_samples.PROVIDER_NAME
     [preview] = query(cfg.database_url, "SELECT preview FROM ap.demo_bill_previews")
     p = preview["preview"]
-    assert p["object_type"] == "bill" and p["vendor"] == {"name": "Wrenfold Hosting LLC", "action": "create"}
-    assert p["document"]["DocNumber"] == "WH-2026-1001" and p["account_names"] == {"20": "Supplies"}
+    assert p["object_type"] == "bill" and p["vendor"] == {"name": "Wrenfold Hosting LLC", "action": "existing"}
+    assert p["document"]["DocNumber"] == "WH-2026-1001"
+    assert list(p["account_names"].values()) == ["Hosting & Cloud Services"]
     assert sum(line["Amount"] for line in p["document"]["Line"]) == pytest.approx(160.58)
     [upload] = query(cfg.database_url, "SELECT status, content, invoice_id FROM ap.demo_uploads")
     assert upload["status"] == "done" and upload["content"] is None and str(upload["invoice_id"]) == body["invoice_id"]
+
+
+# What each sample shows a visitor who sends it first in a new session (demo_samples.CATALOG "shows")
+SAMPLE_OUTCOMES = {
+    "fr-eur-discount": ("ready", []),
+    "de-eur-wrong-total": ("needs_review", ["total_mismatch"]),
+    "es-eur-ambiguous-date": ("needs_review", ["ambiguous_date"]),
+    "ar-aed-tax-invoice": ("ready", []),
+    "hi-inr-gst-invoice": ("ready", []),
+    "us-hosting-october": ("ready", []),
+    "us-hosting-november-other-account": ("ready", []),  # the fraud alert needs October first (test below)
+}
+
+
+def test_every_sample_has_an_expected_outcome():
+    assert sorted(SAMPLE_OUTCOMES) == sorted(s.key for s in demo_samples.CATALOG)
+
+
+@pytest.mark.parametrize("key", sorted(SAMPLE_OUTCOMES))
+def test_each_sample_produces_its_outcome(demo_env, live_now, key):
+    """Every time, whatever the live data: the demo knows the samples' suppliers itself."""
+    _state, _pcfg, cfg = demo_env
+    session = start(cfg.database_url, now=live_now).session
+    body = send_sample(cfg.database_url, session, key)
+    assert (body["status"], codes(body)) == SAMPLE_OUTCOMES[key], body["reasons"]
+    if body["status"] != "ready":
+        assert query(cfg.database_url, "SELECT count(*) AS n FROM ap.demo_bill_previews")[0]["n"] == 0
+        return
+    [preview] = query(cfg.database_url, "SELECT preview FROM ap.demo_bill_previews")
+    p, sample = preview["preview"], demo_samples.sample(key)
+    assert "error" not in p and p["vendor"]["action"] == "existing", p
+    assert sample is not None and list(p["account_names"].values()) == [sample.account]
+
+
+def test_live_supplier_data_does_not_reach_the_demo(demo_env, live_now):
+    """A live default account (or a live supplier) never decides a demo outcome."""
+    _state, _pcfg, cfg = demo_env
+    url = cfg.database_url
+    known_supplier(url, WRENFOLD_KEY, account="20")  # live: hosting coded to Supplies
+    # live: the visitor's upload (Quillmoor) is also from a known supplier (the env fixture)
+    assert query(url, "SELECT 1 FROM ap.supplier_defaults WHERE supplier_key = %s", QUILLMOOR_KEY)
+    session = start(url, now=live_now).session
+    hosting = send_sample(url, session, "us-hosting-october")
+    [inv] = query(url, "SELECT expense_account_id FROM ap.invoices WHERE id = %s", hosting["invoice_id"])
+    [hosting_account] = query(url, "SELECT external_id FROM ap.qbo_accounts WHERE name = 'Hosting & Cloud Services'")
+    assert inv["expense_account_id"] == hosting_account["external_id"]
+    upload = process(queue(url, session, UPLOAD))
+    assert {"new_vendor", "expense_account_missing"} <= set(codes(upload))
+
+
+def test_the_demo_suppliers_are_unknown_outside_the_demo(demo_env):
+    _state, _pcfg, cfg = demo_env
+    content = sample_bytes("us-hosting-october")
+    result = demo_samples.stored_result(hashlib.sha256(content).hexdigest())
+    assert result is not None
+    inv = build_common_invoice(result, demo_samples.PROVIDER_NAME)
+    with db.connect(cfg.database_url) as conn:
+        assert db.supplier_status(conn, inv).known is False
+        assert demo_samples.supplier_status(conn, inv).known is True
+
+
+def test_a_sample_supplier_without_its_account_is_known_but_has_no_default(demo_env, live_now):
+    """The account comes from the QuickBooks copy by name: missing there, the invoice goes to review."""
+    _state, _pcfg, cfg = demo_env
+    query(cfg.database_url, "UPDATE ap.qbo_accounts SET active = false WHERE name = 'Hosting & Cloud Services'")
+    session = start(cfg.database_url, now=live_now).session
+    body = send_sample(cfg.database_url, session, "us-hosting-october")
+    assert (body["status"], codes(body)) == ("needs_review", ["expense_account_missing"])
 
 
 def test_demo_invoices_are_never_posted(demo_env, live_now):
@@ -249,10 +336,10 @@ def test_new_bank_details_raise_the_fraud_alert_within_one_session_only(demo_env
     first, second = start(url, now=live_now).session, start(url, client="198.51.100.4", now=live_now).session
     assert send_sample(url, first, "us-hosting-october")["status"] == "ready"
     changed = send_sample(url, first, "us-hosting-november-other-account")
-    assert changed["status"] == "needs_review" and "possible_bank_detail_change" in codes(changed)
+    assert changed["status"] == "needs_review" and codes(changed) == ["possible_bank_detail_change"]
     # Another visitor's session has no earlier hosting invoice: nothing to compare with
     alone = send_sample(url, second, "us-hosting-november-other-account")
-    assert "possible_bank_detail_change" not in codes(alone)
+    assert alone["status"] == "ready" and codes(alone) == []
 
 
 def test_duplicate_file_is_detected_within_the_session_only(demo_env, live_now):
@@ -428,8 +515,6 @@ def test_expired_sessions_go_with_their_invoices_and_files(demo_env, live_now, m
 
 def test_every_sample_has_its_recorded_result_and_fits_the_limits():
     """A sample without its recorded response would cost an OCR call on every click."""
-    import hashlib
-
     for s in demo_samples.CATALOG:
         content = s.file.read_bytes()
         stored = demo_samples.stored_result(hashlib.sha256(content).hexdigest())

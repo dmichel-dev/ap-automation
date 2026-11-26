@@ -141,7 +141,7 @@ def _process(req: ProcessRequest, provider: ExtractionProvider, cfg: Config) -> 
             return _reject_duplicate_file(conn, req, prepared, sha256, received_at, same, cfg)
 
         duplicates = db.find_possible_duplicates(conn, inv, scope=req.scope, session=req.demo_session_id)
-        supplier = db.supplier_status(conn, inv)
+        supplier = demo_samples.supplier_status(conn, inv) if req.scope == "demo" else db.supplier_status(conn, inv)
         baseline = db.bank_baseline(conn, inv, req.scope, req.demo_session_id)
         bank = bank_details.assess(inv, req.email_text, baseline, cfg.bank_fingerprint_key)
         v = validate(

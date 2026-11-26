@@ -20,7 +20,7 @@ from typing import Any, Literal, TypedDict
 
 from psycopg.types.json import Jsonb
 
-from . import db, fx, matching, postings
+from . import db, demo_samples, fx, matching, postings
 from .db import Conn, Row
 from .tax_treatment import TaxTreatment
 
@@ -134,8 +134,8 @@ def _build_document(conn: Conn, inv: Row, cfg: AccountingConfig) -> Row:
 
 
 def bill_preview(conn: Conn, invoice_id: str, cfg: AccountingConfig) -> Row:
-    """What posting a ready invoice would send, without sending anything (the public demo): the same
-    document as a real posting, the vendor it would use or create, and the accounts' names."""
+    """What posting a ready demo invoice would send, without sending anything: the same document as
+    a real posting, the vendor it would use or create, and the accounts' names."""
     inv = db.one(conn, "SELECT * FROM invoices WHERE id = %s", (invoice_id,))
     preview: Row = {"object_type": _object_type(inv)}
     try:
@@ -144,15 +144,9 @@ def bill_preview(conn: Conn, invoice_id: str, cfg: AccountingConfig) -> Row:
         return preview | {"error": e.code, "message": str(e)}
     ids = sorted({ln["AccountBasedExpenseLineDetail"]["AccountRef"]["value"] for ln in document["Line"]})
     names = conn.execute("SELECT external_id, name FROM qbo_accounts WHERE external_id = ANY(%s)", (ids,)).fetchall()
-    link = conn.execute(
-        "SELECT display_name FROM vendor_links WHERE supplier_key = %s AND currency = %s",
-        (inv["supplier_key"], inv["currency"]),
-    ).fetchone()
-    vendor = (
-        {"name": link["display_name"], "action": "existing"}
-        if link
-        else {"name": inv["supplier_name"], "action": "create"}
-    )
+    # The demo company's vendors are the samples' suppliers (live vendor links never reach the demo)
+    known = inv["supplier_key"] in demo_samples.supplier_accounts()
+    vendor = {"name": inv["supplier_name"], "action": "existing" if known else "create"}
     return preview | {
         "vendor": vendor,
         "document": document,
