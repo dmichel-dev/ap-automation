@@ -13,6 +13,7 @@ All notable changes to this project. The format follows [Keep a Changelog](https
 
 ### Added
 
+- **Read-only review page in the demo** (`/s/CODE/review/ID`, linked from each needs-review card): the reviewer's own page and design, with its controls switched off and a note saying so; nothing can be posted. The original is shown for samples only, never a visitor's own file. It reads three new views without bank details (migration 021, granted to the demo role); tests cover the session checks (code alone, another session, a live or ready invoice), the read-only page, the absence of bank details and the demo role's rights. The review page's content moved to a shared partial (output unchanged), and its data is shaped by one function for both pages.
 - **Credits page** (`/credits`, linked from every demo page's footer): fonts and icons with their licence texts, served by the demo ([THIRD-PARTY.md](THIRD-PARTY.md)). Caddy forwards `/credits`; a test checks that Caddy forwards every demo page route and not `/health`.
 
 ## [0.6.0] - 2026-11-26

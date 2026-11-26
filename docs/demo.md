@@ -26,6 +26,7 @@ email to invoices+CODE@ ──► AP – Email intake ──► core screening: 
 - **Email:** the session code is read from `Delivered-To` only, which Google sets, never from `To`. An email to an unknown or ended session, over its sender's daily limit, or while the demo is paused is **refused**: logged, and deleted at once.
 - Every comparison with earlier documents stays **within the session**: duplicate file, possible duplicate, bank-detail change (the November hosting sample raises the fraud alert only after October was sent in the same session).
 - A ready demo invoice is never posted. The core computes the bill it would post and keeps it for the page (`demo_bill_previews`).
+- A **needs-review** demo invoice opens in the real review page's design, **read-only** (`/s/CODE/review/ID`): the same content as the reviewer's page (`review_item.html`, shaped by `review.page_data`), with every control switched off and a note saying so. No form, no token, no write route. Only the visitor's own session (cookie and code), only its open needs-review invoices. The original is drawn from the demo's own sample PDFs; for a visitor's own file the panel says it isn't shown, and its page images are a 404. The data comes from the views `demo_review_items`, `demo_review_lines` and `demo_review_tax_lines` (migration 021): no bank account details, no file path, OCR text or extraction.
 
 ## Limits
 
@@ -47,7 +48,7 @@ Addresses and senders are stored as keyed hashes (`DEMO_HASH_KEY`), never as wri
 ## Security
 
 - **A session needs its cookie and its code.** The browser that starts a session gets a random token (HttpOnly, Secure, SameSite=Strict; only its SHA-256 is stored). The code alone, from the email address or the URL, never opens the page.
-- **Least privilege:** `demo-web` connects as `ap_demo` ([`db/init/02_demo_role.sh`](../db/init/02_demo_role.sh)): it can start sessions, queue files without reading them back, read results through the view `demo_invoice_results` (demo rows only, no OCR text, no extraction, no bank details), read bill previews and append to the log. Nothing of the live data. It has no file store.
+- **Least privilege:** `demo-web` connects as `ap_demo` ([`db/init/02_demo_role.sh`](../db/init/02_demo_role.sh)): it can start sessions, queue files without reading them back, read results through the view `demo_invoice_results` (demo rows only, no OCR text, no extraction, no bank details), read bill previews and the review page's views (needs-review demo invoices, no bank details) and append to the log. A test applies the script's grants to a temporary role and checks that it reads those views but not the invoices table. Nothing of the live data. It has no file store.
 - **Nothing is served back:** no uploaded or emailed file is ever shown or downloadable.
 - **Only the demo's paths are public.** Caddy forwards `/`, `/start`, `/privacy`, `/credits`, `/s/*` and `/static/*` to `demo-web` (a test checks that every page route is covered and `/health` is not); every other path (its `/health` included) is an empty 404, and bodies over 6 MB are refused ([`deploy/Caddyfile`](../deploy/Caddyfile)). Nothing of n8n is public.
 - Every page sends a strict CSP and the security headers, and ends with the copyright footer. Cross-site form posts are refused.

@@ -107,7 +107,7 @@ docker compose build core review-web
 docker compose up -d
 ```
 
-Database migrations and workflow changes follow [operations](operations.md): back up first, apply the migration, then reload the changed workflows.
+Database migrations and workflow changes follow [operations](operations.md): back up first, apply the migration, then reload the changed workflows. After a migration that adds a demo view, re-run the demo role script (`docker compose exec postgres sh /docker-entrypoint-initdb.d/02_demo_role.sh`) so `demo-web` may read it, and rebuild `demo-web`.
 
 ## Backups
 
