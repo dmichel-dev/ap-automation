@@ -1,0 +1,458 @@
+{
+  "active": false,
+  "connections": {
+    "Missed file (clean-up)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Upload ID",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Process upload (core)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Route by status",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Queued file (webhook)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Upload ID",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Route by status": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Ready: bill preview kept",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Needs review: on the page",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Rejected: on the page",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Refused: not a supported file",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Stop: not processed",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Upload ID": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Process upload (core)",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "AP – Demo processing",
+  "nodes": [
+    {
+      "id": "note-demo-processing",
+      "name": "Note: Demo processing",
+      "parameters": {
+        "color": 5,
+        "content": "## Demo processing\nProcesses one file a visitor queued on the **public demo page** (a sample or an upload).\n\nThe page stores the file in the database and calls the webhook with its **ID only**: the webhook is reachable on the internal Docker network only. The **core service** does all the work, exactly as for the other channels, inside the visitor's session: limits, OCR budget, checks, duplicates within the session. Nothing is posted to QuickBooks: a ready invoice gets a **bill preview**.",
+        "height": 350,
+        "width": 1380
+      },
+      "position": [
+        -40,
+        -150
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-receive",
+      "name": "Note: Receive",
+      "parameters": {
+        "color": 7,
+        "content": "## Receive\nFrom the demo page (header **X-Demo-Key**, answered 202 at once) or from the clean-up, for a file still queued after a minute.",
+        "height": 550,
+        "width": 420
+      },
+      "position": [
+        -40,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-process-core",
+      "name": "Note: Process (core)",
+      "parameters": {
+        "color": 7,
+        "content": "## Process (core)\nExtract, normalize, check, store, in the visitor's session. The core records this run with the session: its record is deleted when the session ends.",
+        "height": 350,
+        "width": 420
+      },
+      "position": [
+        440,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-outcome",
+      "name": "Note: Outcome",
+      "parameters": {
+        "color": 7,
+        "content": "## Outcome\nThe demo page shows the result; nothing else to do here.",
+        "height": 950,
+        "width": 420
+      },
+      "position": [
+        920,
+        250
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "note-not-processed",
+      "name": "Note: Not processed",
+      "parameters": {
+        "color": 3,
+        "content": "## Not processed\nNo answer, a server error, or a file that isn't waiting (409): the run fails and the error workflow logs it. The demo page shows the file as failed when the core recorded why.",
+        "height": 350,
+        "width": 420
+      },
+      "position": [
+        -40,
+        850
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Demo webhook key"
+        }
+      },
+      "id": "queued-file-webhook",
+      "name": "Queued file (webhook)",
+      "parameters": {
+        "authentication": "headerAuth",
+        "httpMethod": "POST",
+        "options": {
+          "noResponseBody": true
+        },
+        "path": "ap-demo-upload",
+        "responseCode": 202,
+        "responseMode": "onReceived"
+      },
+      "position": [
+        0,
+        400
+      ],
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "webhookId": "49a9b6d7-4935-4e23-860f-e18e627ddc7e"
+    },
+    {
+      "id": "missed-file-clean-up",
+      "name": "Missed file (clean-up)",
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "position": [
+        0,
+        600
+      ],
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1
+    },
+    {
+      "id": "upload-id",
+      "name": "Upload ID",
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "upload_id",
+              "name": "upload_id",
+              "type": "string",
+              "value": "={{ String($json.body?.upload_id ?? $json.upload_id ?? '') }}"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "mode": "manual",
+        "options": {}
+      },
+      "position": [
+        240,
+        400
+      ],
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "AP core token"
+        }
+      },
+      "id": "process-upload-core",
+      "maxTries": 3,
+      "name": "Process upload (core)",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ execution_id: $execution.id }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 300000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "=http://core:8000/demo/uploads/{{ $json.upload_id }}/process"
+      },
+      "position": [
+        480,
+        400
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "route-by-status",
+      "name": "Route by status",
+      "parameters": {
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "error"
+        },
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "ready",
+                    "leftValue": "={{ $json.statusCode === 200 && $json.body.status === 'ready' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                }
+              },
+              "outputKey": "ready",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "needs_review",
+                    "leftValue": "={{ $json.statusCode === 200 && $json.body.status === 'needs_review' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                }
+              },
+              "outputKey": "needs_review",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "rejected",
+                    "leftValue": "={{ $json.statusCode === 200 && $json.body.status === 'rejected' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                }
+              },
+              "outputKey": "rejected",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "refused",
+                    "leftValue": "={{ [413, 415].includes($json.statusCode) }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                }
+              },
+              "outputKey": "refused",
+              "renameOutput": true
+            }
+          ]
+        }
+      },
+      "position": [
+        720,
+        400
+      ],
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2
+    },
+    {
+      "id": "ready-bill-preview-kept",
+      "name": "Ready: bill preview kept",
+      "parameters": {},
+      "position": [
+        960,
+        400
+      ],
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1
+    },
+    {
+      "id": "needs-review-on-the-page",
+      "name": "Needs review: on the page",
+      "parameters": {},
+      "position": [
+        960,
+        600
+      ],
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1
+    },
+    {
+      "id": "rejected-on-the-page",
+      "name": "Rejected: on the page",
+      "parameters": {},
+      "position": [
+        960,
+        800
+      ],
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1
+    },
+    {
+      "id": "refused-not-a-supported-file",
+      "name": "Refused: not a supported file",
+      "parameters": {},
+      "position": [
+        960,
+        1000
+      ],
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1
+    },
+    {
+      "id": "stop-not-processed",
+      "name": "Stop: not processed",
+      "parameters": {
+        "errorMessage": "={{ 'demo upload ' + $('Upload ID').item.json.upload_id + ': the core answered ' + ($json.statusCode ?? 'nothing') + ' ' + JSON.stringify($json.body?.detail ?? $json.error?.message ?? '') }}"
+      },
+      "position": [
+        0,
+        1000
+      ],
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1
+    }
+  ],
+  "pinData": {},
+  "settings": {
+    "errorWorkflow": "apErrorLog000001",
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "timezone": "Europe/Paris"
+  }
+}

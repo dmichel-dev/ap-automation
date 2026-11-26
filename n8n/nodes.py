@@ -25,6 +25,8 @@ CREDENTIAL_NAMES = {
     "QBO": "QuickBooks – Sandbox US",
     "PLAID": "Plaid – Sandbox",
     "DRIVE": "Google Drive – david@davidmichel.dev",
+    "DEMO_HOOK": "Demo webhook key",  # header auth X-Demo-Key: the demo page's calls to its webhook
+    "N8N_API": "n8n API (this instance)",  # the demo clean-up deletes the session's run records
 }
 # Full response, never throw on an HTTP error status: the next node checks the status itself
 FULL_RESPONSE = {"response": {"response": {"fullResponse": True, "neverError": True}}}
