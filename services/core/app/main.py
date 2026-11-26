@@ -23,8 +23,9 @@ Daily end-to-end test (e2e_test.py; n8n puts the messages in Gmail and does the 
 
 Public demo (demo.py; the demo page queues files, n8n processes them and runs the clean-up):
   POST /demo/uploads/{id}/process     a queued sample or upload → processed in its session (scope demo)
-  POST /demo/cleanup                  expired sessions deleted with their invoices → what Gmail/Drive should trash
-  POST /demo/trash/done               trashed in Gmail or Drive: off the list
+  POST /demo/cleanup                  expired sessions deleted with their invoices → what to delete in
+                                      Gmail, Drive and n8n, and the uploads whose processing call was missed
+  POST /demo/deletions/done           deleted in Gmail, Drive or n8n (or already gone): off the list
 
 Accounting and bank (n8n does the QuickBooks/Plaid calls; the core keeps state and rules):
   GET  /invoices/{id}/file               original file, for the accounting attachment
@@ -408,9 +409,8 @@ def _confirm_demo(conn: db.Conn, screening: intake.Screening, body: EmailToScree
     if screening.scope != "demo" or not screening.demo_code:
         return
     try:
-        session = demo.email_session(
-            conn, get_demo_limits(), screening.demo_code, body.sender, body.message_id, datetime.now(UTC)
-        )
+        email = demo.EmailRun(screening.demo_code, body.sender, body.message_id, body.execution_id)
+        session = demo.email_session(conn, get_demo_limits(), email, datetime.now(UTC))
     except demo.Refused as exc:
         screening.route, screening.reason, screening.accepted = "demo_refused", f"demo_{exc.code}", []
         db.log(
@@ -944,7 +944,7 @@ def process_demo_upload(
 ) -> processing.ProcessOutcome:
     """A queued sample or upload → the same processing as every channel (scope demo, its session)."""
     with db.connect(cfg.database_url) as conn:
-        upload = demo.claim_upload(conn, upload_id)
+        upload = demo.claim_upload(conn, upload_id, body.execution_id if body else None)
     if upload is None:
         raise HTTPException(status_code=409, detail="this file is not waiting for processing")
     req = processing.ProcessRequest(
@@ -976,23 +976,32 @@ def _finish_upload(cfg: processing.Config, upload_id: int, invoice_id: str | Non
 
 @app.post("/demo/cleanup", dependencies=Auth)
 def demo_cleanup(cfg: AcctCfg) -> JsonDict:
-    """Expired sessions deleted with their invoices and stored files; what Gmail/Drive should trash."""
+    """Expired sessions deleted with their invoices and stored files; what n8n should delete
+    permanently in Gmail, Drive and its own run history; uploads whose processing call was missed."""
+    now = datetime.now(UTC)
     with db.connect(cfg.database_url) as conn:
-        purged = demo.purge_expired(conn, datetime.now(UTC))
+        purged = demo.purge_expired(conn, now)
     for rel_path in purged.files:
         accounting.delete_stored_file(cfg.storage_dir, rel_path)
     with db.connect(cfg.database_url) as conn:
-        trash = demo.trash_due(conn)
-    return {"sessions": purged.sessions, "invoices": purged.invoices, "files": len(purged.files), "trash": trash}
+        deletions = demo.deletions_due(conn)
+        stale = demo.stale_uploads(conn, now)
+    return {
+        "sessions": purged.sessions,
+        "invoices": purged.invoices,
+        "files": len(purged.files),
+        "deletions": deletions,
+        "stale_uploads": stale,
+    }
 
 
-class DemoTrashed(BaseModel):
-    channel: Literal["email", "drive"]
+class DemoDeleted(BaseModel):
+    channel: Literal["email", "drive", "n8n"]
     item_ids: list[str] = Field(min_length=1, max_length=100)
 
 
-@app.post("/demo/trash/done", dependencies=Auth)
-def demo_trash_done(body: DemoTrashed, cfg: AcctCfg) -> JsonDict:
-    """Trashed in Gmail or Drive (or already gone there): off the clean-up's list."""
+@app.post("/demo/deletions/done", dependencies=Auth)
+def demo_deletions_done(body: DemoDeleted, cfg: AcctCfg) -> JsonDict:
+    """Deleted in Gmail, Drive or n8n (or already gone there): off the clean-up's list."""
     with db.connect(cfg.database_url) as conn:
-        return {"removed": demo.trash_done(conn, body.channel, body.item_ids)}
+        return {"removed": demo.deletions_done(conn, body.channel, body.item_ids)}

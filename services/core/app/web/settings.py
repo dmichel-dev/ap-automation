@@ -104,6 +104,10 @@ class DemoWebSettings(DemoSettings):
     demo_origins: str  # comma-separated, e.g. https://demo.example.com
     demo_trusted_proxies: str = ""  # proxy addresses whose X-Forwarded-For names the client
     intake_email_alias: str = "invoices@davidmichel.dev"  # the demo address is its +CODE form
+    # n8n's internal webhook that processes a queued file at once (Docker network only, never public).
+    # Empty: queued files wait for the clean-up's sweep of missed uploads.
+    demo_webhook_url: str = ""
+    demo_webhook_key: SecretStr = SecretStr("")  # sent as DEMO_WEBHOOK_HEADER; n8n checks it
 
     @cached_property
     def origins(self) -> tuple[str, ...]:

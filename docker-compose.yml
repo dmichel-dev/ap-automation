@@ -195,6 +195,9 @@ services:
       DEMO_ORIGINS: ${DEMO_ORIGINS:-http://localhost:8082}
       DEMO_TRUSTED_PROXIES: ${DEMO_TRUSTED_PROXIES:-}
       INTAKE_EMAIL_ALIAS: ${INTAKE_EMAIL_ALIAS:-invoices@davidmichel.dev}
+      # n8n's internal webhook (Docker network only): a queued file is processed at once
+      DEMO_WEBHOOK_URL: ${DEMO_WEBHOOK_URL:-http://n8n:5678/webhook/ap-demo-upload}
+      DEMO_WEBHOOK_KEY: ${DEMO_WEBHOOK_KEY:-}
     ports:
       - "127.0.0.1:8082:8082"
     read_only: true

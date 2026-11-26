@@ -11,7 +11,7 @@ from psycopg.rows import dict_row
 
 MIGRATIONS = Path("/migrations")
 TABLES = (
-    "demo_trash, demo_messages, demo_uploads, demo_bill_previews, demo_senders, demo_budget, demo_starts, "
+    "demo_deletions, demo_external_items, demo_uploads, demo_bill_previews, demo_senders, demo_budget, demo_starts, "
     "demo_sessions, "
     "e2e_qbo_objects, e2e_runs, intake_failures, intake_leases, write_offs, run_requests, matches, bank_transactions, "
     "bank_sync_state, accounting_postings, fx_rates, fx_unsupported, "

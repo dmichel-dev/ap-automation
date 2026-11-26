@@ -12,8 +12,10 @@ Limits, all from settings (Limits):
     reserved before the OCR call, handed back if it fails;
   - emails per sender and day (keyed hash of the address, never the address).
 
-Expired sessions are deleted with their invoices (purge_expired); their emails and Drive files are
-queued for the clean-up workflow to trash.
+Expired sessions are deleted with their invoices (purge_expired). What they left outside the database
+(Gmail messages, Drive files, the n8n runs that handled their items) goes on the deletion list, which
+the clean-up workflow works through: deleted permanently, never moved to a trash. A refused email has
+no session to wait for: it goes on the list at once.
 """
 
 from __future__ import annotations
@@ -43,6 +45,7 @@ CODE_PATTERN = f"[{CODE_ALPHABET}]{{{CODE_LENGTH}}}"  # also in the email addres
 KEEP_STARTS = timedelta(days=2)  # longer than the daily limit's window
 KEEP_SENDERS_DAYS = 2
 KEEP_DAILY_BUDGET_DAYS = 40  # the month's figure is its own row
+STALE_UPLOAD = timedelta(minutes=1)  # still queued after this: its processing call was missed
 
 
 @dataclass(frozen=True)
@@ -292,7 +295,7 @@ def admit_email(conn: db.Conn, limits: Limits, session: Session, sender: str, me
     remembered for the clean-up. A message seen before (re-check) isn't counted again."""
     if message_id:
         new = conn.execute(
-            "INSERT INTO demo_messages (session_id, channel, item_id) VALUES (%s, 'email', %s) "
+            "INSERT INTO demo_external_items (session_id, channel, item_id) VALUES (%s, 'email', %s) "
             "ON CONFLICT DO NOTHING RETURNING 1",
             (session.id, message_id),
         ).fetchone()
@@ -309,16 +312,37 @@ def admit_email(conn: db.Conn, limits: Limits, session: Session, sender: str, me
         raise Refused("sender_limit")
 
 
-def email_session(
-    conn: db.Conn, limits: Limits, code: str, sender: str, message_id: str | None, now: datetime
-) -> Session:
-    """The live session an email to invoices+CODE@ belongs to, once its sender is within the limit."""
+@dataclass(frozen=True)
+class EmailRun:
+    """One n8n run's look at one email to invoices+CODE@."""
+
+    code: str
+    sender: str
+    message_id: str | None
+    execution_id: str | None
+
+
+def email_session(conn: db.Conn, limits: Limits, email: EmailRun, now: datetime) -> Session:
+    """The live session an email to invoices+CODE@ belongs to, once its sender is within the limit;
+    the run that read it goes with the session. A refused email (and its run) is deleted at once:
+    there is no session to wait for."""
+    try:
+        session = _admitted(conn, limits, email, now)
+    except Refused:
+        delete_soon(conn, "email", email.message_id)
+        delete_soon(conn, "n8n", email.execution_id)
+        raise
+    note_run(conn, session.id, email.execution_id)
+    return session
+
+
+def _admitted(conn: db.Conn, limits: Limits, email: EmailRun, now: datetime) -> Session:
     if not limits.open:
         raise Refused("demo_paused")
-    session = session_by_code(conn, code, now)
+    session = session_by_code(conn, email.code, now)
     if session is None:
         raise Refused("session_expired")
-    admit_email(conn, limits, session, sender, message_id)
+    admit_email(conn, limits, session, email.sender, email.message_id)
     return session
 
 
@@ -360,14 +384,27 @@ def queue_file(
     return int(row["id"])
 
 
-def claim_upload(conn: db.Conn, upload_id: int) -> Upload | None:
-    """The queued file, now marked as processing (None if unknown or already taken)."""
+def claim_upload(conn: db.Conn, upload_id: int, execution_id: str | None = None) -> Upload | None:
+    """The queued file, now marked as processing (None if unknown or already taken); the n8n run that
+    processes it goes with its session."""
     row = conn.execute(
         """UPDATE demo_uploads SET status = 'processing' WHERE id = %s AND status = 'queued'
            RETURNING id, session_id, file_name, content""",
         (upload_id,),
     ).fetchone()
-    return Upload(row["id"], str(row["session_id"]), row["file_name"], bytes(row["content"])) if row else None
+    if row is None:
+        return None
+    note_run(conn, str(row["session_id"]), execution_id)
+    return Upload(row["id"], str(row["session_id"]), row["file_name"], bytes(row["content"]))
+
+
+def stale_uploads(conn: db.Conn, now: datetime) -> list[int]:
+    """Files still queued well after they were sent: their processing call never reached n8n."""
+    rows = conn.execute(
+        "SELECT id FROM demo_uploads WHERE status = 'queued' AND created_at <= %s ORDER BY id",
+        (now - STALE_UPLOAD,),
+    ).fetchall()
+    return [int(r["id"]) for r in rows]
 
 
 def finish_upload(conn: db.Conn, upload_id: int, invoice_id: str | None, error: str | None = None) -> None:
@@ -451,13 +488,13 @@ class Purged:
 
 
 def purge_expired(conn: db.Conn, now: datetime) -> Purged:
-    """Expired sessions go with their invoices, uploads and previews. Their Gmail messages and Drive
-    files are queued for trashing. Old counters go too. The caller commits, then deletes `files`."""
+    """Expired sessions go with their invoices, uploads and previews. What they left outside the
+    database goes on the deletion list. Old counters go too. The caller commits, then deletes `files`."""
     db.lock(conn, "demo:purge")
     ids = [r["id"] for r in conn.execute("SELECT id FROM demo_sessions WHERE expires_at <= %s", (now,)).fetchall()]
     rows = conn.execute("SELECT id, file_path FROM invoices WHERE demo_session_id = ANY(%s::uuid[])", (ids,)).fetchall()
     conn.execute(
-        "INSERT INTO demo_trash (channel, item_id) SELECT channel, item_id FROM demo_messages "
+        "INSERT INTO demo_deletions (channel, item_id) SELECT channel, item_id FROM demo_external_items "
         "WHERE session_id = ANY(%s::uuid[]) ON CONFLICT DO NOTHING",
         (ids,),
     )
@@ -480,10 +517,36 @@ def purge_expired(conn: db.Conn, now: datetime) -> Purged:
     return Purged(len(ids), len(rows), [r["file_path"] for r in rows if r["file_path"]])
 
 
-def trash_due(conn: db.Conn, limit: int = 50) -> list[db.Row]:
-    return conn.execute("SELECT channel, item_id FROM demo_trash ORDER BY queued_at LIMIT %s", (limit,)).fetchall()
+# =====================================================================================
+# Outside the database: n8n runs, Gmail messages and Drive files, deleted permanently
+# =====================================================================================
+def note_run(conn: db.Conn, session_id: str, execution_id: str | None) -> None:
+    """An n8n run handled one of the session's items: its record goes when the session ends. A run
+    shared by two sessions is noted once and goes with the first that ends."""
+    if execution_id:
+        conn.execute(
+            "INSERT INTO demo_external_items (session_id, channel, item_id) VALUES (%s, 'n8n', %s) "
+            "ON CONFLICT DO NOTHING",
+            (session_id, execution_id),
+        )
 
 
-def trash_done(conn: db.Conn, channel: str, item_ids: list[str]) -> int:
-    """Trashed (or already gone) in Gmail or Drive: no longer queued."""
-    return conn.execute("DELETE FROM demo_trash WHERE channel = %s AND item_id = ANY(%s)", (channel, item_ids)).rowcount
+def delete_soon(conn: db.Conn, channel: str, item_id: str | None) -> None:
+    """On the deletion list now, with no session to wait for."""
+    if item_id:
+        conn.execute(
+            "INSERT INTO demo_deletions (channel, item_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (channel, item_id)
+        )
+
+
+def deletions_due(conn: db.Conn, limit: int = 50) -> list[db.Row]:
+    return conn.execute(
+        "SELECT channel, item_id FROM demo_deletions ORDER BY queued_at, channel, item_id LIMIT %s", (limit,)
+    ).fetchall()
+
+
+def deletions_done(conn: db.Conn, channel: str, item_ids: list[str]) -> int:
+    """Deleted (or already gone) in Gmail, Drive or n8n: off the list."""
+    return conn.execute(
+        "DELETE FROM demo_deletions WHERE channel = %s AND item_id = ANY(%s)", (channel, item_ids)
+    ).rowcount

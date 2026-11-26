@@ -439,13 +439,14 @@ def test_an_upload_is_processed_once(demo_env, live_now):
 # =====================================================================================
 # Email to invoices+CODE@
 # =====================================================================================
-def screen(code: str, sender: str = "visitor@example.test", message_id: str = "m1"):
+def screen(code: str, sender: str = "visitor@example.test", message_id: str = "m1", execution_id: str = "41"):
     body = {
         "recipients": [f"invoices+{code}@davidmichel.dev"],
         "delivered_to": f"invoices+{code}@davidmichel.dev",
         "attachments": [{"key": "attachment_0", "mime_type": "application/pdf", "file_name": "i.pdf", "size": 50000}],
         "sender": sender,
         "message_id": message_id,
+        "execution_id": execution_id,
     }
     r = TestClient(app).post("/intake/email/screen", headers=AUTH, json=body)
     assert r.status_code == 200, r.text
@@ -462,12 +463,19 @@ def test_email_to_a_live_session(demo_on, live_now):
     session = start(demo_on.database_url, now=live_now).session
     s = screen(session.code)
     assert (s["route"], s["scope"], s["demo_session_id"]) == ("process", "demo", session.id)
-    [msg] = query(demo_on.database_url, "SELECT session_id, channel, item_id FROM ap.demo_messages")
-    assert (str(msg["session_id"]), msg["channel"], msg["item_id"]) == (session.id, "email", "m1")
+    items = query(demo_on.database_url, "SELECT session_id, channel, item_id FROM ap.demo_external_items")
+    assert {(str(i["session_id"]), i["channel"], i["item_id"]) for i in items} == {
+        (session.id, "email", "m1"),
+        (session.id, "n8n", "41"),  # the run that read it goes with the session
+    }
     [sender] = query(demo_on.database_url, "SELECT sender_digest, emails FROM ap.demo_senders")
     assert sender["emails"] == 1 and "visitor" not in sender["sender_digest"]
-    assert screen(session.code)["route"] == "process"  # the re-check of the same message isn't counted again
+    # the re-check of the same message isn't counted again, but its run is noted too
+    assert screen(session.code, execution_id="42")["route"] == "process"
     assert query(demo_on.database_url, "SELECT emails FROM ap.demo_senders")[0]["emails"] == 1
+    runs = query(demo_on.database_url, "SELECT item_id FROM ap.demo_external_items WHERE channel = 'n8n'")
+    assert sorted(r["item_id"] for r in runs) == ["41", "42"]
+    assert query(demo_on.database_url, "SELECT count(*) AS n FROM ap.demo_deletions")[0]["n"] == 0
 
 
 def test_email_to_an_unknown_or_ended_session_is_refused(demo_on, live_now):
@@ -479,6 +487,9 @@ def test_email_to_an_unknown_or_ended_session_is_refused(demo_on, live_now):
         "demo",
         {"reason": "session_expired"},
     )
+    # no session to wait for: the email and the run that read it are deleted at once
+    due = query(demo_on.database_url, "SELECT channel, item_id FROM ap.demo_deletions ORDER BY channel")
+    assert [(d["channel"], d["item_id"]) for d in due] == [("email", "m1"), ("n8n", "41")]
 
 
 def test_emails_per_sender_and_day(demo_on, live_now, monkeypatch):
@@ -486,8 +497,10 @@ def test_emails_per_sender_and_day(demo_on, live_now, monkeypatch):
     session = start(demo_on.database_url, now=live_now).session
     assert screen(session.code, message_id="m1")["route"] == "process"
     assert screen(session.code, message_id="m2")["route"] == "process"
-    refused = screen(session.code, message_id="m3")
+    refused = screen(session.code, message_id="m3", execution_id="43")
     assert (refused["route"], refused["reason"]) == ("demo_refused", "demo_sender_limit")
+    due = query(demo_on.database_url, "SELECT channel, item_id FROM ap.demo_deletions ORDER BY channel")
+    assert [(d["channel"], d["item_id"]) for d in due] == [("email", "m3"), ("n8n", "43")]
     assert screen(session.code, sender="other@example.test", message_id="m4")["route"] == "process"
 
 
@@ -499,7 +512,7 @@ def test_expired_sessions_go_with_their_invoices_and_files(demo_env, live_now, m
     url = cfg.database_url
     old = start(url, now=live_now - timedelta(minutes=59)).session
     current = start(url, client="198.51.100.4", now=live_now).session
-    send_sample(url, old, "us-hosting-october")
+    send_sample(url, old, "us-hosting-october")  # processed by n8n run "7" (see process)
     send_sample(url, current, "us-hosting-october")
     with db.connect(url) as conn:
         demo.admit_email(conn, LIMITS, old, "visitor@example.test", "gmail-msg-1")
@@ -514,7 +527,8 @@ def test_expired_sessions_go_with_their_invoices_and_files(demo_env, live_now, m
         "sessions": 1,
         "invoices": 1,
         "files": 1,
-        "trash": [{"channel": "email", "item_id": "gmail-msg-1"}],
+        "deletions": [{"channel": "email", "item_id": "gmail-msg-1"}, {"channel": "n8n", "item_id": "7"}],
+        "stale_uploads": [],
     }
     assert not (Path(cfg.storage_dir) / stored["file_path"]).exists()
     assert [str(r["id"]) for r in query(url, "SELECT id FROM ap.demo_sessions")] == [current.id]
@@ -522,11 +536,39 @@ def test_expired_sessions_go_with_their_invoices_and_files(demo_env, live_now, m
     logs = query(url, "SELECT count(*) AS n FROM ap.processing_log WHERE scope = 'demo'")[0]["n"]
     assert logs > 0  # the audit trail stays (it never holds document content)
 
-    done = TestClient(app).post(
-        "/demo/trash/done", headers=AUTH, json={"channel": "email", "item_ids": ["gmail-msg-1"]}
-    )
-    assert done.json() == {"removed": 1}
-    assert query(url, "SELECT count(*) AS n FROM ap.demo_trash")[0]["n"] == 0
+    for channel, item in (("email", "gmail-msg-1"), ("n8n", "7")):
+        done = TestClient(app).post("/demo/deletions/done", headers=AUTH, json={"channel": channel, "item_ids": [item]})
+        assert done.json() == {"removed": 1}
+    assert query(url, "SELECT count(*) AS n FROM ap.demo_deletions")[0]["n"] == 0
+
+
+def test_a_run_shared_by_two_sessions_goes_with_the_first_that_ends(clean_db):
+    url = clean_db
+    first = start(url, now=NOW - timedelta(minutes=59)).session
+    second = start(url, client="198.51.100.4").session
+    with db.connect(url) as conn:
+        demo.note_run(conn, first.id, "90")
+        demo.note_run(conn, second.id, "90")
+        demo.purge_expired(conn, NOW + timedelta(minutes=2))
+        assert [r["item_id"] for r in demo.deletions_due(conn)] == ["90"]
+
+
+def test_uploads_still_queued_after_a_minute_are_swept(demo_env, live_now):
+    _state, _pcfg, cfg = demo_env
+    url = cfg.database_url
+    session = start(url, now=live_now).session
+    missed = queue(url, session, sample_bytes("us-hosting-october"), "us-hosting-october")
+    query(url, "UPDATE ap.demo_uploads SET created_at = now() - interval '2 minutes' WHERE id = %s", missed)
+    queue(url, session, sample_bytes("fr-eur-discount"), "fr-eur-discount")  # just sent: not missed
+    r = TestClient(app).post("/demo/cleanup", headers=AUTH)
+    assert r.json()["stale_uploads"] == [missed]
+    process(missed)
+    assert TestClient(app).post("/demo/cleanup", headers=AUTH).json()["stale_uploads"] == []
+
+
+def test_only_known_channels_go_off_the_deletion_list(cfg):
+    r = TestClient(app).post("/demo/deletions/done", headers=AUTH, json={"channel": "s3", "item_ids": ["x"]})
+    assert r.status_code == 422
 
 
 def test_every_sample_has_its_recorded_result_and_fits_the_limits():

@@ -5,9 +5,10 @@ notice, the footer and the security headers. Real Postgres; processing by the co
 import re
 from typing import Any
 
+import httpx
 import pytest
 from app.main import app as core_app
-from app.web.demo_site import DEMO_CSP, SESSION_COOKIE, create_app, router
+from app.web.demo_site import DEMO_CSP, DEMO_WEBHOOK_HEADER, SESSION_COOKIE, WEBHOOK_TIMEOUT, create_app, router
 from app.web.guard import SECURITY_HEADERS
 from app.web.settings import DemoWebSettings
 from fastapi.responses import FileResponse
@@ -198,6 +199,51 @@ def test_upload_is_queued_with_its_bytes_only_until_processed(site):
         "queued",
     )
     assert "my-invoice.pdf" in c.get(f"/s/{code}").text
+
+
+class Webhook:
+    """Stands in for n8n's webhook: records what the page sent, or fails."""
+
+    def __init__(self, fail: bool = False):
+        self.calls: list[dict[str, Any]] = []
+        self.fail = fail
+
+    def post(self, url: str, **kwargs: Any) -> httpx.Response:
+        self.calls.append({"url": url, **kwargs})
+        if self.fail:
+            raise httpx.ConnectError("n8n is down")
+        return httpx.Response(200, request=httpx.Request("POST", url))
+
+
+def test_a_queued_file_is_handed_to_n8n_by_its_id_only(site, monkeypatch):
+    hook = Webhook()
+    monkeypatch.setattr(httpx, "post", hook.post)
+    c = visitor(site, demo_webhook_url="http://n8n:5678/webhook/demo", demo_webhook_key="k3y")
+    code = start(c)
+    assert c.post(f"/s/{code}/samples/us-hosting-october").status_code == 303
+    [upload] = query(site, "SELECT id FROM ap.demo_uploads")
+    [call] = hook.calls
+    assert call["url"] == "http://n8n:5678/webhook/demo"
+    assert call["json"] == {"upload_id": upload["id"]}
+    assert call["headers"] == {DEMO_WEBHOOK_HEADER: "k3y"} and call["timeout"] == WEBHOOK_TIMEOUT
+
+
+def test_n8n_down_still_queues_the_file_for_the_sweep(site, monkeypatch):
+    hook = Webhook(fail=True)
+    monkeypatch.setattr(httpx, "post", hook.post)
+    c = visitor(site, demo_webhook_url="http://n8n:5678/webhook/demo", demo_webhook_key="k3y")
+    code = start(c)
+    assert c.post(f"/s/{code}/samples/us-hosting-october").status_code == 303
+    assert len(hook.calls) == 1
+    assert query(site, "SELECT status FROM ap.demo_uploads")[0]["status"] == "queued"
+
+
+def test_no_webhook_set_means_no_call(site, monkeypatch):
+    hook = Webhook()
+    monkeypatch.setattr(httpx, "post", hook.post)
+    c = visitor(site)
+    assert c.post(f"/s/{start(c)}/samples/us-hosting-october").status_code == 303
+    assert hook.calls == []
 
 
 def test_upload_over_the_page_limit_is_refused_with_the_reason(site):

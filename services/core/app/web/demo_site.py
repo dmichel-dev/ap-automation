@@ -22,6 +22,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
+import httpx
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -34,6 +35,8 @@ from . import guard, reasons
 from .settings import DemoWebSettings
 
 log = logging.getLogger("app.web.demo")
+DEMO_WEBHOOK_HEADER = "X-Demo-Key"  # the header name in n8n's header-auth credential
+WEBHOOK_TIMEOUT = 2.0  # seconds: n8n answers at once, before processing
 SESSION_COOKIE = "__Host-ap_demo"  # __Host-: Secure, Path=/, no Domain
 MAX_FORM = 16 * 1024  # a click on a button
 UPLOAD_OVERHEAD = 64 * 1024  # multipart framing around the file
@@ -253,9 +256,28 @@ def session_items(request: Request, code: str) -> Response:
 
 
 def _queue(request: Request, session: demo.Session, file_name: str, content: bytes, sample: str | None) -> None:
-    with _connect(settings(request)) as conn:
-        demo.queue_file(conn, _limits(request), session, file_name, content, datetime.now(UTC), sample)
+    s = settings(request)
+    with _connect(s) as conn:
+        upload_id = demo.queue_file(conn, _limits(request), session, file_name, content, datetime.now(UTC), sample)
         conn.commit()
+    notify_n8n(s, upload_id)
+
+
+def notify_n8n(s: DemoWebSettings, upload_id: int) -> None:
+    """Asks n8n to process the queued file now. Only its ID is sent (n8n reads nothing else from the
+    page). A failure costs a short wait: the clean-up's sweep picks up missed uploads."""
+    if not s.demo_webhook_url:
+        return
+    try:
+        r = httpx.post(
+            s.demo_webhook_url,
+            json={"upload_id": upload_id},
+            headers={DEMO_WEBHOOK_HEADER: s.demo_webhook_key.get_secret_value()},
+            timeout=WEBHOOK_TIMEOUT,
+        )
+        r.raise_for_status()
+    except httpx.HTTPError as exc:
+        log.warning("n8n not told about upload %s (%s); the sweep will process it", upload_id, type(exc).__name__)
 
 
 async def _queued(request: Request, session: demo.Session, name: str, content: bytes, sample: str | None) -> Response:
