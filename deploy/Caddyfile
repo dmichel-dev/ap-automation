@@ -23,10 +23,10 @@
 
 # The home page: static files from the site repository (github.com/dmichel-dev/davidmichel.dev),
 # mounted read-only. It has no scripts and loads nothing from elsewhere, so the policy allows only its
-# own stylesheet and images. A missing file is an empty 404.
+# own stylesheet, fonts and images. A missing file is an empty 404.
 {$HOME_HOST} {
 	import hardening
-	header Content-Security-Policy "default-src 'none'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+	header Content-Security-Policy "default-src 'none'; style-src 'self'; font-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 	encode zstd gzip
 	root * /srv/site
 	file_server

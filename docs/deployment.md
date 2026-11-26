@@ -21,7 +21,7 @@ n8n's sign-in page served under a custom domain looks to Google Safe Browsing li
 
 A public webhook, if one is ever needed (e.g. an upload form handled by n8n), gets a host of its own in the [Caddyfile](../deploy/Caddyfile) that forwards **only** exact `POST` paths and answers every other path with an empty 404. `WEBHOOK_URL` then names that host.
 
-**Home page** (`HOME_HOST`, e.g. `davidmichel.dev`): static files from the [site repository](https://github.com/dmichel-dev/davidmichel.dev), cloned next to this one on the server; Caddy serves its `public/` folder read-only (`SITE_DIR`). The pages have no scripts and load nothing from elsewhere, so Caddy sends a Content-Security-Policy that allows only the site's own stylesheet and images. Publishing a change is a `git pull` in that clone: Caddy reads the files from disk and needs no restart. `www.` + `HOME_HOST` redirects permanently to it, path kept.
+**Home page** (`HOME_HOST`, e.g. `davidmichel.dev`): static files from the [site repository](https://github.com/dmichel-dev/davidmichel.dev), cloned next to this one on the server; Caddy serves its `public/` folder read-only (`SITE_DIR`). The pages have no scripts and load nothing from elsewhere, so Caddy sends a Content-Security-Policy that allows only the site's own stylesheet, fonts and images. Publishing a change is a `git pull` in that clone: Caddy reads the files from disk and needs no restart. `www.` + `HOME_HOST` redirects permanently to it, path kept.
 
 **Retired host names** (`RETIRED_HOSTS` in `.env`, e.g. the former public name of the editor) answer an empty 404 on every path until their DNS record is removed.
 
