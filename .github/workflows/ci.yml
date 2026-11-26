@@ -61,5 +61,5 @@ jobs:
           -e AP_DATABASE_URL=postgresql://unused@localhost/unused
           -e CORE_API_TOKEN=test-token
           -e AP_TEST_DATABASE_URL=postgresql://ap_ci:ap_ci@localhost:5432/ap_test
-          -v "$PWD/services/core:/app:ro" -v "$PWD/db/migrations:/migrations:ro" -v "$PWD/test-data:/test-data:ro" -v "$PWD/config:/config:ro" -v "$PWD/deploy:/deploy:ro"
+          -v "$PWD/services/core:/app:ro" -v "$PWD/db/migrations:/migrations:ro" -v "$PWD/test-data:/test-data:ro" -v "$PWD/config:/config:ro" -v "$PWD/deploy:/deploy:ro" -v "$PWD/db/init:/db-init:ro"
           ap-core-test pytest -q -m "not live" -p no:cacheprovider

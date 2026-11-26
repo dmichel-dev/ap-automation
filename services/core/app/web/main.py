@@ -58,14 +58,6 @@ ACCOUNT_GROUPS = {
     "Other Current Asset": "Other current assets (e.g. prepaid)",
 }
 NO_ACTION_ON_FRAUD = "Possible fraud: choose “Verified with the supplier” or “Reject”, then confirm. Nothing was saved."
-# Decision panel choices on posting and matching items: (action, title, what it does)
-SETTLE_CHOICES = (
-    ("confirm_match", "Confirm the payment", "The chosen bank transaction pays this bill"),
-    ("reject_match", "None of these", "No candidate pays it; they won't be proposed again"),
-    ("write_off", "Write off the difference", "A vendor credit closes the bill; no money moves"),
-    ("keep_open", "Leave it open", "The difference stays open on the bill"),
-    ("retry", "Try again in QuickBooks", "After fixing the cause; nothing is created twice"),
-)
 ListStatus = Literal["open", "approved", "corrected", "verified", "rejected", "written_off", "all"]
 
 router = APIRouter()
@@ -318,7 +310,7 @@ def _item_page(
         chosen=chosen,
         correctable=forms.CORRECTABLE,
         choose_account=review.account_choice_required(data),
-        settle_choices=SETTLE_CHOICES,
+        settle_choices=forms.SETTLE_CHOICES,
         error=message.get("error"),
         done=message.get("done"),
     )

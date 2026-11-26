@@ -112,3 +112,13 @@ def correction(form: FormData, viewer: Viewer, invoice: dict[str, Any]) -> revie
     if not changes:
         raise FormError("nothing was changed")
     return _build(review.Correction, reviewer=viewer.reviewer, changes=changes)
+
+
+# Decision panel choices on posting and matching items: (action, title, what it does)
+SETTLE_CHOICES = (
+    ("confirm_match", "Confirm the payment", "The chosen bank transaction pays this bill"),
+    ("reject_match", "None of these", "No candidate pays it; they won't be proposed again"),
+    ("write_off", "Write off the difference", "A vendor credit closes the bill; no money moves"),
+    ("keep_open", "Leave it open", "The difference stays open on the bill"),
+    ("retry", "Try again in QuickBooks", "After fixing the cause; nothing is created twice"),
+)

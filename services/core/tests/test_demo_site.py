@@ -9,7 +9,9 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
+import psycopg
 import pytest
+from app import db
 from app.main import app as core_app
 from app.web.demo_site import DEMO_CSP, DEMO_WEBHOOK_HEADER, SESSION_COOKIE, WEBHOOK_TIMEOUT, create_app, router
 from app.web.guard import SECURITY_HEADERS
@@ -190,6 +192,121 @@ def test_a_bill_of_another_session_is_not_found(site):
     assert second.get(f"/s/{second_code}/bills/not-a-uuid").status_code == 422
 
 
+# =====================================================================================
+# Read-only review page
+# =====================================================================================
+def review_session(site, *samples: str) -> tuple[TestClient, str, dict[str, str]]:
+    """A visitor whose session sent these samples (processed), and each sample's invoice id."""
+    c = visitor(site)
+    code = start(c)
+    for key in samples:
+        assert c.post(f"/s/{code}/samples/{key}").status_code == 303
+        process_queued(site)
+    rows = query(
+        site, "SELECT u.sample, i.id::text AS id FROM ap.demo_uploads u JOIN ap.invoices i ON i.id = u.invoice_id"
+    )
+    return c, code, {r["sample"]: r["id"] for r in rows}
+
+
+def test_a_review_card_opens_the_review_page_read_only(site):
+    c, code, ids = review_session(site, "de-eur-wrong-total")
+    url = f"/s/{code}/review/{ids['de-eur-wrong-total']}"
+    assert f'href="{url}">See the review page</a>' in c.get(f"/s/{code}").text
+    r = c.get(url)
+    assert r.status_code == 200
+    page = r.text
+    # The review page's own content and design: its stylesheet, not the demo's palette
+    assert 'class="decision"' in page and "Extracted data (OCR)" in page and "/static/demo.css" not in page
+    assert "The lines and tax don&#39;t add up to the invoice total." in page
+    assert "This is the review page a reviewer uses." in page and "nothing is posted." in page
+    # Read-only: no form, no token, every control inside a disabled fieldset
+    assert "<form" not in page and 'name="csrf"' not in page and "<fieldset disabled>" in page
+    assert f'<a class="back" href="/s/{code}#invoices">Your invoices</a>' in page
+    # A sample's pages are shown, as images drawn by the demo
+    assert f'<img src="{url}/pages/1"' in page
+    image = c.get(f"{url}/pages/1")
+    assert image.status_code == 200 and image.headers["content-type"] == "image/png"
+    assert image.content.startswith(b"\x89PNG")
+    assert c.get(f"{url}/pages/99").status_code == 404
+
+
+def test_the_review_page_opens_only_for_its_session_and_its_review_invoices(site):
+    c, code, ids = review_session(site, "us-hosting-october", "de-eur-wrong-total")
+    review_url = f"/s/{code}/review/{ids['de-eur-wrong-total']}"
+    assert c.get(review_url).status_code == 200
+    # The code alone (no cookie) and another session's cookie open nothing
+    stranger = visitor(site, peer="198.51.100.30")
+    assert stranger.get(review_url).status_code == 404
+    other = visitor(site, peer="198.51.100.31")
+    other_code = start(other)
+    assert other.get(review_url).status_code == 404
+    assert other.get(f"/s/{other_code}/review/{ids['de-eur-wrong-total']}").status_code == 404
+    assert other.get(f"/s/{other_code}/review/{ids['de-eur-wrong-total']}/pages/1").status_code == 404
+    # A ready invoice has no review page
+    assert c.get(f"/s/{code}/review/{ids['us-hosting-october']}").status_code == 404
+    # A non-demo invoice opens nothing, even with this session's id on it
+    with db.connect(site) as conn:
+        conn.execute("UPDATE ap.review_queue SET scope = 'live' WHERE invoice_id = %s", (ids["de-eur-wrong-total"],))
+        conn.execute(
+            "UPDATE ap.invoices SET scope = 'live', demo_session_id = NULL WHERE id = %s", (ids["de-eur-wrong-total"],)
+        )
+    assert c.get(review_url).status_code == 404
+    assert c.get(f"{review_url}/pages/1").status_code == 404
+    assert c.get(f"/s/{code}/review/not-a-uuid").status_code == 422
+
+
+def test_a_visitors_own_file_is_never_shown_on_the_review_page(site):
+    c, code, ids = review_session(site, "de-eur-wrong-total")
+    with db.connect(site) as conn:  # as if the visitor had uploaded it: no sample behind it
+        conn.execute("UPDATE ap.demo_uploads SET sample = NULL, kind = 'upload'")
+    url = f"/s/{code}/review/{ids['de-eur-wrong-total']}"
+    page = c.get(url).text
+    assert "Your own file isn&#39;t shown here" in page and "<img" not in page
+    assert c.get(f"{url}/pages/1").status_code == 404
+
+
+def test_the_review_page_shows_no_bank_details(site):
+    c, code, ids = review_session(site, "us-hosting-october", "us-hosting-november-other-account")
+    invoice = ids["us-hosting-november-other-account"]
+    page = c.get(f"/s/{code}/review/{invoice}").text
+    assert "Verified with the supplier" in page and "<fieldset disabled>" in page  # the fraud panel, switched off
+    assert "Bank details on this document" not in page
+    [row] = query(site, "SELECT bank_accounts, checks FROM ap.invoices WHERE id = %s", invoice)
+    assert row["bank_accounts"] and row["checks"]["bank_details"]["new"]
+    stored = [v for a in row["bank_accounts"] for k, v in a.items() if k != "account_holder" and isinstance(v, str)]
+    # Nothing of the stored bank details beyond the masked reason the session card already shows
+    card = c.get(f"/s/{code}").text
+    assert stored and {v for v in stored if v in page} <= {v for v in stored if v in card}
+    assert not any(v in page for v in stored if v not in card)
+
+
+def demo_role_grants(role: str) -> list[str]:
+    """The rights the demo role script gives in the schema (from its schema USAGE grant to the end of
+    its SQL), as statements for `role`."""
+    script = Path("/db-init/02_demo_role.sh").read_text()
+    start = "GRANT USAGE ON SCHEMA ap"
+    body = start + script.split(start, 1)[1].split("\nSQL\n", 1)[0]
+    sql = "\n".join(line for line in body.splitlines() if not line.strip().startswith("--"))
+    return [x.strip().replace(':"demo_user"', role) for x in sql.split(";") if x.strip()]
+
+
+def test_the_demo_role_reads_the_review_views_and_still_no_invoice(site):
+    """The grants of db/init/02_demo_role.sh, applied to a role of this test: the review views are
+    readable, the invoices table (bank details included) is not. Needs a superuser (CI)."""
+    with db.connect(site) as conn:
+        if not db.one(conn, "SELECT rolsuper FROM pg_roles WHERE rolname = current_user")["rolsuper"]:
+            pytest.skip("creating a role needs a superuser (the CI database)")
+        conn.execute("CREATE ROLE ap_demo_test NOLOGIN")  # rolled back at the end, like every grant
+        for statement in demo_role_grants("ap_demo_test"):
+            conn.execute(statement)
+        conn.execute("SET ROLE ap_demo_test")
+        for view in ("demo_review_items", "demo_review_lines", "demo_review_tax_lines"):
+            conn.execute(f"SELECT * FROM ap.{view} LIMIT 1")
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            conn.execute("SELECT bank_accounts FROM ap.invoices LIMIT 1")
+        conn.rollback()
+
+
 def test_unknown_sample_is_not_found(site):
     c = visitor(site)
     code = start(c)
@@ -288,13 +405,17 @@ def test_a_full_session_offers_no_more_sends(site):
 # =====================================================================================
 @pytest.fixture
 def every_page(site):
-    """A visitor with a session holding one ready invoice, and the path of each kind of page."""
-    c = visitor(site)
-    code = start(c)
-    c.post(f"/s/{code}/samples/us-hosting-october")
-    process_queued(site)
-    [invoice] = query(site, "SELECT id FROM ap.invoices")
-    return c, ["/", "/privacy", "/credits", f"/s/{code}", f"/s/{code}/bills/{invoice['id']}", "/s/zzzzzzzz"]
+    """A visitor with a session holding a ready and a needs-review invoice, and the path of each kind of page."""
+    c, code, ids = review_session(site, "us-hosting-october", "de-eur-wrong-total")
+    return c, [
+        "/",
+        "/privacy",
+        "/credits",
+        f"/s/{code}",
+        f"/s/{code}/bills/{ids['us-hosting-october']}",
+        f"/s/{code}/review/{ids['de-eur-wrong-total']}",
+        "/s/zzzzzzzz",
+    ]
 
 
 class Links(HTMLParser):
@@ -406,7 +527,8 @@ def test_privacy_notice_names_the_processor_the_deletion_and_the_contact(site):
 
 
 def test_no_page_sends_a_document_back():
-    """The pages show processing results only: no route serves a file."""
+    """The pages show processing results only: no route serves a file. The only image route draws a
+    sample's pages (the demo's own fictional files); a visitor's file is never shown (tested above)."""
     routes = [r for r in router.routes if isinstance(r, APIRoute)]
     assert len(routes) == len(router.routes)
     paths = {r.path for r in routes}
@@ -419,6 +541,8 @@ def test_no_page_sends_a_document_back():
         "/s/{code}/samples/{key}",
         "/s/{code}/uploads",
         "/s/{code}/bills/{invoice_id}",
+        "/s/{code}/review/{invoice_id}",
+        "/s/{code}/review/{invoice_id}/pages/{page}",
         "/privacy",
         "/credits",
     }

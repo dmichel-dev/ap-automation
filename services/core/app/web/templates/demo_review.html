@@ -1,0 +1,11 @@
+{% extends "demo_base.html" %}
+{# The review page's own design: its stylesheet only (app.css), not the demo's palette, around the
+   content the review page itself uses (review_item.html), read-only #}
+{% block styles %}{% endblock %}
+{% block title %}Review: {{ inv.supplier_name or "invoice" }}{% endblock %}
+{% block header_right %}
+<span class="who"><span class="who-name">{{ minutes_left }} min left</span><span class="who-role">Read-only review page</span></span>
+{% endblock %}
+{% block main %}
+{% include "review_item.html" %}
+{% endblock %}

@@ -48,7 +48,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 button.quiet { padding: 6px 12px; border: 1px solid var(--rule); border-radius: var(--radius-s); background: none; font-size: 0.875rem; }
 button.quiet:hover { border-color: var(--grey-rule); }
 main { max-width: 1440px; margin: 0 auto; padding: 28px 32px 64px; }
-.foot { max-width: 1440px; margin: 0 auto; padding: 20px 32px 32px; font-size: 0.8125rem; }
+.foot { display: flex; flex-wrap: wrap; gap: 8px 24px; max-width: 1440px; margin: 0 auto; padding: 20px 32px 32px; font-size: 0.8125rem; }
 .foot a { color: var(--ink-2); text-decoration: none; }
 .foot a:hover { text-decoration: underline; }
 

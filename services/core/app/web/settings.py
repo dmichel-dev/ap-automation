@@ -50,7 +50,22 @@ def _is_loopback(netloc: str) -> bool:
     return host in LOOPBACK_HOSTS
 
 
-class WebSettings(BaseSettings):
+class ConfidenceBands(BaseSettings):
+    """The confidence badge's bands (display only), shared by the review page and the demo's copy of it.
+    CONFIDENCE_THRESHOLD is the core's review threshold, so red always means "below the threshold the
+    core routes on"; green starts at REVIEW_CONFIDENCE_HIGH."""
+
+    confidence_threshold: float = 0.85
+    review_confidence_high: float = 0.95
+
+    @model_validator(mode="after")
+    def _ordered_bands(self) -> "ConfidenceBands":
+        if not 0 < self.confidence_threshold <= self.review_confidence_high <= 1:
+            raise ValueError("confidence bands: 0 < CONFIDENCE_THRESHOLD <= REVIEW_CONFIDENCE_HIGH <= 1")
+        return self
+
+
+class WebSettings(ConfidenceBands):
     ap_database_url: SecretStr
     file_storage_dir: str = "/data/files"
     review_listener: Listener = "public"
@@ -58,10 +73,6 @@ class WebSettings(BaseSettings):
     review_trusted_proxies: str = ""  # public only: proxy addresses whose X-Forwarded-For is used
     # What the database holds, said in the page header: "test" for a test or sample database
     review_environment: Environment = "production"
-    # Confidence badge (display only). CONFIDENCE_THRESHOLD is the core's review threshold, so red always
-    # means "below the threshold the core routes on"; green starts at REVIEW_CONFIDENCE_HIGH.
-    confidence_threshold: float = 0.85
-    review_confidence_high: float = 0.95
 
     @cached_property
     def origins(self) -> tuple[str, ...]:
@@ -91,12 +102,10 @@ class WebSettings(BaseSettings):
             raise ValueError("the public listener serves HTTPS origins only")
         for p in self.trusted_proxies:
             ip_address(p)  # ValueError if not an IP address
-        if not 0 < self.confidence_threshold <= self.review_confidence_high <= 1:
-            raise ValueError("confidence bands: 0 < CONFIDENCE_THRESHOLD <= REVIEW_CONFIDENCE_HIGH <= 1")
         return self
 
 
-class DemoWebSettings(DemoSettings):
+class DemoWebSettings(DemoSettings, ConfidenceBands):
     """The public demo pages (web/demo_site.py): behind the reverse proxy over HTTPS. A loopback http
     origin is accepted for running the pages on a workstation. The demo's limits come from DEMO_*."""
 

@@ -30,9 +30,9 @@ from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
-from .. import db, demo, demo_samples
+from .. import db, demo, demo_samples, review
 from ..intake import sub_address
-from . import guard, reasons
+from . import display, forms, guard, reasons, render
 from .settings import DemoWebSettings
 
 log = logging.getLogger("app.web.demo")
@@ -46,6 +46,16 @@ FRAUD_CODES = frozenset({"possible_bank_detail_change"})
 STATUS_LABELS = {"ready": "Ready to post", "needs_review": "Needs review", "rejected": "Rejected"}
 UPLOAD_ERRORS = {"provider_server": "The OCR service didn't answer. Try again in a few minutes."}
 ENDED = "This demo session has ended, or it opens only in the browser that started it."
+PDF = "application/pdf"
+READ_ONLY_REVIEW = (
+    "This is the review page a reviewer uses. Here they would check the invoice against the original, then "
+    "approve it with an expense account, correct a field, or reject it. In the demo these controls are switched "
+    "off: nothing is posted."
+)
+OWN_FILE_NOT_SHOWN = (
+    "Your own file isn't shown here: the demo never shows a visitor's document back. In the live system, the "
+    "original sits on this side, next to the data read from it."
+)
 # The review page's policy, plus fetch to this origin (the session page refreshes its cards) and the
 # demo's self-hosted fonts
 DEMO_CSP = guard.SECURITY_HEADERS["Content-Security-Policy"] + "; connect-src 'self'; font-src 'self'"
@@ -149,6 +159,7 @@ def _invoice_card(item: db.Row) -> dict[str, Any]:
         "reasons": _reason_lines(item["reasons"]) if item["status"] != "ready" else [],
         "steps": _invoice_steps(item),
         "bill": item["id"] if item["has_preview"] and item["account_names"] else None,
+        "review": item["id"] if item["status"] == "needs_review" else None,
         "pending": False,
     }
 
@@ -173,6 +184,7 @@ def _upload_card(item: db.Row) -> dict[str, Any]:
         "reasons": [],
         "steps": [("done", "Received from this page"), last],
         "bill": None,
+        "review": None,
         "pending": not failed,
     }
 
@@ -350,6 +362,66 @@ def bill_page(request: Request, code: str, invoice_id: UUID) -> Response:
     context = _bill_context(request, code, invoice_id)
     context["minutes_left"] = _minutes_left(context["session"], datetime.now(UTC))
     return _page("demo_bill.html", **context)
+
+
+def _review_context(request: Request, code: str, invoice_id: UUID) -> dict[str, Any]:
+    """The review page's own context (review_item.html), read-only, for a needs-review invoice of this
+    session. The original is shown only for a sample: a visitor's own file is never shown back."""
+    s = settings(request)
+    session = _session(request, code)
+    with _connect(s) as conn:
+        found = demo.session_review(conn, session.id, str(invoice_id))
+    if found is None:
+        raise SessionGone
+    data, sample = found["data"], demo_samples.sample(found["sample"] or "")
+    base = f"/s/{code}/review/{invoice_id}"
+    return {
+        "session": session,
+        "minutes_left": _minutes_left(session, datetime.now(UTC)),
+        "item": data,
+        "inv": data["invoice"],
+        "account_groups": [],  # read-only: no chart of accounts in the demo
+        "pages": _sample_pages(sample) if sample else 0,
+        "pages_href": base + "/pages",
+        "original_note": None if sample else OWN_FILE_NOT_SHOWN,
+        "back_href": f"/s/{code}#invoices",
+        "back_label": "Your invoices",
+        "read_only_note": READ_ONLY_REVIEW,
+        "confidence": display.confidence_badge(
+            data["invoice"]["confidence"], s.confidence_threshold, s.review_confidence_high
+        ),
+        "chosen": None,
+        "correctable": forms.CORRECTABLE,
+        "choose_account": review.account_choice_required(data),
+        "settle_choices": forms.SETTLE_CHOICES,
+        "done": None,
+    }
+
+
+def _sample_pages(sample: demo_samples.Sample) -> int | None:
+    try:
+        return render.page_count(sample.file, PDF)
+    except render.RenderError:
+        return None
+
+
+@router.get("/s/{code}/review/{invoice_id}")
+def review_page(request: Request, code: str, invoice_id: UUID) -> Response:
+    return _page("demo_review.html", **_review_context(request, code, invoice_id))
+
+
+@router.get("/s/{code}/review/{invoice_id}/pages/{page}")
+def review_sample_page(request: Request, code: str, invoice_id: UUID, page: int) -> Response:
+    """A page of a sample's original, as an image. Only for an invoice that came from a sample: for a
+    visitor's own file this is a 404, like any page that isn't theirs."""
+    session = _session(request, code)
+    with _connect(settings(request)) as conn:
+        found = demo.session_review(conn, session.id, str(invoice_id))
+    sample = demo_samples.sample((found or {}).get("sample") or "")
+    if sample is None or not 1 <= page <= (_sample_pages(sample) or 0):
+        raise SessionGone
+    png = render.render_page(sample.file, PDF, page - 1)
+    return Response(png, media_type="image/png", headers={"Cache-Control": "private, max-age=3600"})
 
 
 @router.get("/privacy")

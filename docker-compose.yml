@@ -196,6 +196,8 @@ services:
       DEMO_ORIGINS: ${DEMO_ORIGINS:-http://localhost:8082}
       DEMO_TRUSTED_PROXIES: ${DEMO_TRUSTED_PROXIES:-}
       INTAKE_EMAIL_ALIAS: ${INTAKE_EMAIL_ALIAS:-invoices@davidmichel.dev}
+      CONFIDENCE_THRESHOLD: ${CONFIDENCE_THRESHOLD}          # the read-only review page's badge, as on the review page
+      REVIEW_CONFIDENCE_HIGH: ${REVIEW_CONFIDENCE_HIGH:-0.95}
       # n8n's internal webhook (Docker network only): a queued file is processed at once
       DEMO_WEBHOOK_URL: ${DEMO_WEBHOOK_URL:-http://n8n:5678/webhook/ap-demo-upload}
       DEMO_WEBHOOK_KEY: ${DEMO_WEBHOOK_KEY:-}
@@ -249,6 +251,7 @@ services:
       - ./test-data:/test-data:ro
       - ./config:/config:ro
       - ./deploy:/deploy:ro
+      - ./db/init:/db-init:ro
     depends_on:
       postgres:
         condition: service_healthy

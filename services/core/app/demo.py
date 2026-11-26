@@ -33,7 +33,7 @@ from typing import Any
 
 from psycopg.types.json import Jsonb
 
-from . import db, files
+from . import db, files, review
 from .web import render
 from .web.security import new_token, token_digest
 
@@ -468,6 +468,41 @@ def session_bill(conn: db.Conn, session_id: str, invoice_id: str) -> db.Row | No
             WHERE i.id = %s::uuid AND i.demo_session_id = %s::uuid""",
         (invoice_id, session_id),
     ).fetchone()
+
+
+def session_review(conn: db.Conn, session_id: str, invoice_id: str) -> dict[str, Any] | None:
+    """A needs-review invoice of this session as the read-only review page shows it, read through the
+    views of migration 021 only (no bank details, no file, no OCR text); None for anything else (another
+    session's invoice, a ready or rejected one, a live one). `sample` names the sample it came from."""
+    row = conn.execute(
+        """SELECT r.*, u.sample
+             FROM demo_review_items r LEFT JOIN demo_uploads u ON u.invoice_id = r.id
+            WHERE r.id = %s::uuid AND r.demo_session_id = %s::uuid
+            ORDER BY r.review_id DESC LIMIT 1""",
+        (invoice_id, session_id),
+    ).fetchone()
+    if row is None:
+        return None
+    lines = conn.execute(
+        """SELECT line_no, kind, tax_stage, description, quantity, unit_price, amount, tax_rate
+             FROM demo_review_lines WHERE invoice_id = %s ORDER BY line_no""",
+        (row["id"],),
+    ).fetchall()
+    taxes = conn.execute(
+        """SELECT tax_type, label, rate, taxable_base, amount
+             FROM demo_review_tax_lines WHERE invoice_id = %s ORDER BY id""",
+        (row["id"],),
+    ).fetchall()
+    item = {
+        "id": row["review_id"], "invoice_id": row["id"], "stage": row["review_stage"], "status": row["review_status"],
+        "scope": "demo", "reasons": row["review_reasons"], "created_at": row["review_created_at"],
+        # A demo item is never decided, corrected or sent to QuickBooks
+        "corrections": [], "decision": None, "reviewer": None, "resolved_at": None, "waiting_for": None,
+        "effect_error": None,
+    }  # fmt: skip
+    inv = {k: v for k, v in row.items() if not k.startswith("review_")} | {"file_path": None, "bank_accounts": []}
+    data = review.page_data(item, inv, lines, taxes, supplier_default=None, payment=None)
+    return {"data": data, "sample": row["sample"]}
 
 
 # =====================================================================================
