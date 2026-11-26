@@ -32,6 +32,12 @@
 	file_server
 }
 
+# The www name redirects permanently to the home page, keeping the path.
+www.{$HOME_HOST} {
+	import hardening
+	redir https://{$HOME_HOST}{uri} permanent
+}
+
 # The public demo pages (demo-web). Only their own paths are forwarded; anything else, the
 # container's /health included, is an empty 404. Bodies are capped just above the demo's 5 MB file
 # limit (demo-web refuses a larger one too, before reading it).
