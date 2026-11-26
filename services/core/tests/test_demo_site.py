@@ -81,6 +81,10 @@ def test_start_page_starts_and_links_the_privacy_notice_without_listing_the_samp
     assert r.status_code == 200
     assert "Start a demo session" in r.text and 'href="/privacy"' in r.text
     assert "Review: bank details changed? (sent after October)" not in r.text  # the session page lists them
+    text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", r.text))
+    assert "Today: supplier invoices land in an inbox or a shared folder." in text
+    assert "Automated: invoices are collected where they already arrive" in text
+    assert text.index("Today:") < text.index("Automated:") < text.index("Start a demo session")
 
 
 def test_one_click_starts_a_session_with_a_secure_cookie(site):

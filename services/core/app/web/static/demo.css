@@ -110,6 +110,15 @@ a.go { display: inline-flex; align-items: center; justify-content: center; color
 .go.demo-go-small { align-self: flex-start; min-height: 44px; padding: 0 18px; font-size: 0.9375rem; }
 .demo-facts { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; color: var(--ink-2); font-size: 0.875rem; }
 
+/* Start page: today versus automated, each led by a small label */
+.demo-compare { display: grid; gap: 12px; margin-top: -8px; }
+.demo-compare p { padding: 14px 16px; border-radius: 14px; font-size: 0.9375rem; color: var(--ink-body); }
+.compare-today { background: var(--tint); }
+.compare-auto { background: var(--accent-soft); }
+.compare-label { margin-right: 4px; font-family: var(--mono); font-weight: 500; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.compare-today .compare-label { color: #8a5a2b; }
+.compare-auto .compare-label { color: var(--accent); }
+
 /* Start page: the four steps, each with its icon tile */
 .demo-steps { padding: 0; list-style: none; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius-m); overflow: hidden; }
 .demo-steps li { display: flex; gap: 14px; padding: 16px 18px; }
@@ -189,5 +198,7 @@ button.send:hover { border-color: var(--accent); background: var(--accent-soft);
   .brand-sub { font-size: 13px; }
   main { padding-top: 48px; }
   .demo-intro h1 { font-size: 2.4rem; }
+  .demo-compare { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .demo-compare p { padding: 16px 18px; }
   .foot { font-size: 12.5px; padding-bottom: 44px; }
 }

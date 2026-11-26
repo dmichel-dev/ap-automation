@@ -8,6 +8,11 @@
   <p class="muted">An invoice is read by OCR, checked by fixed rules (totals, tax, dates, duplicates, bank details) and either prepared as a bill or sent to a person for review. You see every step.</p>
 </section>
 
+<section class="demo-compare" aria-label="Before and after automation">
+  <p class="compare-today"><span class="compare-label">Today:</span> supplier invoices land in an inbox or a shared folder. Someone opens each one, types it into the accounting software, and checks the totals, tax and bank details by eye. It's slow, and a changed bank account is easy to miss.</p>
+  <p class="compare-auto"><span class="compare-label">Automated:</span> invoices are collected where they already arrive, read, and checked against fixed rules before anything reaches your books. Clean invoices go straight through. The rest go to a person, with the reason flagged.</p>
+</section>
+
 <section class="demo-panel">
   {% if error %}<p class="note error" role="alert">{{ error }}</p>{% endif %}
   {% if current %}
