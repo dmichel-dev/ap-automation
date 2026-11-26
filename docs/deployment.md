@@ -118,6 +118,14 @@ Database migrations and workflow changes follow [operations](operations.md): bac
 - The original invoice files are temporary by design and aren't backed up ([operations](operations.md#backup)).
 - `backups/backup.log` shows each run. A failed run isn't reported anywhere else yet.
 
+## n8n temporary files
+
+```cron
+*/15 * * * * cd $HOME/ap-automation && scripts/purge_n8n_temp_files.sh >> backups/purge_n8n_temp.log 2>&1
+```
+
+A run started by a trigger or a schedule (the Gmail trigger, the Drive listing, the re-check) keeps its downloaded attachments in n8n's `executions/temp/binary_data` folders, and n8n never deletes them: deleting or pruning the run removes only `executions/<id>/`. Every 15 minutes, [`scripts/purge_n8n_temp_files.sh`](../scripts/purge_n8n_temp_files.sh) deletes those older than 90 minutes. Nothing reads them once the run is over, except the n8n editor showing that old run's attachment; the core keeps its own copy of every processed file. The demo's privacy notice relies on this job ("within 90 minutes").
+
 ## Verified on the server (2026-11-25)
 
 | Check | Result |
