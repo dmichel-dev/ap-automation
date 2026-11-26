@@ -2,7 +2,7 @@
 
 Start: uvicorn --factory app.web.main:create_app   (settings from the environment, see settings.py)
 
-Every request passes the guard first:
+Every request passes the guard first (guard.py):
   - the Host header must be one of the configured origins (no host-header tricks);
   - internal listener: a request carrying proxy headers is refused (it can only be reached directly,
     through the SSH tunnel, never through the reverse proxy);
@@ -13,22 +13,19 @@ Every request passes the guard first:
 
 import logging
 from collections.abc import Awaitable, Callable
-from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Annotated, Any, Literal, get_args
-from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi import Path as PathParam
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import FormData
 
 from .. import accounting, db, qbo_reference, review, settlement
 from ..accounting import Conflict, NotFound
-from . import accounts, display, forms, reasons, render
+from . import accounts, display, forms, guard, render
 from .accounts import Viewer
 from .security import email_digest, new_token, same_token
 from .settings import WebSettings
@@ -37,22 +34,7 @@ log = logging.getLogger("app.web")
 HERE = Path(__file__).parent
 SESSION_COOKIE = "__Host-ap_review"  # __Host-: Secure, Path=/, no Domain (no subdomain can set it)
 LOGIN_COOKIE = "__Host-ap_login"  # CSRF token of the sign-in form, before there is a session
-UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 MAX_BODY = 64 * 1024  # the largest form (a correction) is a few hundred bytes
-FORWARDING_HEADERS = ("forwarded", "x-forwarded-for", "x-forwarded-host", "x-forwarded-proto", "x-real-ip")
-SECURITY_HEADERS = {
-    "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; "
-    "form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
-    # same-origin, not no-referrer: with no-referrer, browsers send "Origin: null" on form posts, which the
-    # same-origin check rightly refuses. The page's address still never reaches another site.
-    "Referrer-Policy": "same-origin",
-    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
-    "Cross-Origin-Opener-Policy": "same-origin",
-    "Cross-Origin-Resource-Policy": "same-origin",
-    "Cache-Control": "no-store",
-}
 GENERIC_SIGN_IN_ERROR = "Email or password incorrect, or too many failed attempts. Try again later."
 NOT_FOUND = "This review item doesn't exist, or isn't one you can see."
 DONE = {
@@ -92,33 +74,7 @@ router = APIRouter()
 # =====================================================================================
 # Templates
 # =====================================================================================
-def _money(value: Any, currency: str | None = None) -> str:
-    if value is None:
-        return "–"
-    try:
-        amount = f"{Decimal(str(value)):,.2f}"
-    except InvalidOperation:
-        return str(value)
-    return f"{amount} {currency}" if currency else amount
-
-
-def _number(value: Any) -> str:
-    """A quantity or rate without the database's trailing zeros (1.000000 → 1, 8.5000 → 8.5)."""
-    if value is None:
-        return ""
-    try:
-        return format(Decimal(str(value)).normalize(), "f")
-    except InvalidOperation:
-        return str(value)
-
-
-TEMPLATES = Environment(loader=FileSystemLoader(HERE / "templates"), autoescape=True, undefined=StrictUndefined)
-TEMPLATES.filters["money"] = _money
-TEMPLATES.filters["number"] = _number
-TEMPLATES.filters["explain"] = reasons.explain
-TEMPLATES.filters["age"] = display.age
-TEMPLATES.filters["tone"] = display.tone
-TEMPLATES.filters["status_label"] = display.status_label
+TEMPLATES = guard.templates()
 
 
 def _page(name: str, status: int = 200, **context: Any) -> HTMLResponse:
@@ -129,49 +85,16 @@ def _page(name: str, status: int = 200, **context: Any) -> HTMLResponse:
 # =====================================================================================
 # Guard (every request)
 # =====================================================================================
-def _plain(status: int, message: str) -> Response:
-    return Response(message, status_code=status, media_type="text/plain")
-
-
-def _same_origin(request: Request, s: WebSettings) -> bool:
-    site = request.headers.get("sec-fetch-site")
-    if site is not None and site != "same-origin":
-        return False
-    origin = request.headers.get("origin")
-    if origin is None:
-        return site == "same-origin"
-    return origin in s.origins and urlsplit(origin).netloc == request.headers.get("host")
-
-
-def _body_refusal(request: Request) -> Response | None:
-    """Form bodies are read into memory: their size must be declared and small."""
-    length = request.headers.get("content-length", "")
-    if not length.isdigit():
-        return _plain(411, "a form must declare its length")
-    return _plain(413, "form too large") if int(length) > MAX_BODY else None
-
-
 def _refusal(request: Request, s: WebSettings) -> Response | None:
-    if request.url.path == "/health":
-        return None
-    if request.headers.get("host", "") not in s.hosts:
-        return _plain(400, "unknown host")
-    if s.review_listener == "internal" and any(h in request.headers for h in FORWARDING_HEADERS):
-        return _plain(400, "this address is not served through a proxy")
-    if request.method not in UNSAFE_METHODS:
-        return None
-    if not _same_origin(request, s):
-        return _plain(403, "cross-site request refused")
-    return _body_refusal(request)
+    return guard.refusal(
+        request, hosts=s.hosts, origins=s.origins, no_proxy=s.review_listener == "internal", max_body=MAX_BODY
+    )
 
 
 def client_ip(request: Request, s: WebSettings) -> str:
-    """The peer address; on the public listener, the address the trusted proxy appended last."""
-    peer = request.client.host if request.client else "unknown"
-    if s.review_listener == "public" and peer in s.trusted_proxies:
-        forwarded = request.headers.get("x-forwarded-for", "").split(",")[-1].strip()
-        return forwarded[:64] or peer
-    return peer
+    """The peer address; on the public listener, the address the trusted proxy appended last (the
+    internal listener has no trusted proxy)."""
+    return guard.client_ip(request, s.trusted_proxies)
 
 
 # =====================================================================================
@@ -237,17 +160,10 @@ async def _posted(request: Request, count: bool = True) -> tuple[Viewer, FormDat
     return viewer, form
 
 
-def _redirect(url: str) -> RedirectResponse:
-    return RedirectResponse(url, status_code=303)
-
-
-def _set_cookie(response: Response, name: str, value: str) -> None:
-    # No Max-Age: the cookie ends with the browser session; the server enforces the time limits
-    response.set_cookie(name, value, path="/", secure=True, httponly=True, samesite="strict")
-
-
-def _clear_cookie(response: Response, name: str) -> None:
-    response.delete_cookie(name, path="/", secure=True, httponly=True, samesite="strict")
+_redirect = guard.redirect
+_set_cookie = guard.set_cookie
+_clear_cookie = guard.clear_cookie
+_plain = guard.plain
 
 
 # =====================================================================================
@@ -539,11 +455,8 @@ def create_app(config: WebSettings | None = None) -> FastAPI:
     app.state.settings = s
 
     @app.middleware("http")
-    async def guard(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
-        response = _refusal(request, s) or await call_next(request)
-        for name, value in SECURITY_HEADERS.items():
-            response.headers.setdefault(name, value)  # a route may set a stricter one (the download)
-        return response
+    async def check_request(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+        return guard.add_security_headers(_refusal(request, s) or await call_next(request))
 
     _error_handlers(app)
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")

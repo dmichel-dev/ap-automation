@@ -8,7 +8,8 @@ from io import BytesIO
 import pytest
 from app import db
 from app.web import accounts, render
-from app.web.main import LOGIN_COOKIE, SECURITY_HEADERS, SESSION_COOKIE, create_app
+from app.web.guard import SECURITY_HEADERS
+from app.web.main import LOGIN_COOKIE, SESSION_COOKIE, create_app
 from app.web.security import IP_MAX_ATTEMPTS, PasswordPolicyError
 from app.web.settings import WebSettings
 from app.web.users import main as users_cli
