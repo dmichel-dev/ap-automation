@@ -12,6 +12,7 @@ import httpx
 import psycopg
 import pytest
 from app import db
+from app.demo_samples import CATALOG
 from app.main import app as core_app
 from app.web.demo_site import DEMO_CSP, DEMO_WEBHOOK_HEADER, SESSION_COOKIE, WEBHOOK_TIMEOUT, create_app, router
 from app.web.guard import SECURITY_HEADERS
@@ -87,6 +88,22 @@ def test_start_page_starts_and_links_the_privacy_notice_without_listing_the_samp
     assert "Today: supplier invoices land in an inbox or a shared folder." in text
     assert "Automated: invoices are collected where they already arrive" in text
     assert text.index("Today:") < text.index("Automated:") < text.index("Start a demo session")
+
+
+def test_the_samples_fold_closed_under_a_summary_with_their_count(site):
+    c = visitor(site)
+    page = c.get(f"/s/{start(c)}").text
+    fold = page[page.index('<details class="demo-box demo-fold">') : page.index("</details>")]
+    assert "<summary>Send a sample invoice (7)</summary>" in fold  # closed: no `open` attribute
+    assert fold.count("/samples/") == 7 and "<script" not in fold and "onclick" not in fold
+
+
+def test_sample_titles_name_their_currency_by_iso_code_only():
+    titles = [s.title for s in CATALOG]
+    assert "French invoice, EUR, with a discount" in titles and "Arabic tax invoice, AED" in titles
+    assert "Hindi GST invoice, INR" in titles
+    words = ("euro", "dirham", "rupee", "dollar", "UAE", "India")
+    assert not [t for t in titles if any(w.lower() in t.lower() for w in words)]
 
 
 def test_one_click_starts_a_session_with_a_secure_cookie(site):

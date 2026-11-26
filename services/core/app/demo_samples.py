@@ -47,7 +47,7 @@ class Sample:
 CATALOG: tuple[Sample, ...] = (
     Sample(
         "fr-eur-discount",
-        "French invoice in euros, with a discount",
+        "French invoice, EUR, with a discount",
         "Straight through: ready to post",
         "Office Supplies",
     ),
@@ -65,13 +65,13 @@ CATALOG: tuple[Sample, ...] = (
     ),
     Sample(
         "ar-aed-tax-invoice",
-        "Arabic tax invoice (UAE, dirhams)",
+        "Arabic tax invoice, AED",
         "Right-to-left text read and checked: ready to post",
         "Office Supplies",
     ),
     Sample(
         "hi-inr-gst-invoice",
-        "Hindi GST invoice (India, rupees)",
+        "Hindi GST invoice, INR",
         "Devanagari text read and checked: ready to post",
         "Office Supplies",
     ),
