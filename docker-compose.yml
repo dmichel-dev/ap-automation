@@ -3,6 +3,22 @@
 
 name: ap-automation
 
+# The public demo's limits and OCR budget (docs/demo.md), read by the core and the demo pages.
+# Off unless DEMO_ENABLED=true.
+x-demo-limits: &demo-limits
+  DEMO_ENABLED: ${DEMO_ENABLED:-false}
+  DEMO_HASH_KEY: ${DEMO_HASH_KEY:-}
+  DEMO_SESSION_MINUTES: ${DEMO_SESSION_MINUTES:-60}
+  DEMO_STARTS_PER_HOUR: ${DEMO_STARTS_PER_HOUR:-3}
+  DEMO_STARTS_PER_DAY: ${DEMO_STARTS_PER_DAY:-10}
+  DEMO_ACTIVE_SESSIONS: ${DEMO_ACTIVE_SESSIONS:-30}
+  DEMO_FILES_PER_SESSION: ${DEMO_FILES_PER_SESSION:-5}
+  DEMO_MAX_FILE_BYTES: ${DEMO_MAX_FILE_BYTES:-5242880}
+  DEMO_MAX_PAGES: ${DEMO_MAX_PAGES:-3}
+  DEMO_PAGES_PER_DAY: ${DEMO_PAGES_PER_DAY:-200}
+  DEMO_PAGES_PER_MONTH: ${DEMO_PAGES_PER_MONTH:-2000}
+  DEMO_EMAILS_PER_SENDER_DAY: ${DEMO_EMAILS_PER_SENDER_DAY:-10}
+
 services:
   postgres:
     image: postgres:17.12-alpine
@@ -17,6 +33,8 @@ services:
       N8N_DB_PASSWORD: ${N8N_DB_PASSWORD}
       AP_DB_USER: ${AP_DB_USER}
       AP_DB_PASSWORD: ${AP_DB_PASSWORD}
+      AP_DEMO_DB_USER: ${AP_DEMO_DB_USER:-}         # the demo pages' role (02_demo_role.sh)
+      AP_DEMO_DB_PASSWORD: ${AP_DEMO_DB_PASSWORD:-}
     volumes:
       - pg17_data:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro
@@ -110,19 +128,7 @@ services:
       MATCH_NAME_MIN_SIMILARITY: ${MATCH_NAME_MIN_SIMILARITY:-0.6}
       MATCH_FX_PCT_TOLERANCE: ${MATCH_FX_PCT_TOLERANCE:-0.03}
       MATCH_FX_MAX_RATE_AGE_DAYS: ${MATCH_FX_MAX_RATE_AGE_DAYS:-4}
-      # Public demo: its limits and OCR budget (docs/demo.md); off unless DEMO_ENABLED=true
-      DEMO_ENABLED: ${DEMO_ENABLED:-false}
-      DEMO_HASH_KEY: ${DEMO_HASH_KEY:-}
-      DEMO_SESSION_MINUTES: ${DEMO_SESSION_MINUTES:-60}
-      DEMO_STARTS_PER_HOUR: ${DEMO_STARTS_PER_HOUR:-3}
-      DEMO_STARTS_PER_DAY: ${DEMO_STARTS_PER_DAY:-10}
-      DEMO_ACTIVE_SESSIONS: ${DEMO_ACTIVE_SESSIONS:-30}
-      DEMO_FILES_PER_SESSION: ${DEMO_FILES_PER_SESSION:-5}
-      DEMO_MAX_FILE_BYTES: ${DEMO_MAX_FILE_BYTES:-5242880}
-      DEMO_MAX_PAGES: ${DEMO_MAX_PAGES:-3}
-      DEMO_PAGES_PER_DAY: ${DEMO_PAGES_PER_DAY:-200}
-      DEMO_PAGES_PER_MONTH: ${DEMO_PAGES_PER_MONTH:-2000}
-      DEMO_EMAILS_PER_SENDER_DAY: ${DEMO_EMAILS_PER_SENDER_DAY:-10}
+      <<: *demo-limits  # public demo limits (x-demo-limits above)
     volumes:
       - ap_files:/data/files     # original invoice files, core service only
     # Internal only: reachable from n8n at http://core:8000
@@ -163,6 +169,40 @@ services:
     security_opt: ["no-new-privileges:true"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8081/health', timeout=3).status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    mem_limit: 256m
+    networks: [backend]
+
+  # Public demo pages (web/demo_site.py). Their own database role, with rights on the demo tables only
+  # (db/init/02_demo_role.sh); no file store: files are queued in the database and never served back.
+  demo-web:
+    build:
+      context: ./services/core
+      target: runtime
+    image: ap-automation/core:dev
+    restart: unless-stopped
+    command: ["uvicorn", "--factory", "app.web.demo_site:create_app", "--host", "0.0.0.0", "--port", "8082",
+              "--workers", "1", "--no-server-header", "--no-access-log"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *demo-limits
+      AP_DATABASE_URL: postgresql://${AP_DEMO_DB_USER:-ap_demo}:${AP_DEMO_DB_PASSWORD:-}@postgres:5432/${N8N_DB_NAME}
+      DEMO_ORIGINS: ${DEMO_ORIGINS:-http://localhost:8082}
+      DEMO_TRUSTED_PROXIES: ${DEMO_TRUSTED_PROXIES:-}
+      INTAKE_EMAIL_ALIAS: ${INTAKE_EMAIL_ALIAS:-invoices@davidmichel.dev}
+    ports:
+      - "127.0.0.1:8082:8082"
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8082/health', timeout=3).status == 200 else 1)"]
       interval: 30s
       timeout: 5s
       start_period: 10s

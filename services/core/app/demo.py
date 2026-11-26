@@ -384,7 +384,7 @@ def finish_upload(conn: db.Conn, upload_id: int, invoice_id: str | None, error: 
 def session_items(conn: db.Conn, session_id: str) -> list[db.Row]:
     """The session's files, newest first: those still queued, being processed or failed (kind
     'upload'), and every invoice (kind 'invoice': emailed ones have no upload row). The page reads
-    no document content: only the processing results."""
+    no document content: only the processing results (view demo_invoice_results)."""
     uploads = conn.execute(
         """SELECT 'upload' AS kind, id::text AS id, sample, file_name, status, error, created_at
              FROM demo_uploads WHERE session_id = %s AND status <> 'done'""",
@@ -393,10 +393,9 @@ def session_items(conn: db.Conn, session_id: str) -> list[db.Row]:
     invoices = conn.execute(
         """SELECT 'invoice' AS kind, i.id::text AS id, u.sample, i.file_name, i.channel, i.status,
                   i.status_reasons AS reasons, i.supplier_name, i.invoice_number, i.document_type,
-                  i.total, i.currency, i.confidence, i.created_at,
-                  (SELECT count(*) FROM invoice_lines l WHERE l.invoice_id = i.id) AS lines,
+                  i.total, i.currency, i.confidence, i.created_at, i.lines,
                   p.preview IS NOT NULL AS has_preview, p.preview -> 'account_names' AS account_names
-             FROM invoices i
+             FROM demo_invoice_results i
              LEFT JOIN demo_uploads u ON u.invoice_id = i.id
              LEFT JOIN demo_bill_previews p ON p.invoice_id = i.id
             WHERE i.demo_session_id = %s""",
@@ -427,7 +426,7 @@ def session_bill(conn: db.Conn, session_id: str, invoice_id: str) -> db.Row | No
     session's invoice included)."""
     return conn.execute(
         """SELECT i.id::text AS id, i.supplier_name, i.invoice_number, i.total, i.currency, p.preview
-             FROM invoices i JOIN demo_bill_previews p ON p.invoice_id = i.id
+             FROM demo_invoice_results i JOIN demo_bill_previews p ON p.invoice_id = i.id
             WHERE i.id = %s::uuid AND i.demo_session_id = %s::uuid""",
         (invoice_id, session_id),
     ).fetchone()
