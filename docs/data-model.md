@@ -22,6 +22,14 @@ Defined in [`db/migrations/`](../db/migrations). Migrations run as the `ap_app` 
 | `supplier_defaults` | Supplier → default account, set by a reviewer on the supplier's first confirmed invoice (`source` = `reviewer`, or `test_setup` for the e2e test suppliers) |
 | `review_users` | Review-page accounts: email, display name, Argon2id password hash, `role` (`reviewer`, `admin`, `demo`), `scope` (a `demo` account always has the `demo` scope), lockout state. Created with the CLI only (see [security](security.md)) |
 | `review_sessions` | Server-side sessions: SHA-256 of the cookie token (never the token), the listener it belongs to (`internal` or `public`), its CSRF token, idle and absolute expiry, the per-minute decision count |
+| `demo_sessions` | Public demo sessions: the 8-letter code (email address and page URL), SHA-256 of the browser's token (never the token), a keyed hash of the client address, expiry, files used. Deleted when they end, with everything below that names them (see [demo](demo.md)) |
+| `demo_starts`, `demo_senders` | Session starts per client address and demo emails per sender and day, for the limits: keyed hashes only, kept 2 days |
+| `demo_budget` | OCR pages spent on visitors' own files, per day and per month |
+| `demo_uploads` | Samples and uploads waiting for processing: the bytes until processed (then emptied), status, the invoice it became, or the error |
+| `demo_bill_previews` | The bill a ready demo invoice would post (demo invoices are never sent to QuickBooks) |
+| `demo_external_items` | What a session left outside the database: its Gmail messages, Drive files and the n8n runs that handled its items |
+| `demo_deletions` | Those still to be deleted permanently in Gmail, Drive or n8n (outlives the session; a refused email goes here at once) |
+| `demo_invoice_results` (view) | What the demo pages may read of invoices: demo rows and results only, no OCR text, extraction or bank details |
 | `login_attempts` | Sign-in attempts for the per-address limit and the audit: address, listener, outcome and a hash of the typed email (never the email or a password); kept 30 days |
 
 ## Conventions
@@ -34,7 +42,7 @@ Defined in [`db/migrations/`](../db/migrations). Migrations run as the `ap_app` 
 - **Idempotency:** `(channel, source_ref)` is unique, so re-running an intake never creates a second row for the same attachment.
 - **Codes:** `currency` is ISO 4217, `supplier_country` is ISO 3166-1 alpha-2, `language` is BCP 47.
 - **Expense account:** `expense_account_id` + `expense_account_source` (`supplier_default` or `reviewer`) record the account a ready invoice is posted to, and why. Posting refuses an invoice without one.
-- **Scope:** `invoices`, `review_queue`, `processing_log` and `intake_failures` have `scope` = `live`, `e2e` or `demo`, so test and demo data stay out of live summaries, alerts and the review list. A review item and a log entry take their invoice's scope. Duplicate checks and the bank-details baseline compare only within one scope.
+- **Scope:** `invoices`, `review_queue`, `processing_log` and `intake_failures` have `scope` = `live`, `e2e` or `demo`, so test and demo data stay out of live summaries, alerts and the review list. A review item and a log entry take their invoice's scope. Duplicate checks and the bank-details baseline compare only within one scope, and a demo invoice (with its `demo_session_id`, required for scope `demo` only) only within its session.
 - **Daily end-to-end test:** `e2e_runs` (one row per run: status, checks passed, failures) and `e2e_qbo_objects` (the QuickBooks bills and attachments its postings created, with their state: `pending`, `checked`, `deleted`, `gone` or `refused`). See [operations](operations.md#daily-end-to-end-test).
 - **Database safeguards:** a `ready` invoice must have every required field, including a resolved invoice date. `dates_ambiguous` records what was printed (a reviewer may settle it). `processing_log` rejects UPDATE, DELETE and TRUNCATE.
 - `processing_log` never stores document content (privacy): only IDs, steps, check names and short messages.

@@ -3,7 +3,7 @@
 End-to-end **accounts payable invoice processing**, from intake to accounting: multi-channel, multilingual and multi-currency.
 Built with **n8n**, **Mistral OCR**, **PostgreSQL**, a small **Python (FastAPI)** core service, **Plaid** (bank) and **QuickBooks Online** (accounting).
 
-> Status: work in progress. **Day 3 complete** (`v0.3.0`): email intake → OCR → validation → routing → human review → QuickBooks bill with the original file → bank matching (Plaid) → bill payment, with a fraud alert on bank-detail changes, error handling, a daily summary and a daily automated end-to-end test, verified on sandboxes. All test invoices come from fictional companies. What changed in each version: [CHANGELOG](CHANGELOG.md).
+> Status: work in progress. Email and Drive intake → OCR → validation → routing → human review → QuickBooks bill with the original file → bank matching (Plaid) → bill payment, with a fraud alert on bank-detail changes, error handling, a daily summary and a daily automated end-to-end test, verified on sandboxes and running on a server. A **public demo** lets anyone send invoices through it. All test invoices come from fictional companies. What changed in each version: [CHANGELOG](CHANGELOG.md).
 
 ## How it works
 
@@ -20,7 +20,8 @@ Intake channels ──► common invoice format ──► core checks ──► 
 - Anything uncertain (failed check, ambiguous date, low confidence, possible duplicate, a supplier's first invoice, a bank payment that fits several bills) goes to **human review**. Nothing is guessed, including the expense account: each supplier's account is chosen once by a person, then reused.
 - **Fraud alert on bank-detail changes.** An invoice, a letter or an email that announces new bank details, or an invoice whose account differs from those on the supplier's earlier invoices, goes to review as possible fraud and is never posted automatically. A reviewer must confirm it with the supplier through a known contact. Bank details read from a document are never trusted. Full account numbers are never written to logs, messages or the stored extraction (last 4 characters only); they remain only in the original document and its OCR text, and in n8n's execution data, pruned after 14 days. A known supplier's bank details seen for the first time are reported in the daily summary, not sent to review.
 - **A review page for people** shows each document (rendered on the server as images) next to what was read, and records who approved, corrected or rejected it. Its decisions take effect in QuickBooks: confirm which bank payment pays a bill, write off a small under-payment (a vendor credit, no money moves), or retry after QuickBooks refused something. The item stays open until QuickBooks confirms. Every decision records who acted: the signed-in person on the page, or an automation label for automated runs, never a person's name. It is built with security defaults: Argon2id passwords, lockout and rate limits, server-side sessions, CSRF protection, a strict CSP, access scoped per user. Reviewer accounts can't sign in from the internet at all.
-- Details: [invoice format](docs/common-invoice-format.md), [checks and routing](docs/validation.md), [human review](docs/review.md), [Drive intake](docs/operations.md#google-drive-intake), [review page security](docs/security.md), [data model](docs/data-model.md), [bank matching](docs/matching.md), [Plaid and QuickBooks facts verified live](docs/integrations.md), [operations](docs/operations.md), [confidence calibration](docs/calibration.md).
+- **A public demo** at demo.davidmichel.dev: one click starts a 60-minute session, then a visitor sends one of 7 fictional samples (six languages, three scripts, four currencies), their own file, or an email to the session's own address, and sees each outcome in the review page's words, with the QuickBooks bill a ready invoice would create (nothing is posted). Everything runs in the demo's own scope and session, with per-address limits and an OCR budget. When the session ends, its data, its emails (permanently) and its n8n run records are deleted ([demo](docs/demo.md)).
+- Details: [invoice format](docs/common-invoice-format.md), [checks and routing](docs/validation.md), [human review](docs/review.md), [Drive intake](docs/operations.md#google-drive-intake), [review page security](docs/security.md), [data model](docs/data-model.md), [bank matching](docs/matching.md), [Plaid and QuickBooks facts verified live](docs/integrations.md), [operations](docs/operations.md), [confidence calibration](docs/calibration.md), [deployment](docs/deployment.md), [public demo](docs/demo.md).
 - **Failures are retried or handed to a person, never lost.** A temporary failure (OCR service down, core restarting) labels the email AP/Error, and a re-check every 15 minutes tries it again (5 attempts over about 17 hours). A permanent one (a file the OCR service refuses), or the last failed attempt, is given up and reported. An AP/Error email the core never heard of (it was down when the email failed) is picked up too. Failed workflow runs are logged by an error workflow. Details: [errors and retries](docs/operations.md#errors-and-retries).
 - **A daily summary email** lists fraud alerts, invoices received and posted, payments, write-offs, the touchless rate (documents posted with no review), open review items and intake problems, plus the result of the **daily end-to-end test** that sends four test emails through the real pipeline each morning and alerts at once if anything fails ([operations](docs/operations.md#daily-summary)).
 - **The confidence threshold was checked against real results.** The score measures how well the page was read, not whether the data is right; the only wrong extraction so far scored 0.982 and was caught by the totals check ([calibration](docs/calibration.md)).
@@ -94,7 +95,7 @@ Every commit runs [pre-commit](https://pre-commit.com) (`.pre-commit-config.yaml
 
 ## Updating the n8n workflow
 
-The workflows are generated from code (`n8n/build_email_intake.py`, `n8n/build_drive_intake.py`, `n8n/build_post_qbo.py`, `n8n/build_bank_sync.py`, `n8n/build_sync_reference.py`, `n8n/build_run_now.py`, `n8n/build_error_log.py`, `n8n/build_daily_summary.py`, `n8n/build_e2e_test.py`, `n8n/build_e2e_cleanup.py`) and committed without credentials. Each canvas is laid out by the builders too: nodes on a grid, grouped in sections with a note explaining each one (`Section` and `lay_out` in `n8n/nodes.py`), and `n8n/check_layout.py` fails the commit and CI if a node sits outside a section or anything overlaps. After a change made in the n8n editor, `scripts/export_workflow.sh` exports the live workflows, strips credential IDs and instance data, refuses to write a file if a secret scan matches, and shows the diff.
+The workflows are generated from code (`n8n/build_email_intake.py`, `n8n/build_drive_intake.py`, `n8n/build_post_qbo.py`, `n8n/build_bank_sync.py`, `n8n/build_sync_reference.py`, `n8n/build_run_now.py`, `n8n/build_error_log.py`, `n8n/build_daily_summary.py`, `n8n/build_e2e_test.py`, `n8n/build_e2e_cleanup.py`, `n8n/build_demo_processing.py`, `n8n/build_demo_cleanup.py`) and committed without credentials. Each canvas is laid out by the builders too: nodes on a grid, grouped in sections with a note explaining each one (`Section` and `lay_out` in `n8n/nodes.py`), and `n8n/check_layout.py` fails the commit and CI if a node sits outside a section or anything overlaps. After a change made in the n8n editor, `scripts/export_workflow.sh` exports the live workflows, strips credential IDs and instance data, refuses to write a file if a secret scan matches, and shows the diff.
 
 ## Repository layout
 
@@ -102,7 +103,8 @@ The workflows are generated from code (`n8n/build_email_intake.py`, `n8n/build_d
 docker-compose.yml   .env.example
 db/init/             Postgres roles + migration runner (first start)
 db/migrations/       ap schema migrations
-services/core/       FastAPI core service; app/web/ is the review page (its own container)
+services/core/       FastAPI core service; app/web/ is the review page and the demo pages (their own containers)
+deploy/              Caddyfile (HTTPS front door: the demo pages only)
 n8n/                 Workflow builders (shared nodes.py) + exported workflows (no credentials)
 test-data/invoices/  Fictional test invoices + expected results
 test-data/bank/      Bank transactions for the matching tests
@@ -117,8 +119,8 @@ docs/                Architecture and data-format documentation
 - [x] Day 2: QuickBooks bills, Plaid bank matching and bill payments
 - [x] Day 3: Human review, fraud alert, error handling, daily summary, daily end-to-end test
 - [x] Day 4: Google Drive intake, foreign-currency bank matching, test set of 20 invoices and confidence calibration
-- [ ] Day 5: VPS deployment (Caddy, HTTPS)
-- [ ] Day 6: Public demo page
+- [x] Day 5: VPS deployment (Caddy, HTTPS, backups, n8n reached through an SSH tunnel only)
+- [x] Day 6: Public demo: samples, uploads and email, session page with bill preview, privacy notice, limits, deletion
 - [ ] Day 7: Video, architecture diagram, case study
 
 **After the 7 days (documented, not built):**

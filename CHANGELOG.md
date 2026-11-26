@@ -4,6 +4,22 @@ All notable changes to this project. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+A public demo at demo.davidmichel.dev: anyone can send invoices through the real pipeline, in a short session of their own, and nothing they send outlives it.
+
+### Added
+
+- **Public demo** ([docs/demo.md](docs/demo.md)): one click starts a 60-minute session (no account, nothing typed). A visitor sends one of 7 fictional samples (French, German, Spanish, Arabic, Hindi, and two hosting invoices that raise the bank-details fraud alert), a file of their own, or an email to `invoices+CODE@`. The session page shows each outcome in the review page's words, the real confidence, and for a ready invoice the QuickBooks bill it would create. Nothing is posted. Duplicate and bank-detail checks compare only within the session. The samples give the outcome they describe whatever the live data, and cost no OCR (stored results).
+- **Demo limits:** sessions per address (3 an hour, 10 a day), 30 at once, 5 files per session, 5 MB and 3 pages per file, an OCR page budget per day and month, 10 emails per sender a day, and a kill switch. Addresses and senders are kept only as keyed hashes, for 2 days.
+- **Demo security:** a session page needs the browser's cookie as well as the code; the pages connect with their own database role that sees demo results only; no file is ever served back; Caddy forwards only the demo's paths.
+- **n8n workflows** *AP – Demo processing* (internal webhook, plus a sweep for missed calls) and *AP – Demo clean-up* (every 5 minutes). n8n runs at most 4 executions at once.
+- **Deletion when a session ends:** its data and stored files, its emails permanently (not the trash), and the records of the n8n runs that handled its files. A refused demo email is deleted at once. The core decides what each delete answer means and retries the rest.
+- **Privacy notice** (`/privacy`): what is received and why (legitimate interest), Mistral AI's 30-day abuse-monitoring retention as an independent controller, the providers involved, how long everything is kept.
+- **n8n temporary files deleted after 90 minutes** (`scripts/purge_n8n_temp_files.sh`, cron every 15 minutes): n8n never deletes the attachments a triggered run downloads, even when the run is deleted.
+
+### Fixed
+
+- The German sample's default account is looked up by its full name (`Cost of Goods Sold:Materials`); a test checks every sample account against the chart of accounts.
+
 ## [0.4.0] - 2026-11-25
 
 A second intake channel (Google Drive), bank matching for bills in foreign currencies, and a larger test set with Arabic, Hindi and degraded scans to calibrate the confidence threshold.
