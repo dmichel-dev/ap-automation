@@ -1,9 +1,12 @@
 """The public demo pages: one-click start, the session page (cookie AND code), samples and uploads
 queued, the cards after processing, the bill preview (own session only), refusals, the privacy
-notice, the footer and the security headers. Real Postgres; processing by the core's own endpoint."""
+notice, the footer, links and the security headers. Real Postgres; processing by the core's own endpoint."""
 
 import re
+from html.parser import HTMLParser
+from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 import pytest
@@ -21,7 +24,11 @@ from .test_demo import LIMITS, UPLOAD, demo_env, live_now, pdf_with_pages  # noq
 from .test_processing import env  # noqa: F401  (fixture)
 
 ORIGIN = "https://demo.test"
-FOOTER = '<a href="https://davidmichel.dev">© David Michel</a>'
+FOOTER = '<a href="https://davidmichel.dev" target="_blank" rel="noopener noreferrer">© David Michel</a>'
+NEW_TAB = {"target": "_blank", "rel": "noopener noreferrer"}
+CREDITS_LINK = '<a href="/credits">Credits</a>'
+STATIC = Path(__file__).parent.parent / "app" / "web" / "static"
+CADDYFILE = Path("/deploy/Caddyfile")  # mounted read-only by the test service and CI
 
 
 def site_settings(url: str, **overrides: Any) -> DemoWebSettings:
@@ -69,12 +76,11 @@ def site(demo_env):  # noqa: F811
 # =====================================================================================
 # Start
 # =====================================================================================
-def test_start_page_lists_the_samples_and_links_the_privacy_notice(site):
+def test_start_page_starts_and_links_the_privacy_notice_without_listing_the_samples(site):
     r = visitor(site).get("/")
     assert r.status_code == 200
     assert "Start a demo session" in r.text and 'href="/privacy"' in r.text
-    assert "Review: bank details changed? (sent after October)" in r.text
-    assert r.text.count("<li><span>") == 7
+    assert "Review: bank details changed? (sent after October)" not in r.text  # the session page lists them
 
 
 def test_one_click_starts_a_session_with_a_secure_cookie(site):
@@ -276,21 +282,118 @@ def test_a_full_session_offers_no_more_sends(site):
 # =====================================================================================
 # Every page
 # =====================================================================================
-def test_every_page_has_the_footer_and_the_security_headers(site):
+@pytest.fixture
+def every_page(site):
+    """A visitor with a session holding one ready invoice, and the path of each kind of page."""
     c = visitor(site)
     code = start(c)
     c.post(f"/s/{code}/samples/us-hosting-october")
     process_queued(site)
     [invoice] = query(site, "SELECT id FROM ap.invoices")
-    pages = ["/", "/privacy", f"/s/{code}", f"/s/{code}/bills/{invoice['id']}", "/s/zzzzzzzz"]
+    return c, ["/", "/privacy", "/credits", f"/s/{code}", f"/s/{code}/bills/{invoice['id']}", "/s/zzzzzzzz"]
+
+
+class Links(HTMLParser):
+    """Every <a href> on a page, with its attributes."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.found: list[dict[str, str]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "a" and dict(attrs).get("href"):
+            self.found.append({name: value or "" for name, value in attrs})
+
+
+def links(html: str) -> list[dict[str, str]]:
+    parser = Links()
+    parser.feed(html)
+    return parser.found
+
+
+def opens_elsewhere(href: str) -> bool:
+    """A link to another site, davidmichel.dev included (the demo is its own origin)."""
+    parts = urlsplit(href)
+    return parts.scheme in ("http", "https") and parts.netloc != urlsplit(ORIGIN).netloc
+
+
+def test_links_to_other_sites_open_in_a_new_tab_and_demo_links_stay(every_page):
+    c, pages = every_page
+    seen = 0
+    for path in pages:
+        for a in links(c.get(path).text):
+            target = {key: a.get(key) for key in NEW_TAB}
+            if opens_elsewhere(a["href"]):
+                seen += 1
+                assert target == NEW_TAB, (path, a)
+            else:
+                assert "target" not in a, (path, a)
+    assert seen >= len(pages)  # the footer link at least, on every page
+
+
+def test_every_page_has_the_footer_and_the_security_headers(every_page):
+    c, pages = every_page
     for path in pages:
         r = c.get(path)
-        assert FOOTER in r.text, path
+        assert FOOTER in r.text and CREDITS_LINK in r.text, path
         assert re.search(r"<script(?![^>]*\bsrc=)", r.text) is None and " style=" not in r.text, path
         expected = SECURITY_HEADERS | {"Content-Security-Policy": DEMO_CSP}
         for name, value in expected.items():
             assert r.headers.get(name) == value, (path, name)
         assert "connect-src 'self'" in r.headers["content-security-policy"]
+        assert "font-src 'self'" in r.headers["content-security-policy"]
+
+
+def test_the_stylesheet_uses_only_fonts_the_demo_serves(site):
+    c = visitor(site)
+    css = c.get("/static/demo.css")
+    assert css.status_code == 200
+    urls = re.findall(r"url\(\"?([^\")]+)\"?\)", css.text)
+    assert len(urls) == 3 and "@import" not in css.text
+    for url in urls:
+        assert url.startswith("/static/fonts/"), url
+        font = c.get(url)
+        assert font.status_code == 200 and font.headers["content-type"] == "font/woff2", url
+    for name in ("OFL-bricolage-grotesque", "OFL-inter", "OFL-jetbrains-mono", "MIT-tabler-icons"):
+        assert (STATIC / "licenses" / f"{name}.txt").is_file(), name
+
+
+def test_credits_link_each_licence_text_the_demo_serves(site):
+    c = visitor(site)
+    page = c.get("/credits")
+    assert page.status_code == 200
+    licences = sorted({a["href"] for a in links(page.text) if a["href"].startswith("/static/licenses/")})
+    assert licences == sorted(f"/static/licenses/{f.name}" for f in (STATIC / "licenses").iterdir())
+    for href in licences:
+        r = c.get(href)
+        assert r.status_code == 200 and r.headers["content-type"].startswith("text/plain"), href
+
+
+def caddy_demo_paths() -> list[str]:
+    """The path patterns Caddy forwards to demo-web (its @demo matcher)."""
+    [line] = [ln.split() for ln in CADDYFILE.read_text().splitlines() if ln.strip().startswith("@demo path ")]
+    return line[2:]
+
+
+def caddy_forwards(path: str) -> bool:
+    return any(path == p or (p.endswith("*") and path.startswith(p[:-1])) for p in caddy_demo_paths())
+
+
+def test_caddy_forwards_every_demo_page_and_not_the_health_check():
+    for route in router.routes:
+        assert isinstance(route, APIRoute)
+        path = re.sub(r"\{[^}]+\}", "x", route.path)
+        assert caddy_forwards(path) == (route.path != "/health"), route.path
+    assert caddy_forwards("/static/fonts/inter-latin-wght.woff2") and caddy_forwards(
+        "/static/licenses/MIT-tabler-icons.txt"
+    )
+
+
+def test_icons_are_decorative(every_page):
+    c, pages = every_page
+    for path in pages:
+        for svg in re.findall(r"<svg[^>]*>", c.get(path).text):
+            assert 'aria-hidden="true"' in svg, (path, svg)
 
 
 def test_privacy_notice_names_the_processor_the_deletion_and_the_contact(site):
@@ -313,6 +416,7 @@ def test_no_page_sends_a_document_back():
         "/s/{code}/uploads",
         "/s/{code}/bills/{invoice_id}",
         "/privacy",
+        "/credits",
     }
     assert all(r.response_class is not FileResponse for r in routes)
 

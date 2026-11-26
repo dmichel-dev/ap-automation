@@ -1,0 +1,193 @@
+/* Public demo pages (web/demo_site.py), loaded after app.css. They share the review page's markup
+   and components, in the look of davidmichel.dev: warm off-white ground, warm dark text, one deep
+   green accent; green, amber, grey (and red for a fraud alert) only ever mean a status, and the
+   text always says the same thing. Fonts are served by this origin (see THIRD-PARTY.md). */
+
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("/static/fonts/bricolage-grotesque-latin-wght.woff2") format("woff2");
+  font-weight: 200 800;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("/static/fonts/inter-latin-wght.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/static/fonts/jetbrains-mono-latin-500.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* The review page's tokens, redefined: every shared component picks up the demo's palette. */
+:root {
+  --bg: #f6f2ea;
+  --surface: #fffcf6;
+  --white: #ffffff;
+  --tint: #efe6d6;
+  --ink: #2b2420;
+  --ink-body: #4a413a;
+  --ink-2: #6a5f55;
+  --rule: #e4dacb;
+  --rule-strong: #d3c6b2;
+  --accent: #1e5a48;
+  --accent-hover: #154236;
+  --accent-ink: #ffffff;
+  --accent-soft: #e3ece5;
+  --green: #2f5e35; --green-bg: #e9f0e2; --green-rule: #8fb98f;   /* ready */
+  --amber: #7a4f0c; --amber-bg: #f7ebd2; --amber-rule: #d9a84e;   /* review */
+  --grey: #5e544b;  --grey-bg: #ece5d9;  --grey-rule: #b3a590;    /* rejected */
+  --red: #9b2c1f;   --red-bg: #f8e4df;   --red-rule: #d27a6c;     /* fraud alert */
+  --radius-s: 10px;
+  --radius-m: 16px;
+  --column: 680px;
+  --gutter: max(16px, calc((100% - var(--column)) / 2));  /* header and footer line up with the column */
+  --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --display: "Bricolage Grotesque", "Inter", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+body { line-height: 1.6; }
+a { text-underline-offset: 3px; text-decoration-thickness: 1px; }
+a:hover { color: var(--accent-hover); }
+:focus-visible { border-radius: 4px; }
+h1, h2 { font-family: var(--display); font-weight: 650; letter-spacing: -0.02em; }
+h2 { font-size: 1.25rem; letter-spacing: -0.01em; }
+code, pre, .demo-code { font-family: var(--mono); font-weight: 500; }
+
+/* ---- Icons (inline SVG, decorative) ----------------------------------------------------------- */
+.ico { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.ico.sm { width: 16px; height: 16px; }
+
+/* ---- Header and footer ------------------------------------------------------------------------ */
+.top { min-height: 60px; padding: 8px var(--gutter); background: var(--bg); border-bottom: 1px solid var(--rule); }
+.brand { display: flex; align-items: baseline; gap: 8px; font-family: var(--display); font-weight: 650; font-size: 18px; letter-spacing: -0.01em; }
+.brand-sub { font-family: var(--mono); font-weight: 500; font-size: 12px; letter-spacing: 0; color: var(--ink-2); }
+.top-link { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-size: 0.875rem; text-decoration: none; }
+.top-link:hover { text-decoration: underline; }
+.who-name { font-family: var(--mono); font-weight: 500; font-size: 0.8125rem; }
+.foot { display: flex; flex-wrap: wrap; gap: 8px 24px; max-width: none; padding: 24px var(--gutter) 36px; border-top: 1px solid var(--rule); font-family: var(--mono); font-weight: 500; font-size: 12px; }
+.foot a:hover { color: var(--ink); }
+
+/* ---- Shared components, softened --------------------------------------------------------------- */
+.note { padding: 12px 16px; border: 1px solid var(--amber-rule); border-radius: 12px; color: var(--ink); }
+.note.ok { border-color: var(--green-rule); }
+.note.error, .note.fraud { border-color: var(--red-rule); }
+.quiet-note { background: var(--tint); border-color: transparent; font-size: 0.8125rem; color: var(--ink-body); }
+.card { border-radius: var(--radius-m); }
+.badge { padding: 2px 10px; font-size: 0.78rem; }
+.chip { padding: 1px 8px; border-radius: 999px; background: var(--tint); color: var(--ink-body); }
+.go { border-radius: 12px; font-weight: 600; }
+.go:hover { filter: none; background: var(--accent-hover); }
+button.quiet { min-height: 40px; padding: 6px 14px; border-color: var(--rule-strong); border-radius: 10px; background: var(--white); font-weight: 600; }
+button.quiet:hover { border-color: var(--accent); }
+.back { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin-bottom: 4px; text-decoration: none; }
+.back:hover { text-decoration: underline; }
+summary { color: var(--accent); font-weight: 600; }
+.facts dt { font-family: var(--mono); font-weight: 500; font-size: 0.6875rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.why-detail { color: var(--ink-2); }
+
+/* ---- Layout: one column, mobile first ---------------------------------------------------------- */
+main { padding-top: 32px; }
+.demo { max-width: var(--column); margin: 0 auto; display: flex; flex-direction: column; gap: 32px; }
+.demo-intro { display: flex; flex-direction: column; gap: 10px; }
+.demo-intro h1 { font-size: 1.85rem; line-height: 1.15; letter-spacing: -0.025em; }
+.demo-intro .muted { color: var(--ink-body); }
+.demo-section { display: flex; flex-direction: column; gap: 12px; }
+.demo-section ul, .demo-section ol { margin: 0; }
+.demo-small { font-size: 0.8125rem; }
+.demo-code { color: var(--ink); letter-spacing: 0.04em; }
+.demo-panel, .demo-box { padding: 18px 20px; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius-m); display: flex; flex-direction: column; gap: 12px; }
+.demo-panel form { margin: 0; }
+.go.demo-go { display: block; width: 100%; min-height: 50px; text-align: center; font-size: 1.0625rem; text-decoration: none; }
+a.go { display: inline-flex; align-items: center; justify-content: center; color: var(--accent-ink); text-decoration: none; }
+.go.demo-go-small { align-self: flex-start; min-height: 44px; padding: 0 18px; font-size: 0.9375rem; }
+.demo-facts { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; color: var(--ink-2); font-size: 0.875rem; }
+
+/* Start page: the four steps, each with its icon tile */
+.demo-steps { padding: 0; list-style: none; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius-m); overflow: hidden; }
+.demo-steps li { display: flex; gap: 14px; padding: 16px 18px; }
+.demo-steps li + li { border-top: 1px solid var(--rule); }
+.demo-steps .muted { font-size: 0.875rem; }
+.step-ico { flex: none; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
+.step-name { font-weight: 600; }
+.demo-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+/* Session page */
+.demo-box-title { font-family: var(--mono); font-weight: 500; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); }
+/* The sample rows run to the box's edges (more specific than .demo-section ul) */
+.demo-box .demo-samples { margin: 0 -20px -18px; padding: 0; list-style: none; }
+.demo-samples li { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--rule); }
+.demo-samples li > div { flex: 1; min-width: 0; }
+.demo-samples form { margin: 0; }
+.demo-samples .muted, .demo-box > .muted { font-size: 0.8125rem; }
+.sample-title { font-weight: 600; font-size: 0.9rem; }
+button.send { min-height: 44px; padding: 8px 16px; border: 1px solid var(--rule-strong); border-radius: 12px; background: var(--white); color: var(--accent); font-weight: 600; font-size: 0.875rem; }
+button.send:hover { border-color: var(--accent); background: var(--accent-soft); }
+.demo-upload { margin: 0; }
+.demo-upload label { font-family: var(--mono); font-weight: 500; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); }
+.demo-upload input[type=file] { font: inherit; font-size: 0.875rem; max-width: 100%; color: var(--ink-body); }
+.demo-upload input[type=file]::file-selector-button { min-height: 40px; margin-right: 12px; padding: 6px 14px; font: inherit; font-weight: 600; color: var(--ink); background: var(--white); border: 1px solid var(--rule-strong); border-radius: 10px; cursor: pointer; }
+.demo-upload input[type=file]::file-selector-button:hover { border-color: var(--accent); }
+.demo-upload .send { align-self: flex-start; }
+.demo-address { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* On a phone the address takes its own line, so it never breaks mid-word */
+.demo-address code { flex: 1 1 260px; min-width: 0; padding: 9px 12px; background: var(--tint); border-radius: 10px; font-size: 0.8125rem; overflow-wrap: anywhere; }
+.demo-address button { min-height: 44px; }
+.demo-cards { display: flex; flex-direction: column; gap: 12px; }
+.demo-card { padding: 16px 18px; background: var(--surface); border: 1px solid var(--rule); border-left: 4px solid var(--grey-rule); border-radius: var(--radius-m); display: flex; flex-direction: column; gap: 10px; }
+.demo-card.tone-review { border-left-color: var(--amber-rule); }
+.demo-card.tone-fraud { border-left-color: var(--red-rule); }
+.demo-card.tone-ready { border-left-color: var(--green-rule); }
+.demo-card > .badge { align-self: flex-start; }
+.demo-card .why { margin: 0; }
+.demo-card .why-sentence { font-size: 1rem; }
+.card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.card-who { min-width: 0; }
+.card-who .muted { font-size: 0.8125rem; }
+.card-title { font-weight: 600; overflow-wrap: anywhere; }
+.card-amount { font-weight: 600; }
+.card-steps { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 0.8125rem; color: var(--ink-body); }
+.card-steps li { padding-left: 20px; position: relative; }
+.card-steps li::before { position: absolute; left: 0; font-weight: 700; }
+.card-steps .step-done::before { content: "✓"; color: var(--green); }
+.card-steps .step-now::before { content: "…"; color: var(--accent); }
+.card-steps .step-stop::before { content: "!"; color: var(--amber); }
+.empty { border-color: var(--rule-strong); border-radius: var(--radius-m); background: transparent; }
+
+/* Bill preview */
+.demo-bill-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.demo-bill-facts > div:first-child, .demo-bill-facts > div:nth-child(2) { grid-column: 1 / -1; }
+.demo-lines { padding: 0; list-style: none; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius-m); overflow: hidden; }
+.demo-lines li { padding: 12px 18px; display: flex; flex-direction: column; gap: 2px; }
+.demo-lines li + li { border-top: 1px solid var(--rule); }
+.line-head, .line-total { display: flex; justify-content: space-between; gap: 12px; }
+.line-head { font-weight: 600; }
+.demo-lines .line-total { flex-direction: row; background: var(--tint); font-weight: 700; font-size: 1.0625rem; }
+.demo-next { padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 0.875rem; }
+.demo-json { margin: 0; padding: 14px; background: var(--ink); color: var(--bg); border-radius: 12px; font-size: 0.75rem; line-height: 1.5; overflow-x: auto; }
+
+/* Credits */
+.demo-text .demo-box { display: block; padding: 4px 20px; }
+.demo-text table { font-size: 0.875rem; }
+.demo-text tbody tr:last-child td { border-bottom: 0; }
+
+/* Privacy notice and credits */
+.demo-text ul { padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.demo-text p, .demo-text li { color: var(--ink-body); }
+
+@media (min-width: 760px) {
+  body { font-size: 16px; }
+  .top { min-height: 72px; }
+  .brand { font-size: 20px; }
+  .brand-sub { font-size: 13px; }
+  main { padding-top: 48px; }
+  .demo-intro h1 { font-size: 2.4rem; }
+  .foot { font-size: 12.5px; padding-bottom: 44px; }
+}

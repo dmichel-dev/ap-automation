@@ -46,7 +46,7 @@ www.{$HOME_HOST} {
 	request_body {
 		max_size 6MB
 	}
-	@demo path / /start /privacy /s/* /static/*
+	@demo path / /start /privacy /credits /s/* /static/*
 	handle @demo {
 		reverse_proxy demo-web:8082
 	}

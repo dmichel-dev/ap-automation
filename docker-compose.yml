@@ -248,6 +248,7 @@ services:
       - ./db/migrations:/migrations:ro
       - ./test-data:/test-data:ro
       - ./config:/config:ro
+      - ./deploy:/deploy:ro
     depends_on:
       postgres:
         condition: service_healthy

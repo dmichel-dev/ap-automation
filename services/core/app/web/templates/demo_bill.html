@@ -1,11 +1,12 @@
 {% extends "demo_base.html" %}
+{% from "demo_icons.html" import icon %}
 {% block title %}Bill preview{% endblock %}
 {% block header_right %}
 <span class="who"><span class="who-name">{{ minutes_left }} min left</span><span class="who-role">Session {{ session.code }}</span></span>
 {% endblock %}
 {% block main %}
 <div class="demo">
-<a class="back" href="/s/{{ session.code }}#invoices">Your invoices</a>
+<a class="back" href="/s/{{ session.code }}#invoices">{{ icon("arrow-left", "sm") }}Your invoices</a>
 <section class="demo-intro">
   <h1>Bill preview</h1>
   <p class="muted">{{ bill.supplier_name }} · invoice {{ bill.invoice_number }} · <strong class="num">{{ bill.total | money(bill.currency) }}</strong></p>

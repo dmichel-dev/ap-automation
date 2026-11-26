@@ -1,0 +1,38 @@
+{% extends "demo_base.html" %}
+{% block title %}Credits{% endblock %}
+{% block main %}
+<div class="demo demo-text">
+<section class="demo-intro">
+  <h1>Credits</h1>
+  <p class="muted">The demo serves its own fonts and icons: nothing is loaded from another site. They are used under open licences, and the text of each licence is served by the demo.</p>
+</section>
+
+<section class="demo-section" aria-labelledby="fonts-title">
+  <h2 id="fonts-title">Fonts</h2>
+  <p>Latin subsets in WOFF2 format, from the Fontsource npm packages (version 5.3.0).</p>
+  <div class="demo-box scroll">
+    <table>
+      <thead><tr><th scope="col">Font</th><th scope="col">Used for</th><th scope="col">Licence</th></tr></thead>
+      <tbody>
+        <tr><td><a href="https://github.com/ateliertriay/bricolage" target="_blank" rel="noopener noreferrer">Bricolage Grotesque</a> (variable weight)</td><td>Headings</td><td><a href="/static/licenses/OFL-bricolage-grotesque.txt">SIL Open Font License 1.1</a></td></tr>
+        <tr><td><a href="https://github.com/rsms/inter" target="_blank" rel="noopener noreferrer">Inter</a> (variable weight)</td><td>Body text</td><td><a href="/static/licenses/OFL-inter.txt">SIL Open Font License 1.1</a></td></tr>
+        <tr><td><a href="https://github.com/JetBrains/JetBrainsMono" target="_blank" rel="noopener noreferrer">JetBrains Mono</a> (500)</td><td>Small labels</td><td><a href="/static/licenses/OFL-jetbrains-mono.txt">SIL Open Font License 1.1</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="demo-section" aria-labelledby="icons-title">
+  <h2 id="icons-title">Icons</h2>
+  <p>SVG paths copied into the pages. All of them are decorative: every link and step keeps its own text.</p>
+  <div class="demo-box scroll">
+    <table>
+      <thead><tr><th scope="col">Set</th><th scope="col">Icons</th><th scope="col">Licence</th></tr></thead>
+      <tbody>
+        <tr><td><a href="https://tabler.io/icons" target="_blank" rel="noopener noreferrer">Tabler Icons</a> 3.53.0, outline</td><td>inbox, scan, checklist, arrows-split-2, external-link, arrow-left</td><td><a href="/static/licenses/MIT-tabler-icons.txt">MIT</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+</div>
+{% endblock %}

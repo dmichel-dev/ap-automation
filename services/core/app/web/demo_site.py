@@ -16,6 +16,7 @@ sample click is queued here and processed by the workflow (demo_uploads).
 import json
 import logging
 import math
+import mimetypes
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -45,11 +46,14 @@ FRAUD_CODES = frozenset({"possible_bank_detail_change"})
 STATUS_LABELS = {"ready": "Ready to post", "needs_review": "Needs review", "rejected": "Rejected"}
 UPLOAD_ERRORS = {"provider_server": "The OCR service didn't answer. Try again in a few minutes."}
 ENDED = "This demo session has ended, or it opens only in the browser that started it."
-# The review page's policy, plus fetch to this origin (the session page refreshes its cards)
-DEMO_CSP = guard.SECURITY_HEADERS["Content-Security-Policy"] + "; connect-src 'self'"
+# The review page's policy, plus fetch to this origin (the session page refreshes its cards) and the
+# demo's self-hosted fonts
+DEMO_CSP = guard.SECURITY_HEADERS["Content-Security-Policy"] + "; connect-src 'self'; font-src 'self'"
 REFUSAL_STATUS = {"too_many_starts": 429, "demo_full": 503, "demo_paused": 503, "file_limit": 409}
 
 router = APIRouter()
+# The slim image's MIME table lacks WOFF2: serve the demo's fonts with their own type, not as bytes
+mimetypes.add_type("font/woff2", ".woff2")
 TEMPLATES = guard.templates()
 
 
@@ -211,7 +215,7 @@ def _start_context(request: Request) -> dict[str, Any]:
     with _connect(settings(request)) as conn:
         current = demo.session_for_token(conn, request.cookies.get(SESSION_COOKIE), datetime.now(UTC))
     limits = _limits(request)
-    return {"samples": demo_samples.CATALOG, "limits": limits, "paused": not limits.open, "current": current}
+    return {"limits": limits, "paused": not limits.open, "current": current}
 
 
 @router.get("/")
@@ -351,6 +355,11 @@ def bill_page(request: Request, code: str, invoice_id: UUID) -> Response:
 @router.get("/privacy")
 def privacy() -> Response:
     return _page("demo_privacy.html")
+
+
+@router.get("/credits")
+def credits() -> Response:
+    return _page("demo_credits.html")
 
 
 # =====================================================================================

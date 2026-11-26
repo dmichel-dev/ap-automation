@@ -6,6 +6,7 @@
 <title>{% block title %}Review{% endblock %} | {% block site %}AP review{% endblock %}</title>
 <link rel="icon" href="/static/favicon.svg">
 <link rel="stylesheet" href="/static/app.css">
+{% block styles %}{% endblock %}
 {% block scripts %}<script src="/static/app.js" defer></script>{% endblock %}
 </head>
 <body>
@@ -25,6 +26,6 @@
   {% endblock %}
 </header>
 <main>{% block main %}{% endblock %}</main>
-<footer class="foot"><a href="https://davidmichel.dev">© David Michel</a></footer>
+<footer class="foot"><a href="https://davidmichel.dev"{% block footer_link_attrs %}{% endblock %}>© David Michel</a>{% block footer_links %}{% endblock %}</footer>
 </body>
 </html>

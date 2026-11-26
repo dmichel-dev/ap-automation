@@ -49,7 +49,7 @@ Addresses and senders are stored as keyed hashes (`DEMO_HASH_KEY`), never as wri
 - **A session needs its cookie and its code.** The browser that starts a session gets a random token (HttpOnly, Secure, SameSite=Strict; only its SHA-256 is stored). The code alone, from the email address or the URL, never opens the page.
 - **Least privilege:** `demo-web` connects as `ap_demo` ([`db/init/02_demo_role.sh`](../db/init/02_demo_role.sh)): it can start sessions, queue files without reading them back, read results through the view `demo_invoice_results` (demo rows only, no OCR text, no extraction, no bank details), read bill previews and append to the log. Nothing of the live data. It has no file store.
 - **Nothing is served back:** no uploaded or emailed file is ever shown or downloadable.
-- **Only the demo's paths are public.** Caddy forwards `/`, `/start`, `/privacy`, `/s/*` and `/static/*` to `demo-web`; every other path (its `/health` included) is an empty 404, and bodies over 6 MB are refused ([`deploy/Caddyfile`](../deploy/Caddyfile)). Nothing of n8n is public.
+- **Only the demo's paths are public.** Caddy forwards `/`, `/start`, `/privacy`, `/credits`, `/s/*` and `/static/*` to `demo-web` (a test checks that every page route is covered and `/health` is not); every other path (its `/health` included) is an empty 404, and bodies over 6 MB are refused ([`deploy/Caddyfile`](../deploy/Caddyfile)). Nothing of n8n is public.
 - Every page sends a strict CSP and the security headers, and ends with the copyright footer. Cross-site form posts are refused.
 - **The AI only reads the document.** The demo's outcomes come from the same deterministic checks as the live system.
 

@@ -4,6 +4,16 @@ All notable changes to this project. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Changed
+
+- **Demo pages restyled** in the look of davidmichel.dev: warm palette, self-hosted fonts (Bricolage Grotesque, Inter, JetBrains Mono; `font-src 'self'` added to the demo's CSP), Tabler outline icons drawn inline, softer cards. Layout, text, flows and behaviour are unchanged; the status colours keep their meaning. The demo's styles moved from `app.css` to `demo.css`, so the review page is unaffected.
+- **Links to other sites open in a new tab** on every demo page (`target="_blank" rel="noopener noreferrer"`), davidmichel.dev included; links within the demo stay in the same tab. A test enforces it.
+- The start page no longer lists the sample invoices; the session page still offers all seven.
+
+### Added
+
+- **Credits page** (`/credits`, linked from every demo page's footer): fonts and icons with their licence texts, served by the demo ([THIRD-PARTY.md](THIRD-PARTY.md)). Caddy forwards `/credits`; a test checks that Caddy forwards every demo page route and not `/health`.
+
 ## [0.6.0] - 2026-11-26
 
 A public demo at demo.davidmichel.dev: anyone can send invoices through the real pipeline, in a short session of their own, and nothing they send outlives it.

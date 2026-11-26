@@ -1,7 +1,12 @@
 {% extends "base.html" %}
+{% from "demo_icons.html" import icon %}
 {% block site %}AP Automation demo{% endblock %}
+{% block styles %}<link rel="preload" href="/static/fonts/bricolage-grotesque-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/static/demo.css">{% endblock %}
 {% block scripts %}<script src="/static/demo.js" defer></script>{% endblock %}
 {% block header %}
 <a class="brand" href="/">AP Automation <span class="brand-sub">demo</span></a>
-{% block header_right %}<a class="top-link" href="https://davidmichel.dev">About the author</a>{% endblock %}
+{% block header_right %}<a class="top-link" href="https://davidmichel.dev" target="_blank" rel="noopener noreferrer">About the author {{ icon("external-link", "sm") }}</a>{% endblock %}
 {% endblock %}
+{% block footer_link_attrs %} target="_blank" rel="noopener noreferrer"{% endblock %}
+{% block footer_links %}<a href="/credits">Credits</a>{% endblock %}
