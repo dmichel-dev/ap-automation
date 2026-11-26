@@ -11,6 +11,7 @@ from app import accounting, db, demo, demo_samples, main
 from app.extraction import build_common_invoice
 from app.intake import Attachment, demo_code, screen_email
 from app.main import app
+from app.web.reasons import explain
 from fastapi.testclient import TestClient
 from PIL import Image
 
@@ -267,6 +268,21 @@ SAMPLE_OUTCOMES = {
 
 def test_every_sample_has_an_expected_outcome():
     assert sorted(SAMPLE_OUTCOMES) == sorted(s.key for s in demo_samples.CATALOG)
+
+
+@pytest.mark.parametrize("key", sorted(SAMPLE_OUTCOMES))
+def test_each_sample_says_what_it_shows_in_the_review_page_words(key):
+    """One wording everywhere: "ready to post", or "Review: " and the reason's label on the review page.
+    The bank-detail alert needs October first, so the November sample names that outcome."""
+    sample = demo_samples.sample(key)
+    assert sample is not None
+    status, reasons = SAMPLE_OUTCOMES[key]
+    if key == "us-hosting-november-other-account":
+        status, reasons = "needs_review", ["possible_bank_detail_change"]
+    if status == "ready":
+        assert "ready to post" in sample.shows.lower()
+    else:
+        assert sample.shows.lower().startswith(f"review: {explain(reasons[0]).label.lower()}")
 
 
 @pytest.mark.parametrize("key", sorted(SAMPLE_OUTCOMES))

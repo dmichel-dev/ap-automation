@@ -32,7 +32,7 @@ PROVIDER_NAME = "mistral-ocr (stored sample result)"
 class Sample:
     key: str  # also the file name: <key>.pdf, and its recorded response: <key>.mistral.json
     title: str
-    shows: str  # what the visitor will see happen
+    shows: str  # what the visitor will see happen, in the review page's words (tests/test_demo.py)
     account: str  # its supplier's default expense account: a name the chart of accounts script creates
 
     @property
@@ -54,13 +54,13 @@ CATALOG: tuple[Sample, ...] = (
     Sample(
         "de-eur-wrong-total",
         "German invoice whose total doesn't add up",
-        "Sent to review: totals mismatch",
+        "Review: total doesn't add up",
         "Materials",
     ),
     Sample(
         "es-eur-ambiguous-date",
         "Spanish invoice with an ambiguous date",
-        "Sent to review, with a suggested date",
+        "Review: date reads two ways, with a suggested date",
         "Advertising",
     ),
     Sample(
@@ -84,7 +84,7 @@ CATALOG: tuple[Sample, ...] = (
     Sample(
         "us-hosting-november-other-account",
         "Hosting invoice, November: same supplier, another bank account",
-        "Fraud alert if October was sent first",
+        "Review: bank details changed? (sent after October)",
         "Hosting & Cloud Services",
     ),
 )
