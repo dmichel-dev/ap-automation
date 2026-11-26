@@ -4,6 +4,8 @@ All notable changes to this project. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-26
+
 A public demo at demo.davidmichel.dev: anyone can send invoices through the real pipeline, in a short session of their own, and nothing they send outlives it.
 
 ### Added
@@ -20,7 +22,26 @@ A public demo at demo.davidmichel.dev: anyone can send invoices through the real
 
 - The German sample's default account is looked up by its full name (`Cost of Goods Sold:Materials`); a test checks every sample account against the chart of accounts.
 
-## [0.4.0] - 2026-11-25
+## [0.5.0] - 2026-11-25
+
+The pipeline runs on a server: one small Ubuntu machine with Docker Compose, HTTPS through Caddy, and nothing of n8n on the internet.
+
+### Added
+
+- **Server deployment** ([docs/deployment.md](docs/deployment.md)): the same compose file as on a workstation plus a server override (`docker-compose.prod.yml`), selected from the server's `.env`. Caddy obtains and renews the certificates. Only Caddy publishes ports beyond `127.0.0.1`; the firewall allows SSH, 80 and 443 only; SSH by key only.
+- **n8n and the review page through an SSH tunnel only.** n8n's sign-in page under a custom domain can look like phishing to Google Safe Browsing and taint the whole domain, so nothing of n8n is served publicly: its workflows poll or are called from the server. A retired host name answers an empty 404 on every path.
+- **Deploy config check** on every commit and in CI (`scripts/check_deploy_config.sh`): the merged compose files and the Caddyfile are valid, only Caddy publishes public ports, and Caddy never forwards a whole host.
+- **Nightly backups** (`scripts/backup.sh --online`, 03:20 UTC): every database and the n8n data volume, kept 14 days; older copies are deleted only after a complete backup.
+- **Install and move guide:** a new server step by step, and moving the data from another instance with a per-table fingerprint (row count and MD5 of every row) and SHA-256 sums of the stored files on both sides.
+
+### Changed
+
+- n8n gets 1 GB of memory on the server.
+
+### Fixed
+
+- The config check reads `.env.example` keys that contain digits.
+
 
 A second intake channel (Google Drive), bank matching for bills in foreign currencies, and a larger test set with Arabic, Hindi and degraded scans to calibrate the confidence threshold.
 
@@ -94,7 +115,9 @@ Email intake, OCR extraction, validation and routing.
 - **Routing:** `rejected` only when a person could do nothing with the document; everything fixable goes to `needs_review` with a reason. Ambiguous dates come with a suggested reading from the supplier's country.
 - **Audit trail:** append-only processing log, original files kept with a retention date, idempotent processing.
 
-[Unreleased]: https://github.com/dmichel-dev/ap-automation/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/dmichel-dev/ap-automation/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/dmichel-dev/ap-automation/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/dmichel-dev/ap-automation/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/dmichel-dev/ap-automation/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/dmichel-dev/ap-automation/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/dmichel-dev/ap-automation/compare/v0.1.0...v0.2.0

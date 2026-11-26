@@ -76,6 +76,20 @@ The core decides what each delete answer means: 200, 204 or 404 (already gone) t
 - **Workflows:** `apDemoProcess001` (published before `apDemoCleanup001`, which calls it) and `apDemoCleanup001`. The clean-up's successful runs are not saved (288 a day, IDs only).
 - **n8n runs at most 4 executions at once** (`N8N_CONCURRENCY_PRODUCTION_LIMIT`): a burst of demo files waits as "queued" on the page.
 
+## Verified on the server (2026-11-26)
+
+| Check | Result |
+|---|---|
+| HTTPS and paths | Certificate issued; the demo's paths answer, `/health`, `/docs`, `/openapi.json` and `/.env` an empty 404 |
+| Address limit behind Caddy | Only the visitor's real address counted; a forged `X-Forwarded-For` and Caddy's own address ignored |
+| Samples | All 7 gave the outcome they describe, the hosting fraud alert included |
+| Upload | A fictional invoice of an unknown supplier: `needs_review` (new supplier) |
+| Webhook | The demo pages' key accepted, a wrong key refused (403); a file that isn't waiting refused by the core (409) |
+| Email | Sent to a live session: processed in it. Sent to a made-up code: refused and deleted at once |
+| Session end | Sessions, invoices and the 10 n8n run records of 3 test sessions deleted by the clean-up; both emails answer 404 in Gmail (deleted, not in the trash) |
+| Live pipeline | The daily end-to-end test passed (40 checks) after the deploy |
+| Kill switch | `DEMO_ENABLED=false`: the page says the demo is paused |
+
 ## Known limits
 
 - A run that fails before it reaches a session (the core down during the email screening) can't be tied to it: it stays in n8n's history up to 14 days, without its file (deleted within 90 minutes).
