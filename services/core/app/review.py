@@ -178,11 +178,17 @@ def _lines(conn: db.Conn, invoice_id: Any) -> tuple[list[db.Row], list[db.Row]]:
 def stored_invoice(conn: db.Conn, inv: db.Row) -> CommonInvoice:
     """The invoice as stored now (with any corrections), in the common format the checks use."""
     lines, taxes = _lines(conn, inv["id"])
+    return common_invoice(inv, lines, taxes)
+
+
+def common_invoice(inv: db.Row, lines: list[db.Row], taxes: list[db.Row]) -> CommonInvoice:
+    """Stored invoice rows in the common format. Buyer, normalized keys and the provider are optional:
+    the checks after review don't use them, and the demo's views leave them out."""
     return CommonInvoice(
         is_invoice=True,
         document_type=inv["document_type"],
         supplier=Party(name=inv["supplier_name"], tax_id=inv["supplier_tax_id"], country=inv["supplier_country"]),
-        buyer=Party(name=inv["buyer_name"], tax_id=inv["buyer_tax_id"]),
+        buyer=Party(name=inv.get("buyer_name"), tax_id=inv.get("buyer_tax_id")),
         invoice_number=inv["invoice_number"],
         related_invoice_number=inv["related_invoice_number"],
         invoice_date=inv["invoice_date"],
@@ -198,11 +204,11 @@ def stored_invoice(conn: db.Conn, inv: db.Row) -> CommonInvoice:
         total=inv["total"],
         ocr_text="",
         normalized=Normalized(
-            invoice_number=inv["invoice_number_norm"],
-            supplier_name=inv["supplier_name_norm"],
-            supplier_tax_id=inv["supplier_tax_id_norm"],
+            invoice_number=inv.get("invoice_number_norm"),
+            supplier_name=inv.get("supplier_name_norm"),
+            supplier_tax_id=inv.get("supplier_tax_id_norm"),
         ),
-        extraction=ExtractionMeta(provider=inv["extraction_provider"] or "unknown", pages=0),
+        extraction=ExtractionMeta(provider=inv.get("extraction_provider") or "unknown", pages=0),
         issues=[],
     )
 
@@ -233,8 +239,21 @@ def detail(conn: db.Conn, review_id: int, scope: Scope | None = None) -> dict[st
     item = _item(conn, review_id, scope=scope)
     inv = _invoice(conn, item["invoice_id"])
     lines, taxes = _lines(conn, inv["id"])
+    return page_data(item, inv, lines, taxes, _supplier_default(conn, inv["supplier_key"]), _payment(conn, inv["id"]))
+
+
+def page_data(
+    item: db.Row,
+    inv: db.Row,
+    lines: list[db.Row],
+    taxes: list[db.Row],
+    supplier_default: db.Row | None,
+    payment: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """The review page's data from rows already read: the review page (detail) and the demo's
+    read-only copy shape it the same way. Values are JSON-safe."""
     letter = nothing_to_post(inv)
-    blockers = [] if letter else posting_blockers(stored_invoice(conn, inv))[0]
+    blockers = [] if letter else posting_blockers(common_invoice(inv, lines, taxes))[0]
     result = {
         **{k: item[k] for k in ("id", "stage", "status", "scope", "reasons", "corrections", "decision", "reviewer")},
         **{k: item[k] for k in ("waiting_for", "effect_error")},
@@ -244,9 +263,9 @@ def detail(conn: db.Conn, review_id: int, scope: Scope | None = None) -> dict[st
         "invoice": {k: inv[k] for k in INVOICE_FIELDS} | {"has_file": inv["file_path"] is not None},
         "lines": lines,
         "taxes": taxes,
-        "supplier_default_account": _supplier_default(conn, inv["supplier_key"]),
+        "supplier_default_account": supplier_default,
         "blockers": [b.model_dump() for b in blockers],  # what approving would refuse now
-        "payment": _payment(conn, inv["id"]),
+        "payment": payment,
         "nothing_to_post": letter,
     }
     result["invoice"].pop("file_path")

@@ -6,7 +6,8 @@
 # Without AP_DEMO_DB_USER and AP_DEMO_DB_PASSWORD it does nothing.
 #
 # The pages: start sessions (demo_sessions, demo_starts), queue files (demo_uploads, without reading
-# any file back), read results through the demo-only view, read bill previews, append to the log.
+# any file back), read results through the demo-only view, read bill previews and the read-only review
+# page's views (migration 021), append to the log.
 set -eu
 
 if [ -z "${AP_DEMO_DB_USER:-}" ] || [ -z "${AP_DEMO_DB_PASSWORD:-}" ]; then
@@ -38,6 +39,8 @@ GRANT INSERT ON ap.demo_uploads TO :"demo_user";
 GRANT SELECT (id, session_id, kind, sample, file_name, size, status, error, invoice_id, created_at, updated_at)
   ON ap.demo_uploads TO :"demo_user";
 GRANT SELECT ON ap.demo_invoice_results, ap.demo_bill_previews TO :"demo_user";
+-- The read-only review page: needs-review demo invoices, without bank details
+GRANT SELECT ON ap.demo_review_items, ap.demo_review_lines, ap.demo_review_tax_lines TO :"demo_user";
 -- The log: append only (the insert reads an invoice's scope)
 GRANT INSERT ON ap.processing_log TO :"demo_user";
 GRANT SELECT (id, scope) ON ap.invoices TO :"demo_user";
