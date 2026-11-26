@@ -85,8 +85,8 @@ def test_start_page_starts_and_links_the_privacy_notice_without_listing_the_samp
     assert "Start a demo session" in r.text and 'href="/privacy"' in r.text and "One click: no account" in r.text
     assert "Review: bank details changed? (sent after October)" not in r.text  # the session page lists them
     text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", r.text))
-    assert "Today: someone types each invoice in by hand" in text
-    assert "Automated: invoices are picked up where they arrive" in text
+    assert "Today: in many companies, invoices arrive through several channels" in text
+    assert "Automated: invoices are picked up wherever they arrive" in text
     assert text.index("Today:") < text.index("Automated:") < text.index("Start a demo session")
 
 
