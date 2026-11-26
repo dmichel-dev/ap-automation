@@ -4,7 +4,7 @@
 #
 # Nothing of n8n is served on the internet: its editor, sign-in and OAuth callback are reached
 # through an SSH tunnel, like the review page. Caddy is the only service published on the public
-# interface (80/443), and it serves no n8n route today (deploy/Caddyfile).
+# interface (80/443); it forwards the demo pages (demo-web) and no n8n route (deploy/Caddyfile).
 
 x-logging: &logging
   driver: json-file
@@ -37,6 +37,15 @@ services:
   review-web:
     logging: *logging
 
+  # Public demo pages, behind Caddy: on Caddy's network too (Caddy reaches nothing else). Only Caddy's
+  # X-Forwarded-For names the client, for the per-address limits.
+  demo-web:
+    environment:
+      DEMO_ORIGINS: ${DEMO_ORIGINS:?set DEMO_ORIGINS in .env (e.g. https://demo.davidmichel.dev)}
+      DEMO_TRUSTED_PROXIES: 172.29.250.10   # caddy, below
+    logging: *logging
+    networks: [backend, frontend]
+
   # HTTPS front door. Certificates from Let's Encrypt, renewed automatically. It sits alone on
   # its own network: it can't reach n8n, the database, the core or the review page.
   caddy:
@@ -44,6 +53,7 @@ services:
     restart: unless-stopped
     environment:
       RETIRED_HOSTS: ${RETIRED_HOSTS:?set RETIRED_HOSTS in .env}
+      DEMO_HOST: ${DEMO_HOST:?set DEMO_HOST in .env}
       ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
     ports:
       - "80:80"
@@ -60,7 +70,9 @@ services:
     security_opt: ["no-new-privileges:true"]
     mem_limit: 128m
     logging: *logging
-    networks: [frontend]
+    networks:
+      frontend:
+        ipv4_address: 172.29.250.10   # fixed: demo-web trusts this address's X-Forwarded-For
 
 volumes:
   caddy_data:
@@ -68,3 +80,6 @@ volumes:
 
 networks:
   frontend:
+    ipam:
+      config:
+        - subnet: 172.29.250.0/24

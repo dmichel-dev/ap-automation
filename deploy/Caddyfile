@@ -1,7 +1,7 @@
 # Public HTTPS front door. Host names and the Let's Encrypt account e-mail come from .env
 # (docker-compose.prod.yml).
 #
-# No n8n route is served: n8n's editor, sign-in and OAuth callback are reached through an SSH
+# The demo pages are the only service forwarded (demo-web, on Caddy's network). No n8n route is served: n8n's editor, sign-in and OAuth callback are reached through an SSH
 # tunnel (docs/deployment.md), and so is the review page's internal listener (docs/security.md).
 # A public n8n webhook, if one is ever needed, gets a host of its own that forwards only exact
 # POST paths; scripts/check_deploy_config.sh refuses any proxy route without a path matcher.
@@ -17,6 +17,23 @@
 		Referrer-Policy "no-referrer"
 		X-Frame-Options "DENY"
 		-Server
+	}
+}
+
+# The public demo pages (demo-web). Only their own paths are forwarded; anything else, the
+# container's /health included, is an empty 404. Bodies are capped just above the demo's 5 MB file
+# limit (demo-web refuses a larger one too, before reading it).
+{$DEMO_HOST} {
+	import hardening
+	request_body {
+		max_size 6MB
+	}
+	@demo path / /start /privacy /s/* /static/*
+	handle @demo {
+		reverse_proxy demo-web:8082
+	}
+	handle {
+		respond 404
 	}
 }
 
