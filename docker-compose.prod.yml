@@ -4,7 +4,8 @@
 #
 # Nothing of n8n is served on the internet: its editor, sign-in and OAuth callback are reached
 # through an SSH tunnel, like the review page. Caddy is the only service published on the public
-# interface (80/443); it forwards the demo pages (demo-web) and no n8n route (deploy/Caddyfile).
+# interface (80/443); it serves the home page's static files, forwards the demo pages (demo-web) and
+# no n8n route (deploy/Caddyfile).
 
 x-logging: &logging
   driver: json-file
@@ -54,6 +55,7 @@ services:
     environment:
       RETIRED_HOSTS: ${RETIRED_HOSTS:?set RETIRED_HOSTS in .env}
       DEMO_HOST: ${DEMO_HOST:?set DEMO_HOST in .env}
+      HOME_HOST: ${HOME_HOST:?set HOME_HOST in .env}
       ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
     ports:
       - "80:80"
@@ -61,6 +63,7 @@ services:
       - "443:443/udp"   # HTTP/3
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${SITE_DIR:-../davidmichel.dev/public}:/srv/site:ro   # the home page's files (site repository)
       - caddy_data:/data       # certificates and ACME account: keep it, or Let's Encrypt limits may apply
       - caddy_config:/config
     read_only: true

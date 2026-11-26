@@ -6,7 +6,7 @@ The stack runs on one small Ubuntu server (4 GB RAM) with Docker Compose: the sa
 
 | Service | Internet | Server only | How a person reaches it |
 |---|---|---|---|
-| Caddy (HTTPS) | 80, 443 (TCP and UDP) | | |
+| Caddy (HTTPS): home page, demo pages | 80, 443 (TCP and UDP) | | |
 | n8n editor, sign-in, OAuth callback, webhooks | **no** | `127.0.0.1:5678` | SSH tunnel |
 | Review page, internal listener | **no** | `127.0.0.1:8081` | SSH tunnel ([security](security.md)) |
 | Core API, PostgreSQL | **no** | Docker network only | |
@@ -20,6 +20,8 @@ The stack runs on one small Ubuntu server (4 GB RAM) with Docker Compose: the sa
 n8n's sign-in page served under a custom domain looks to Google Safe Browsing like a copy of the n8n login page, and a host serving it can be flagged as phishing. A flagged host can taint the whole domain, including the public demo pages. So nothing of n8n is served publicly: its editor is used through a tunnel, like the review page, and all of its workflows either poll (Gmail, Google Drive, schedules) or are called from the server itself (`scripts/run_now.py`).
 
 A public webhook, if one is ever needed (e.g. an upload form handled by n8n), gets a host of its own in the [Caddyfile](../deploy/Caddyfile) that forwards **only** exact `POST` paths and answers every other path with an empty 404. `WEBHOOK_URL` then names that host.
+
+**Home page** (`HOME_HOST`, e.g. `davidmichel.dev`): static files from the [site repository](https://github.com/dmichel-dev/davidmichel.dev), cloned next to this one on the server; Caddy serves its `public/` folder read-only (`SITE_DIR`). The pages have no scripts and load nothing from elsewhere, so Caddy sends a Content-Security-Policy that allows only the site's own stylesheet and images. Publishing a change is a `git pull` in that clone: Caddy reads the files from disk and needs no restart.
 
 **Retired host names** (`RETIRED_HOSTS` in `.env`, e.g. the former public name of the editor) answer an empty 404 on every path until their DNS record is removed.
 
@@ -79,14 +81,14 @@ Ubuntu 24.04 with Docker from the Ubuntu archive. Commands run as a normal user 
 3. **`.env`** (mode 600, never committed), from [`.env.example`](../.env.example):
    - **Generate new** Postgres passwords, `N8N_ENCRYPTION_KEY`, `CORE_API_TOKEN` and `RUN_NOW_TOKEN` (`openssl rand -hex 32`).
    - **Keep `BANK_FINGERPRINT_KEY`** if the data comes from another instance: the stored bank-account fingerprints were computed with it.
-   - Add `COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml`, `ACME_EMAIL`, `RETIRED_HOSTS` and `BACKUP_KEEP_DAYS=14`.
+   - Add `COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml`, `ACME_EMAIL`, `RETIRED_HOSTS`, `DEMO_HOST`, `HOME_HOST` and `BACKUP_KEEP_DAYS=14`.
    - **Store `N8N_ENCRYPTION_KEY` and `BANK_FINGERPRINT_KEY` in a password manager.** Without the first, n8n's stored credentials can't be decrypted from a backup; changing the second resets the bank-detail comparison.
 4. **Database:** `docker volume create ap-automation_pg17_data` (external, so `docker compose down -v` can never delete it), then `docker compose up -d postgres`. On its first start the container creates the roles and applies every migration.
 5. **Data from another instance** (optional, see below), then `docker compose up -d core review-web n8n`.
 6. **n8n owner account:** through the tunnel, **before** anything else, then turn on two-factor authentication. Until an owner exists, whoever opens n8n first can create one.
 7. **Credentials**, with the exact names in `CREDENTIAL_NAMES` ([`n8n/nodes.py`](../n8n/nodes.py)). OAuth ones (Gmail, Google Drive, QuickBooks) in the editor, as above. The others (core token, database, Plaid) can be created in the editor too, or imported with `n8n import:credentials` from a temporary file built from `.env` and deleted right after; n8n encrypts them on import.
 8. **Workflows:** write the instance's credential IDs to `cred_ids.json` (gitignored), then build, import and publish each workflow in the order given in [operations](operations.md#updating-the-workflows-in-n8n).
-9. **Caddy:** `docker compose up -d caddy`. It obtains the certificates on its first start.
+9. **Caddy:** clone the site repository next to this one (`git clone … ../davidmichel.dev`; its files must exist before Caddy starts, or Docker creates an empty folder in their place), then `docker compose up -d caddy`. It obtains the certificates on its first start.
 10. **Backups:** the cron job below.
 
 **Moving from another instance:** stop the old one from processing first (`n8n unpublish:workflow --all`, then restart its n8n), or both would read the same mailbox, Drive folder and bank feed. Then:

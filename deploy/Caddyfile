@@ -1,7 +1,8 @@
 # Public HTTPS front door. Host names and the Let's Encrypt account e-mail come from .env
 # (docker-compose.prod.yml).
 #
-# The demo pages are the only service forwarded (demo-web, on Caddy's network). No n8n route is served: n8n's editor, sign-in and OAuth callback are reached through an SSH
+# The home page (davidmichel.dev) is static files from a read-only mount. The demo pages are the
+# only service forwarded (demo-web, on Caddy's network). No n8n route is served: n8n's editor, sign-in and OAuth callback are reached through an SSH
 # tunnel (docs/deployment.md), and so is the review page's internal listener (docs/security.md).
 # A public n8n webhook, if one is ever needed, gets a host of its own that forwards only exact
 # POST paths; scripts/check_deploy_config.sh refuses any proxy route without a path matcher.
@@ -18,6 +19,17 @@
 		X-Frame-Options "DENY"
 		-Server
 	}
+}
+
+# The home page: static files from the site repository (github.com/dmichel-dev/davidmichel.dev),
+# mounted read-only. It has no scripts and loads nothing from elsewhere, so the policy allows only its
+# own stylesheet and images. A missing file is an empty 404.
+{$HOME_HOST} {
+	import hardening
+	header Content-Security-Policy "default-src 'none'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+	encode zstd gzip
+	root * /srv/site
+	file_server
 }
 
 # The public demo pages (demo-web). Only their own paths are forwarded; anything else, the
