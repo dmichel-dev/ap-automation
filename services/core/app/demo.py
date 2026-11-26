@@ -173,17 +173,23 @@ def _insert_session(conn: db.Conn, token: str, client_digest: str, now: datetime
     raise RuntimeError("could not draw an unused session code")
 
 
-def session_for_page(conn: db.Conn, token: str | None, code: str | None, now: datetime) -> Session | None:
-    """The session whose page this is: the cookie's token AND the code in the URL must belong to the
-    same live session. A code alone (a shared or guessed link) opens nothing."""
-    if not token or not code:
+def session_for_token(conn: db.Conn, token: str | None, now: datetime) -> Session | None:
+    """The live session this browser's cookie holds, if any (the start page sends it back there)."""
+    if not token:
         return None
     row = conn.execute(
         "SELECT * FROM demo_sessions WHERE token_digest = %s AND expires_at > %s", (token_digest(token), now)
     ).fetchone()
-    if row is None or not re.fullmatch(CODE_PATTERN, code) or not hmac.compare_digest(row["code"], code):
+    return _session(row) if row else None
+
+
+def session_for_page(conn: db.Conn, token: str | None, code: str | None, now: datetime) -> Session | None:
+    """The session whose page this is: the cookie's token AND the code in the URL must belong to the
+    same live session. A code alone (a shared or guessed link) opens nothing."""
+    session = session_for_token(conn, token, now)
+    if session is None or not code or not re.fullmatch(CODE_PATTERN, code):
         return None
-    return _session(row)
+    return session if hmac.compare_digest(session.code, code) else None
 
 
 def session_by_code(conn: db.Conn, code: str, now: datetime) -> Session | None:
@@ -343,12 +349,7 @@ def queue_file(
     live = session_by_code(conn, session.code, now)
     if live is None:
         raise Refused("session_expired")
-    pending = db.one(
-        conn,
-        "SELECT count(*) AS n FROM demo_uploads WHERE session_id = %s AND status IN ('queued', 'processing')",
-        (session.id,),
-    )["n"]
-    if live.files_used + pending >= limits.files_per_session:
+    if live.files_used + files_pending(conn, session.id) >= limits.files_per_session:
         raise Refused("file_limit")
     row = db.one(
         conn,
@@ -375,6 +376,61 @@ def finish_upload(conn: db.Conn, upload_id: int, invoice_id: str | None, error: 
         "UPDATE demo_uploads SET status = %s, invoice_id = %s, error = %s, content = NULL WHERE id = %s",
         ("failed" if error else "done", invoice_id, error, upload_id),
     )
+
+
+# =====================================================================================
+# What the session page shows
+# =====================================================================================
+def session_items(conn: db.Conn, session_id: str) -> list[db.Row]:
+    """The session's files, newest first: those still queued, being processed or failed (kind
+    'upload'), and every invoice (kind 'invoice': emailed ones have no upload row). The page reads
+    no document content: only the processing results."""
+    uploads = conn.execute(
+        """SELECT 'upload' AS kind, id::text AS id, sample, file_name, status, error, created_at
+             FROM demo_uploads WHERE session_id = %s AND status <> 'done'""",
+        (session_id,),
+    ).fetchall()
+    invoices = conn.execute(
+        """SELECT 'invoice' AS kind, i.id::text AS id, u.sample, i.file_name, i.channel, i.status,
+                  i.status_reasons AS reasons, i.supplier_name, i.invoice_number, i.document_type,
+                  i.total, i.currency, i.confidence, i.created_at,
+                  (SELECT count(*) FROM invoice_lines l WHERE l.invoice_id = i.id) AS lines,
+                  p.preview IS NOT NULL AS has_preview, p.preview -> 'account_names' AS account_names
+             FROM invoices i
+             LEFT JOIN demo_uploads u ON u.invoice_id = i.id
+             LEFT JOIN demo_bill_previews p ON p.invoice_id = i.id
+            WHERE i.demo_session_id = %s""",
+        (session_id,),
+    ).fetchall()
+    return sorted([*uploads, *invoices], key=lambda r: r["created_at"], reverse=True)
+
+
+def samples_sent(conn: db.Conn, session_id: str) -> set[str]:
+    rows = conn.execute(
+        "SELECT DISTINCT sample FROM demo_uploads WHERE session_id = %s AND sample IS NOT NULL", (session_id,)
+    ).fetchall()
+    return {r["sample"] for r in rows}
+
+
+def files_pending(conn: db.Conn, session_id: str) -> int:
+    """Files still waiting in the queue. A file being processed already took its slot (files_used,
+    take_file_slot), so it isn't counted again; processing enforces the limit itself."""
+    return int(
+        db.one(
+            conn, "SELECT count(*) AS n FROM demo_uploads WHERE session_id = %s AND status = 'queued'", (session_id,)
+        )["n"]
+    )
+
+
+def session_bill(conn: db.Conn, session_id: str, invoice_id: str) -> db.Row | None:
+    """A ready invoice of this session with its bill preview; None for anything else (another
+    session's invoice included)."""
+    return conn.execute(
+        """SELECT i.id::text AS id, i.supplier_name, i.invoice_number, i.total, i.currency, p.preview
+             FROM invoices i JOIN demo_bill_previews p ON p.invoice_id = i.id
+            WHERE i.id = %s::uuid AND i.demo_session_id = %s::uuid""",
+        (invoice_id, session_id),
+    ).fetchone()
 
 
 # =====================================================================================

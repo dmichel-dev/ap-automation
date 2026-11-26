@@ -547,3 +547,19 @@ def test_demo_limits_come_from_the_environment(monkeypatch):
     monkeypatch.setenv("DEMO_FILES_PER_SESSION", "2")
     limits = DemoSettings().demo_limits()
     assert limits.open and limits.files_per_session == 2 and limits.session_minutes == 60
+
+
+def test_a_file_being_processed_counts_once(demo_env, live_now):
+    """Processing takes the file's slot (files_used); the queue counts only files still waiting, so a
+    file in progress isn't counted twice and the session gets every file it is allowed."""
+    _state, _pcfg, cfg = demo_env
+    limits = demo.Limits(enabled=True, hash_key=LIMITS.hash_key, files_per_session=2)
+    session = start(cfg.database_url, now=live_now).session
+    with db.connect(cfg.database_url) as conn:
+        first = demo.queue_file(
+            conn, limits, session, "a.pdf", sample_bytes("us-hosting-october"), live_now, "us-hosting-october"
+        )
+        assert demo.claim_upload(conn, first) is not None
+        demo.take_file_slot(conn, limits, session.id, live_now)  # what processing does next
+        demo.queue_file(conn, limits, session, "b.pdf", sample_bytes("fr-eur-discount"), live_now, "fr-eur-discount")
+        assert refusal(demo.queue_file, conn, limits, session, "c.pdf", UPLOAD, live_now).code == "file_limit"
