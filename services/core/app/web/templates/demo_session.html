@@ -14,7 +14,7 @@
 <section class="demo-section" aria-labelledby="send-title">
   <h2 id="send-title">Send an invoice</h2>
   {% if full %}<p class="note" role="status">This session has used all its files. Its results stay here until it ends.</p>{% endif %}
-  <details class="demo-box demo-fold">
+  <details class="demo-box demo-fold"{% if samples_open %} open{% endif %}>
     <summary>Send a sample invoice ({{ samples | length }})</summary>
     <ul class="demo-samples">
       {% for sample, sent in samples %}

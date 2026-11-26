@@ -98,6 +98,17 @@ def test_the_samples_fold_closed_under_a_summary_with_their_count(site):
     assert fold.count("/samples/") == 7 and "<script" not in fold and "onclick" not in fold
 
 
+def test_the_samples_fold_stays_open_after_a_send_and_closes_on_a_plain_visit(site):
+    c = visitor(site)
+    code = start(c)
+    sent = c.post(f"/s/{code}/samples/fr-eur-discount")
+    assert sent.headers["location"] == f"/s/{code}?sent=sample#invoices"
+    assert '<details class="demo-box demo-fold" open>' in c.get(sent.headers["location"]).text
+    assert '<details class="demo-box demo-fold">' in c.get(f"/s/{code}").text  # no signal: closed
+    uploaded = c.post(f"/s/{code}/uploads", files={"file": ("mine.pdf", UPLOAD, "application/pdf")})
+    assert uploaded.headers["location"] == f"/s/{code}#invoices"  # an upload leaves the fold as it was
+
+
 def test_sample_titles_name_their_currency_by_iso_code_only():
     titles = [s.title for s in CATALOG]
     assert "French invoice, EUR, with a discount" in titles and "Arabic tax invoice, AED" in titles

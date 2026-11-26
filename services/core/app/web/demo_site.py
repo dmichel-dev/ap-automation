@@ -41,6 +41,7 @@ WEBHOOK_TIMEOUT = 2.0  # seconds: n8n answers at once, before processing
 SESSION_COOKIE = "__Host-ap_demo"  # __Host-: Secure, Path=/, no Domain
 MAX_FORM = 16 * 1024  # a click on a button
 UPLOAD_OVERHEAD = 64 * 1024  # multipart framing around the file
+SENT_PARAM, SENT_SAMPLE = "sent", "sample"  # the redirect after a sample send: the sample list opens
 CHANNELS = {"upload": "from this page", "email": "by email", "drive": "from Google Drive"}
 FRAUD_CODES = frozenset({"possible_bank_detail_change"})
 STATUS_LABELS = {"ready": "Ready to post", "needs_review": "Needs review", "rejected": "Rejected"}
@@ -205,6 +206,7 @@ def _session_context(request: Request, session: demo.Session) -> dict[str, Any]:
         "cards": cards,
         "pending": any(c["pending"] for c in cards),
         "samples": [(sample, sample.key in sent) for sample in demo_samples.CATALOG],
+        "samples_open": request.query_params.get(SENT_PARAM) == SENT_SAMPLE,
         "used": min(used, limits.files_per_session),
         "limits": limits,
         "full": used >= limits.files_per_session,
@@ -302,7 +304,9 @@ async def _queued(request: Request, session: demo.Session, name: str, content: b
     except demo.Refused as exc:
         context = await run_in_threadpool(_session_context, request, session)
         return _refused("demo_session.html", exc, **context)
-    return guard.redirect(f"/s/{session.code}#invoices")
+    # After a sample, the page comes back with its sample list still open, so the next one is one click away
+    landing = f"?{SENT_PARAM}={SENT_SAMPLE}" if sample else ""
+    return guard.redirect(f"/s/{session.code}{landing}#invoices")
 
 
 @router.post("/s/{code}/samples/{key}")
