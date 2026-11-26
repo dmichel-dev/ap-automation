@@ -3,6 +3,7 @@ session-scoped checks (duplicates, bank details), the bill preview, no posting, 
 
 import hashlib
 import io
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -264,6 +265,13 @@ SAMPLE_OUTCOMES = {
     "us-hosting-october": ("ready", []),
     "us-hosting-november-other-account": ("ready", []),  # the fraud alert needs October first (test below)
 }
+
+
+def test_each_sample_account_is_a_full_name_the_chart_of_accounts_creates():
+    """The demo finds a sample supplier's account by its full name (a sub-account is Parent:Name)."""
+    chart = json.loads(Path("/config/chart_of_accounts_us.json").read_text())["accounts"]
+    full_names = {f"{a['parent']}:{a['name']}" if a.get("parent") else a["name"] for a in chart}
+    assert {s.account for s in demo_samples.CATALOG} <= full_names
 
 
 def test_every_sample_has_an_expected_outcome():

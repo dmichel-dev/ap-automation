@@ -55,7 +55,7 @@ CATALOG: tuple[Sample, ...] = (
         "de-eur-wrong-total",
         "German invoice whose total doesn't add up",
         "Review: total doesn't add up",
-        "Materials",
+        "Cost of Goods Sold:Materials",
     ),
     Sample(
         "es-eur-ambiguous-date",

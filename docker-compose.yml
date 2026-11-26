@@ -247,6 +247,7 @@ services:
       - ./services/core:/app
       - ./db/migrations:/migrations:ro
       - ./test-data:/test-data:ro
+      - ./config:/config:ro
     depends_on:
       postgres:
         condition: service_healthy
