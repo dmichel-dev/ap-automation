@@ -120,7 +120,7 @@ docs/                Architecture and data-format documentation
 - [x] Day 3: Human review, fraud alert, error handling, daily summary, daily end-to-end test
 - [x] Day 4: Google Drive intake, foreign-currency bank matching, test set of 20 invoices and confidence calibration
 - [x] Day 5: VPS deployment (Caddy, HTTPS, backups, n8n reached through an SSH tunnel only)
-- [x] Day 6: Public demo: samples, uploads and email, session page with bill preview, privacy notice, limits, deletion
+- [x] Day 6: Public demo: samples, uploads and email, session page with QuickBooks bill preview, privacy notice, limits, deletion
 - [ ] Day 7: Video, architecture diagram, case study
 
 **After the 7 days (documented, not built):**

@@ -192,6 +192,7 @@ def test_a_sample_goes_from_queued_to_ready_with_its_bill(site, live_now):  # no
     assert "All checks passed" in page and "coded to Office Supplies" in page
     assert "Read (stored OCR result): 4 lines · confidence 98%" in page and "fields found" not in page
     assert 'aria-describedby="conf-info-1"' in page and "Below 85%, the invoice goes to a person for review." in page
+    assert '<script src="/static/info.js" defer></script>' in page and c.get("/static/info.js").status_code == 200
     assert "Sent</span>" in page  # the sample's button is gone
     [invoice] = query(site, "SELECT id FROM ap.invoices")
     bill = c.get(f"/s/{code}/bills/{invoice['id']}")
@@ -209,7 +210,7 @@ def test_a_review_card_says_why_in_the_review_page_words(site):
     page = c.get(f"/s/{code}").text
     assert "Needs review" in page and "The lines and tax don&#39;t add up to the invoice total." in page
     assert "Total (875.13 EUR) doesn&#39;t match lines + adjustments + tax (865.13 EUR): 10.00 EUR off." in page
-    assert "Sent to review: Total doesn&#39;t add up" in page and "See the bill preview" not in page
+    assert "Sent to review: Total doesn&#39;t add up" in page and "See the QuickBooks bill preview" not in page
 
 
 def test_a_bill_of_another_session_is_not_found(site):

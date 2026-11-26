@@ -293,4 +293,5 @@ textarea { resize: vertical; }
 /* The transparent top border bridges the gap, so the pointer can move onto the text without closing it */
 .info-tip { display: none; position: absolute; z-index: 20; left: 0; right: 0; top: 100%; padding: 10px 12px; border-top: 6px solid transparent; background: var(--ink) padding-box; border-radius: 14px; color: #ffffff; font: 400 0.8125rem/1.5 var(--font); letter-spacing: normal; text-align: left; text-transform: none; white-space: normal; filter: drop-shadow(0 6px 12px rgb(0 0 0 / 0.18)); }
 .info:hover .info-tip, .info:focus-within .info-tip { display: block; }
+.info.info-dismissed .info-tip { display: none; }  /* Escape (static/info.js) */
 .conf-line { display: flex; align-items: center; gap: 6px; }

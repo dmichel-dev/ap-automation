@@ -1,6 +1,6 @@
 {% extends "demo_base.html" %}
 {% from "demo_icons.html" import icon %}
-{% block title %}Bill preview{% endblock %}
+{% block title %}QuickBooks bill preview{% endblock %}
 {% block description %}The QuickBooks bill an invoice would create: vendor, dates, lines, tax and total. In the demo, nothing is sent.{% endblock %}
 {% block header_right %}
 <span class="who"><span class="who-name">{{ minutes_left }} min left</span><span class="who-role">Session {{ session.code }}</span></span>
@@ -9,12 +9,12 @@
 <div class="demo">
 <a class="back" href="/s/{{ session.code }}#invoices">{{ icon("arrow-left", "sm") }}Your invoices</a>
 <section class="demo-intro">
-  <h1>Bill preview</h1>
+  <h1>QuickBooks bill preview</h1>
   <p class="muted">{{ bill.supplier_name }} · invoice {{ bill.invoice_number }} · <strong class="num">{{ bill.total | money(bill.currency) }}</strong></p>
 </section>
 
 {% if preview.get("error") %}
-<p class="note error" role="alert">This bill can't be prepared: {{ preview.get("message") }}</p>
+<p class="note error" role="alert">This QuickBooks bill can't be prepared: {{ preview.get("message") }}</p>
 {% else %}
 <p class="note ok">This is exactly what would be sent to QuickBooks. In the demo, nothing is sent.</p>
 
@@ -42,7 +42,7 @@
 <section class="demo-section">
   <h2>Next, in the live system</h2>
   <ol class="demo-next">
-    <li>The bill is created in QuickBooks with the original document attached.</li>
+    <li>The QuickBooks bill is created, with the original document attached.</li>
     <li>Bank transactions (Plaid) are matched to open bills by amount, date window and supplier name, using the ECB rate for foreign currencies.</li>
     <li>A match records the payment; anything uncertain goes to a person.</li>
   </ol>

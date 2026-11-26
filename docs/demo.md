@@ -10,7 +10,7 @@ A visitor tries the whole pipeline at **demo.davidmichel.dev**: one click starts
 | **Upload** | A PDF or image of their own, up to 5 MB and 3 pages | Mistral OCR |
 | **Email** | To `invoices+CODE@davidmichel.dev`, where CODE is the session's 8-letter code shown on the page | Mistral OCR |
 
-The session page shows each file's outcome in the review page's words: **ready to post** (with the bill it would create: supplier, account, lines, tax, total), or **Review:** and the reason (total doesn't add up, date reads two ways, bank details changed?, new supplier…), or **rejected** and why. The confidence shown is the real one the core routes on, as a whole percentage, with an info button explaining it (see [review](review.md)). The samples always give the outcome they describe: the demo knows their suppliers and default accounts itself ([`demo_samples.py`](../services/core/app/demo_samples.py)), so live data never changes a demo result.
+The session page shows each file's outcome in the review page's words: **ready to post** (with the QuickBooks bill it would create: supplier, account, lines, tax, total), or **Review:** and the reason (total doesn't add up, date reads two ways, bank details changed?, new supplier…), or **rejected** and why. The confidence shown is the real one the core routes on, as a whole percentage, with an info button explaining it (see [review](review.md)). The samples always give the outcome they describe: the demo knows their suppliers and default accounts itself ([`demo_samples.py`](../services/core/app/demo_samples.py)), so live data never changes a demo result.
 
 ## How a file goes through
 
@@ -25,7 +25,7 @@ email to invoices+CODE@ ──► AP – Email intake ──► core screening: 
 - A file still queued a minute later (the webhook call was missed) is picked up by the clean-up's sweep, one run per file.
 - **Email:** the session code is read from `Delivered-To` only, which Google sets, never from `To`. An email to an unknown or ended session, over its sender's daily limit, or while the demo is paused is **refused**: logged, and deleted at once.
 - Every comparison with earlier documents stays **within the session**: duplicate file, possible duplicate, bank-detail change (the November hosting sample raises the fraud alert only after October was sent in the same session).
-- A ready demo invoice is never posted. The core computes the bill it would post and keeps it for the page (`demo_bill_previews`).
+- A ready demo invoice is never posted. The core computes the QuickBooks bill it would post and keeps it for the page (`demo_bill_previews`).
 - A **needs-review** demo invoice opens in the real review page's design, **read-only** (`/s/CODE/review/ID`): the same content as the reviewer's page (`review_item.html`, shaped by `review.page_data`), with every control switched off and a note saying so. No form, no token, no write route. Only the visitor's own session (cookie and code), only its open needs-review invoices. The original is drawn from the demo's own sample PDFs; for a visitor's own file the panel says it isn't shown, and its page images are a 404. The data comes from the views `demo_review_items`, `demo_review_lines` and `demo_review_tax_lines` (migration 021): no bank account details, no file path, OCR text or extraction.
 
 ## Limits

@@ -174,6 +174,10 @@ def test_the_badge_shows_the_routed_score_with_an_info_button_explaining_it(item
     tip = head[head.index('id="conf-info">') :]
     assert 'role="tooltip"' in head and "How sure the system is that it read this invoice correctly." in tip
     assert "Below 85%, the invoice goes to a person for review." in tip and "<script" not in head
+    # Escape closes it: the one script involved, from a file (the CSP allows no inline script)
+    assert '<script src="/static/info.js" defer></script>' in page
+    script = c.get("/static/info.js")
+    assert script.status_code == 200 and '"Escape"' in script.text and "info-dismissed" in script.text
 
 
 def test_the_raw_ocr_average_stays_under_the_raw_values(samples):

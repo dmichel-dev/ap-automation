@@ -25,7 +25,18 @@ def test_money_has_the_currency_s_usual_decimals(value, currency, shown):
 
 
 @pytest.mark.parametrize(
-    "score, shown", [(0.973, "97%"), ("0.8499", "84%"), (0.85, "85%"), (1, "100%"), (0, "0%"), (None, "–")]
+    "score, shown",
+    [
+        (0.9775, "97%"),
+        ("0.9775", "97%"),
+        (0.973, "97%"),
+        (0.9999, "99%"),
+        ("0.8499", "84%"),
+        (0.85, "85%"),
+        (1, "100%"),
+        (0, "0%"),
+        (None, "–"),
+    ],
 )
 def test_scores_are_whole_percentages_rounded_down(score, shown):
     assert formatting.percent(score) == shown

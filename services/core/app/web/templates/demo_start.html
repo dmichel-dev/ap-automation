@@ -5,8 +5,8 @@
 {% block main %}
 <div class="demo">
 <section class="demo-intro">
-  <h1>Send an invoice. Watch it become a QuickBooks bill.</h1>
-  <p class="muted">Each invoice is read by OCR, checked against fixed rules (totals, tax, dates, duplicates, bank details), then either prepared as a bill or sent to a person for review. You see every step.</p>
+  <h1>Send an invoice. Watch it get posted to QuickBooks.</h1>
+  <p class="muted">Each invoice is read by OCR, checked against fixed rules (totals, tax, dates, duplicates, bank details), then either prepared as a QuickBooks bill or sent to a person for review. You see every step.</p>
 </section>
 
 <section class="demo-compare" aria-label="Before and after automation">
@@ -27,7 +27,7 @@
   <ul class="demo-facts">
     <li>One click: no account, no sign-in, nothing to type.</li>
     <li>{{ limits.session_minutes }} minutes, up to {{ limits.files_per_session }} files.</li>
-    <li>Nothing is posted to QuickBooks: you get the bill it would receive.</li>
+    <li>Nothing is posted to QuickBooks: you see the QuickBooks bill it would create.</li>
   </ul>
   {% endif %}
 </section>
