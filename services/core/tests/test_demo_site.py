@@ -83,6 +83,7 @@ def test_start_page_starts_and_links_the_privacy_notice_without_listing_the_samp
     r = visitor(site).get("/")
     assert r.status_code == 200
     assert "Start a demo session" in r.text and 'href="/privacy"' in r.text and "demo-facts" not in r.text
+    assert "In this demo, nothing is sent to QuickBooks: you see the bill it would create.</p>" in r.text
     assert "Review: bank details changed? (sent after October)" not in r.text  # the session page lists them
     text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", r.text))
     assert "Today: in many companies, invoices arrive through several channels" in text
