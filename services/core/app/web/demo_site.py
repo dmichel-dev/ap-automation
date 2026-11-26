@@ -30,7 +30,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
-from .. import db, demo, demo_samples, review
+from .. import db, demo, demo_samples, formatting, review
 from ..intake import sub_address
 from . import display, forms, guard, reasons, render
 from .settings import DemoWebSettings
@@ -44,7 +44,6 @@ UPLOAD_OVERHEAD = 64 * 1024  # multipart framing around the file
 SENT_PARAM, SENT_SAMPLE = "sent", "sample"  # the redirect after a sample send: the sample list opens
 CHANNELS = {"upload": "from this page", "email": "by email", "drive": "from Google Drive"}
 FRAUD_CODES = frozenset({"possible_bank_detail_change"})
-STATUS_LABELS = {"ready": "Ready to post", "needs_review": "Needs review", "rejected": "Rejected"}
 UPLOAD_ERRORS = {"provider_server": "The OCR service didn't answer. Try again in a few minutes."}
 ENDED = "This demo session has ended, or it opens only in the browser that started it."
 PDF = "application/pdf"
@@ -116,48 +115,52 @@ def _minutes_left(session: demo.Session, now: datetime) -> int:
 # =====================================================================================
 # What a card on the session page says (display only: the statuses and reasons are the core's)
 # =====================================================================================
-def _reason_lines(found: list[dict[str, Any]]) -> list[dict[str, str | None]]:
+def _reason_lines(found: list[dict[str, Any]], currency: str | None) -> list[dict[str, str | None]]:
     lines: list[dict[str, str | None]] = []
     for r in found:
         known = r.get("code") in reasons.REASONS
         sentence = reasons.explain(r["code"]).sentence if known else r.get("message") or "Not processed."
-        lines.append({"sentence": sentence, "detail": r.get("message") if known else None})
+        detail = display.reason_detail(r.get("message"), currency) if known else None
+        lines.append({"sentence": sentence, "detail": detail or None})
     return lines
 
 
-def _read_step(item: db.Row) -> str:
-    source = " · stored OCR result" if item["sample"] else ""
+Step = tuple[str, str, bool]  # (state, text, followed by the confidence score's info button)
+
+
+def _read_step(item: db.Row) -> Step:
+    source = " (stored OCR result)" if item["sample"] else ""
     if item["confidence"] is None:
-        return f"Read: {item['lines']} lines{source}"
-    percent = round(float(item["confidence"]) * 100)
-    return f"Read: {item['lines']} lines · confidence {percent}% (OCR × fields found){source}"
+        return ("done", f"Read{source}: {item['lines']} lines", False)
+    return ("done", f"Read{source}: {item['lines']} lines · confidence {formatting.percent(item['confidence'])}", True)
 
 
-def _invoice_steps(item: db.Row) -> list[tuple[str, str]]:
-    steps = [("done", f"Received {CHANNELS.get(item['channel'], '')}".strip())]
+def _invoice_steps(item: db.Row) -> list[Step]:
+    steps = [("done", f"Received {CHANNELS.get(item['channel'], '')}".strip(), False)]
     if item["status"] == "rejected":
-        return [*steps, ("stop", "Not processed further")]
-    steps.append(("done", _read_step(item)))
+        return [*steps, ("stop", "Not processed further", False)]
+    steps.append(_read_step(item))
     if item["status"] == "ready":
-        steps.append(("done", "All checks passed"))
+        steps.append(("done", "All checks passed", False))
     else:
         labels = ", ".join(reasons.explain(r["code"]).label for r in item["reasons"])
-        steps.append(("stop", f"Sent to review: {labels}"))
+        steps.append(("stop", f"Sent to review: {labels}", False))
     if item["has_preview"] and item["account_names"]:
-        steps.append(("done", "Bill prepared for QuickBooks, coded to " + ", ".join(item["account_names"].values())))
+        coded = ", ".join(item["account_names"].values())
+        steps.append(("done", f"Bill prepared for QuickBooks, coded to {coded}", False))
     return steps
 
 
 def _invoice_card(item: db.Row) -> dict[str, Any]:
     codes = {r.get("code") for r in item["reasons"]}
-    tone = {"ready": "ready", "needs_review": "review", "rejected": "closed"}[item["status"]]
+    status = display.STATUSES["fraud" if codes & FRAUD_CODES else item["status"]]
     return {
         "title": item["supplier_name"] or item["file_name"],
         "sub": _invoice_sub(item),
-        "amount": guard.money(item["total"], item["currency"]) if item["total"] is not None else None,
-        "tone": "fraud" if codes & FRAUD_CODES else tone,
-        "label": STATUS_LABELS[item["status"]],
-        "reasons": _reason_lines(item["reasons"]) if item["status"] != "ready" else [],
+        "amount": formatting.money(item["total"], item["currency"]) if item["total"] is not None else None,
+        "tone": status.tone,
+        "label": status.label,
+        "reasons": _reason_lines(item["reasons"], item["currency"]) if item["status"] != "ready" else [],
         "steps": _invoice_steps(item),
         "bill": item["id"] if item["has_preview"] and item["account_names"] else None,
         "review": item["id"] if item["status"] == "needs_review" else None,
@@ -175,17 +178,17 @@ def _upload_card(item: db.Row) -> dict[str, Any]:
     failed = item["status"] == "failed"
     reading = "Reading (stored OCR result)" if item["sample"] else "Reading with Mistral OCR (a few seconds)"
     now = {"queued": "Waiting to be read", "processing": reading}.get(item["status"], "")
-    last = (
-        ("stop", UPLOAD_ERRORS.get(item["error"] or "", "This file couldn't be processed.")) if failed else ("now", now)
-    )
+    error = UPLOAD_ERRORS.get(item["error"] or "", "This file couldn't be processed.")
+    last = ("stop", error, False) if failed else ("now", now, False)
+    status = display.STATUSES["not_processed" if failed else "in_progress"]
     return {
         "title": item["file_name"],
         "sub": "sample" if item["sample"] else "your file",
         "amount": None,
-        "tone": "fraud" if failed else "closed",
-        "label": "Not processed" if failed else "In progress",
+        "tone": status.tone,
+        "label": status.label,
         "reasons": [],
-        "steps": [("done", "Received from this page"), last],
+        "steps": [("done", "Received from this page", False), last],
         "bill": None,
         "review": None,
         "pending": not failed,
@@ -213,6 +216,7 @@ def _session_context(request: Request, session: demo.Session) -> dict[str, Any]:
         "limits": limits,
         "full": used >= limits.files_per_session,
         "minutes_left": _minutes_left(session, now),
+        "threshold": formatting.percent(s.confidence_threshold),
         "address": sub_address(s.intake_email_alias, session.code),
     }
 
@@ -452,6 +456,7 @@ def create_app(config: DemoWebSettings | None = None) -> FastAPI:
     limits = s.demo_limits()
     app = FastAPI(title="AP Automation demo", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.settings, app.state.limits = s, limits
+    TEMPLATES.globals["site_url"] = s.origins[0]  # the public address, for link previews (absolute URLs)
 
     @app.middleware("http")
     async def check_request(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:

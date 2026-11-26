@@ -3,6 +3,7 @@
    content the review page itself uses (review_item.html), read-only #}
 {% block styles %}{% endblock %}
 {% block title %}Review: {{ inv.supplier_name or "invoice" }}{% endblock %}
+{% block description %}The read-only review page for an invoice the demo sent to a person: the reasons, the data read from it, and the decisions a reviewer could take.{% endblock %}
 {% block header_right %}
 <span class="who"><span class="who-name">{{ minutes_left }} min left</span><span class="who-role">Read-only review page</span></span>
 {% endblock %}

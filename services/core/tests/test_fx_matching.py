@@ -100,7 +100,8 @@ def test_eur_payment_outside_tolerance_goes_to_review_with_expected_and_actual(c
     item = review(cfg, inv)
     assert item["stage"] == "matching" and item["reasons"][0]["code"] == "fx_amount_difference"
     assert item["reasons"][0]["detail"] == (
-        "2026-11-24 bank 1900.00 USD, expected 1748.72 USD (1598.61 EUR × 1.0939, ECB 2026-11-23), +8.65 %"
+        "Bank payment of 24 Nov 2026 (1,900.00 USD) doesn't match the expected amount (1,748.72 USD: "
+        "1,598.61 EUR × 1.0939, ECB rate of 23 Nov 2026): 151.28 USD off (+8.65%)."
     )
     # The reviewer confirms it: the whole bill is paid at the bank rate, never a write-off
     assert act(item["id"], "confirm-match", bank_transaction_id="t-eur").status_code == 200
@@ -120,7 +121,7 @@ def test_currency_the_ecb_does_not_quote_goes_to_review(cfg):
     run(cfg)
     item = review(cfg, inv)
     assert item["reasons"][0]["code"] == "fx_rate_unavailable"
-    assert item["reasons"][0]["detail"] == "2026-11-24 bank 435.30 USD, no ECB rate for AED"
+    assert item["reasons"][0]["detail"] == "Bank payment of 24 Nov 2026 (435.30 USD): no ECB rate for AED."
     m = sql(cfg, "SELECT status, fx_rate, expected_bank_amount, difference FROM ap.matches")[0]
     assert (m["status"], m["fx_rate"], m["expected_bank_amount"], m["difference"]) == ("candidate", None, None, None)
 

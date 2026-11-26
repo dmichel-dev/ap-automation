@@ -22,6 +22,7 @@ from psycopg.types.json import Jsonb
 
 from . import db, demo_samples, fx, matching, postings
 from .db import Conn, Row
+from .formatting import day, money
 from .tax_treatment import TaxTreatment
 
 
@@ -235,8 +236,8 @@ def _in_closed_period(conn: Conn, cfg: AccountingConfig, p: Row, close: postings
     inv = db.one(conn, "SELECT invoice_date, service_period_end FROM invoices WHERE id = %s", (p["invoice_id"],))
     if not close.closes(inv["invoice_date"], inv["service_period_end"]):
         return False
-    message = f"books closed through {close.closed_through}; invoice dated {inv['invoice_date']}" + (
-        f", service period ending {inv['service_period_end']}" if inv["service_period_end"] else ""
+    message = f"books closed through {day(close.closed_through)}; invoice dated {day(inv['invoice_date'])}" + (
+        f", service period ending {day(inv['service_period_end'])}" if inv["service_period_end"] else ""
     )
     ctx = LogContext(invoice_id=str(p["invoice_id"]), execution_id=None)
     _record_failed(conn, cfg, p, {"error_code": "period_closed", "error_message": message}, ctx)
@@ -916,17 +917,19 @@ def _for_person(
 
 
 def fx_detail(amount: Decimal, currency: str, tx: matching.BankTx, ev: matching.Evaluation) -> str:
-    """Expected vs actual for a person, e.g. "2026-11-24 bank 1760.00 USD, expected 1748.72 USD
-    (1598.61 EUR × 1.0939, ECB 2026-11-23), +0.65 %"."""
-    bank = f"{tx.date.isoformat()} bank {ev.bank_amount} {ev.bank_currency}"
+    """Expected vs actual for a person, e.g. "Bank payment of 24 Nov 2026 (1,760.00 USD) doesn't match the
+    expected amount (1,748.72 USD: 1,598.61 EUR × 1.0939, ECB rate of 23 Nov 2026): 11.28 USD off (+0.65%)."
+    The rate keeps all its decimals."""
+    bank = f"Bank payment of {day(tx.date)} ({money(ev.bank_amount, ev.bank_currency)})"
     if ev.fx_rate is None or ev.expected_bank_amount is None or ev.difference is None:
         why = "rate older than allowed" if ev.fx_status == "stale_rate" else f"no {fx.PROVIDER.upper()} rate"
-        return f"{bank}, {why} for {currency}"
+        return f"{bank}: {why} for {currency}."
     pct = (ev.difference / ev.expected_bank_amount * 100).quantize(Decimal("0.01"))
+    rate = f"{ev.fx_rate.rate.normalize():f}, {fx.PROVIDER.upper()} rate of {day(ev.fx_rate.rate_date)}"
     return (
-        f"{bank}, expected {ev.expected_bank_amount} {ev.bank_currency} ({amount.normalize():f} {currency} × "
-        f"{ev.fx_rate.rate.normalize():f}, {fx.PROVIDER.upper()} {ev.fx_rate.rate_date.isoformat()}), "
-        f"{'+' if pct > 0 else ''}{pct} %"
+        f"{bank} doesn't match the expected amount ({money(ev.expected_bank_amount, ev.bank_currency)}: "
+        f"{money(amount, currency)} × {rate}): {money(abs(ev.difference), ev.bank_currency)} off "
+        f"({'+' if pct > 0 else ''}{pct}%)."
     )
 
 

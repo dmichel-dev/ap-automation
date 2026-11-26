@@ -1,6 +1,26 @@
 {% extends "base.html" %}
 {% from "demo_icons.html" import icon %}
 {% block site %}AP Automation demo{% endblock %}
+{# Search and link previews: every page has a description; public pages also name their address (path) #}
+{% block meta %}
+<meta name="description" content="{% block description %}A live demo of accounts payable automation: send a fictional invoice and watch it read by OCR, checked by fixed rules, and prepared as a QuickBooks bill or sent to a person for review.{% endblock %}">
+{% if self.path() %}<link rel="canonical" href="{{ site_url }}{% block path %}{% endblock %}">
+<meta property="og:url" content="{{ site_url }}{{ self.path() }}">{% endif %}
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="AP Automation demo">
+<meta property="og:locale" content="en_US">
+<meta property="og:title" content="{{ self.title() }} | AP Automation demo">
+<meta property="og:description" content="{{ self.description() }}">
+<meta property="og:image" content="{{ site_url }}/static/og-demo.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="AP Automation live demo: send an invoice, watch it become a bill. Invoice, OCR, checks, then ready to post or needs review.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ self.title() }} | AP Automation demo">
+<meta name="twitter:description" content="{{ self.description() }}">
+<meta name="twitter:image" content="{{ site_url }}/static/og-demo.png">
+<meta name="twitter:image:alt" content="AP Automation live demo: send an invoice, watch it become a bill.">
+{% endblock %}
 {% block styles %}<link rel="preload" href="/static/fonts/bricolage-grotesque-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/static/demo.css">{% endblock %}
 {% block scripts %}<script src="/static/demo.js" defer></script>{% endblock %}

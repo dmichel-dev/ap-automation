@@ -15,6 +15,7 @@ from decimal import Decimal
 from typing import Any
 
 from .bank_details import BankCheck
+from .formatting import below_threshold, day, mismatch, money
 from .models import CommonInvoice, Issue
 from .reference import minor_units
 
@@ -157,7 +158,7 @@ def _subtotal_check(inv: CommonInvoice, unit: Decimal, f: _Findings) -> None:
         "item_lines": str(items_sum),
     }
     if not ok:
-        f.fail("lines_mismatch", "subtotal", f"subtotal {inv.subtotal} ≠ sum of lines {before_sum}")
+        f.fail("lines_mismatch", "subtotal", mismatch("lines", inv.subtotal, before_sum, inv.currency))
 
 
 def _tax_lines_check(inv: CommonInvoice, unit: Decimal, f: _Findings) -> Decimal | None:
@@ -171,7 +172,7 @@ def _tax_lines_check(inv: CommonInvoice, unit: Decimal, f: _Findings) -> Decimal
         ok = _close(inv.tax_total, tax_sum, tol) or _close(inv.tax_total, non_withholding, tol)
         f.checks["tax_total_vs_tax_lines"] = {"passed": ok, "tax_total": str(inv.tax_total), "tax_lines": str(tax_sum)}
         if not ok:
-            f.fail("tax_mismatch", "tax_total", f"tax total {inv.tax_total} ≠ sum of tax lines {tax_sum}")
+            f.fail("tax_mismatch", "tax_total", mismatch("tax", inv.tax_total, tax_sum, inv.currency))
     return tax_sum
 
 
@@ -196,7 +197,7 @@ def _grand_total_check(inv: CommonInvoice, unit: Decimal, tax_sum: Decimal | Non
         "tax_mode": tax_mode,
     }
     if tax_mode is None:
-        f.fail("total_mismatch", "total", f"total {inv.total} ≠ lines + adjustments + tax {exclusive}")
+        f.fail("total_mismatch", "total", mismatch("total", inv.total, exclusive, inv.currency))
     return tax_mode
 
 
@@ -262,7 +263,11 @@ def posting_blockers(inv: CommonInvoice) -> tuple[list[Issue], str | None]:
     _dates_check(inv, f)
     start, end = inv.service_period_start, inv.service_period_end
     if start and end and end < start:
-        f.fail("service_period_inverted", "service_period_end", f"service period ends {end} before it starts {start}")
+        f.fail(
+            "service_period_inverted",
+            "service_period_end",
+            f"service period ends {day(end)}, before it starts on {day(start)}",
+        )
     total_reasons, _, tax_mode = totals_check(inv)
     return f.reasons + total_reasons, tax_mode
 
@@ -304,7 +309,8 @@ def _sign_check(inv: CommonInvoice, f: _Findings) -> None:
     wrong = (inv.document_type == "invoice" and inv.total < 0) or (inv.document_type == "credit_note" and inv.total > 0)
     f.checks["sign"] = {"passed": not wrong, "document_type": inv.document_type, "total": str(inv.total)}
     if wrong:
-        f.fail("wrong_sign", "total", f"{inv.document_type} with total {inv.total}: check the document type")
+        kind = (inv.document_type or "document").replace("_", " ")
+        f.fail("wrong_sign", "total", f"{kind} with total {money(inv.total, inv.currency)}: check the document type")
 
 
 def _dates_check(inv: CommonInvoice, f: _Findings) -> None:
@@ -316,7 +322,7 @@ def _dates_check(inv: CommonInvoice, f: _Findings) -> None:
         f.fail(
             "due_before_invoice_date",
             "due_date",
-            f"due date {inv.due_date} is before invoice date {inv.invoice_date}",
+            f"due date {day(inv.due_date)} is before invoice date {day(inv.invoice_date)}",
         )
 
 
@@ -326,10 +332,14 @@ def _cutoff_check(inv: CommonInvoice, policy: Policy, f: _Findings) -> None:
     only when material. Closed periods (QuickBooks book close date) are checked at posting."""
     start, end = inv.service_period_start, inv.service_period_end
     if start and end and end < start:
-        f.fail("service_period_inverted", "service_period_end", f"service period ends {end} before it starts {start}")
+        f.fail(
+            "service_period_inverted",
+            "service_period_end",
+            f"service period ends {day(end)}, before it starts on {day(start)}",
+        )
     if not (end and inv.invoice_date) or end >= inv.invoice_date.replace(day=1):
         return
-    message = f"service period ends {end}, before the accounting period of the invoice ({inv.invoice_date:%Y-%m})"
+    message = f"service period ends {day(end)}, before the accounting period of the invoice ({inv.invoice_date:%b %Y})"
     material, basis = _material(inv, policy)
     f.checks["cutoff"] = {"prior_period": True, "service_period_end": str(end), "material": material, "basis": basis}
     target = f.reasons if material else f.info
@@ -341,8 +351,8 @@ def _material(inv: CommonInvoice, policy: Policy) -> tuple[bool, str]:
         # No home-currency amount before FX conversion exists: a person looks at it
         return True, "amount in the home currency not known yet"
     if abs(inv.total) >= policy.cutoff_materiality:
-        return True, f"amount at or above the materiality of {policy.cutoff_materiality} {policy.home_currency}"
-    return False, f"below the materiality of {policy.cutoff_materiality} {policy.home_currency}"
+        return True, f"amount at or above the materiality of {money(policy.cutoff_materiality, policy.home_currency)}"
+    return False, f"below the materiality of {money(policy.cutoff_materiality, policy.home_currency)}"
 
 
 def _capex_check(inv: CommonInvoice, policy: Policy, f: _Findings) -> None:
@@ -361,8 +371,8 @@ def _capex_check(inv: CommonInvoice, policy: Policy, f: _Findings) -> None:
             f.fail(
                 "possible_capex",
                 "lines",
-                f"line {li.line_no}: item cost {cost} {inv.currency} reaches the capitalisation threshold "
-                f"{policy.capex_threshold}; decide expense or fixed asset",
+                f"line {li.line_no}: item cost {money(cost, inv.currency)} reaches the capitalisation threshold "
+                f"{money(policy.capex_threshold, policy.home_currency)}; decide expense or fixed asset",
             )
     f.checks["capex"] = {"checked": True, "threshold": str(policy.capex_threshold), "lines": found}
 
@@ -451,4 +461,4 @@ def _confidence_check(
     if confidence is None:
         f.fail("no_ocr_confidence", None, "the provider returned no OCR confidence")
     elif confidence < threshold:
-        f.fail("low_confidence", None, f"confidence {confidence} below threshold {threshold}")
+        f.fail("low_confidence", None, below_threshold(confidence, threshold))

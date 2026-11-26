@@ -132,7 +132,7 @@ def test_the_item_page_explains_why_in_sentences_without_codes(samples):
     why = page[page.index('class="why') : page.index("</div>", page.index('class="why'))]
     assert "Why it needs review" in why
     assert escape(REASONS["possible_capex"].sentence) in why
-    assert "line 1: item cost 4800.00 USD reaches the capitalisation threshold" in why  # the core's detail
+    assert "line 1: item cost 4,800.00 USD reaches the capitalisation threshold" in why  # the core's detail
     assert "possible_capex" not in page and "possible capex" not in page
 
 
@@ -142,37 +142,50 @@ def test_the_item_page_explains_why_in_sentences_without_codes(samples):
 @pytest.mark.parametrize(
     "score, shown, level",
     [
-        (0.9775, "97.75%", "high"),
-        (0.95, "95.00%", "high"),  # green starts exactly at the high band
-        (0.9499, "94.99%", "medium"),
-        (0.85, "85.00%", "medium"),  # the threshold itself is not below the threshold
-        (0.8499, "84.99%", "low"),
-        ("0.12345", "12.35%", "low"),  # two decimals, halves rounded up
+        (0.9775, "97%", "high"),
+        (0.95, "95%", "high"),  # green starts exactly at the high band
+        (0.9499, "94%", "medium"),  # whole percent, rounded down
+        (0.85, "85%", "medium"),  # the threshold itself is not below the threshold
+        (0.8499, "84%", "low"),  # just below the threshold never reads as the threshold
+        ("0.12345", "12%", "low"),
+        (1, "100%", "high"),
         (None, "–", "unknown"),
     ],
 )
 def test_confidence_bands_follow_the_review_threshold(score, shown, level):
     badge = display.confidence_badge(score, 0.85, 0.95)
-    assert (badge.percent, badge.level, badge.threshold) == (shown, level, "85.00%")
+    assert (badge.percent, badge.level, badge.threshold) == (shown, level, "85%")
     assert badge.label == display.LEVEL_LABELS[level]  # the colour is always said in words too
 
 
-def test_the_badge_shows_the_routed_score_and_says_how_it_is_made(items):
+def test_the_badge_shows_the_routed_score_with_an_info_button_explaining_it(items):
     c, _url, live, _demo = items  # the test invoice: OCR 0.97 × all required fields = 0.97
     page = page_of(c, live)
-    head = page[page.index('class="extracted-head"') : page.index('class="why') if 'class="why' in page else None]
-    badge = head[head.index('class="conf level-high"') : head.index("</p>", head.index('class="conf level-high"'))]
+    head = page[page.index('class="extracted-head') : page.index('class="why') if 'class="why' in page else None]
+    badge = head[head.index('class="conf level-high"') : head.index('<span class="info"')]
     assert "Extracted data (OCR)" in head and "OCR confidence" not in page
-    assert " ".join(re.sub(r"<[^>]+>", " ", badge.split(">", 1)[1]).split()) == "Confidence 97.00% · high"
-    assert "OCR average × required fields found · threshold 85.00%" in head
+    assert " ".join(re.sub(r"<[^>]+>", " ", badge.split(">", 1)[1]).split()) == "Confidence 97% · high"
+    assert "Review threshold 85% · high from 95%" in head and "×" not in head and "fields found" not in page
+    # The explanation: a real button, described by the tooltip's text (read by screen readers on focus)
+    assert (
+        '<button type="button" class="info-btn" aria-label="About the confidence score" aria-describedby="conf-info">'
+        in head
+    )
+    tip = head[head.index('id="conf-info">') :]
+    assert 'role="tooltip"' in head and "How sure the system is that it read this invoice correctly." in tip
+    assert "Below 85%, the invoice goes to a person for review." in tip and "<script" not in head
 
 
 def test_the_raw_ocr_average_stays_under_the_raw_values(samples):
     c, _url, ids = samples  # Quillmoor: OCR 0.81 × all required fields = 0.81, below the threshold
     page = page_of(c, ids["quillmoor"])
-    assert 'class="conf level-low"' in page and "81.00%" in page
+    assert 'class="conf level-low"' in page and '<strong class="conf-value">81%</strong>' in page
     raw = page[page.index("Show details: raw values") : page.index("Show details: history")]
-    assert "<dt>Raw OCR average</dt><dd>0.8100</dd>" in raw and "<dt>Required fields found</dt>" in raw
+    assert "<dt>Confidence score</dt><dd>81%</dd>" in raw
+    assert (
+        "<dt>Reading quality (OCR average)</dt><dd>81%</dd>" in raw and "<dt>Key details found</dt><dd>100%</dd>" in raw
+    )
+    assert "0.81" not in raw
 
 
 @pytest.mark.parametrize("threshold, high, level", [(0.9, 0.98, "medium"), (0.98, 0.99, "low")])
@@ -184,7 +197,7 @@ def test_the_bands_are_configurable_and_red_is_the_review_threshold(items, thres
     c = browser(s, INTERNAL)
     assert sign_in(c).status_code == 303
     page = page_of(c, live)
-    assert f'class="conf level-{level}"' in page and f"threshold {display.percent(threshold)}" in page
+    assert f'class="conf level-{level}"' in page and f"Review threshold {round(threshold * 100)}%" in page
 
 
 @pytest.mark.parametrize("threshold, high", [(0.96, 0.95), (0, 0.95), (0.85, 1.2)])

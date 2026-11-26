@@ -24,6 +24,13 @@ def codes(v):
     return [r.code for r in v.reasons]
 
 
+def test_low_confidence_says_both_as_whole_percentages():
+    v = check(ocr_avg=0.7123)
+    assert [r.message for r in v.reasons if r.code == "low_confidence"] == [
+        "Confidence (71%) is below the review threshold (85%)."
+    ]
+
+
 def test_clean_invoice_is_ready():
     v = check()
     assert v.status == "ready", v.reasons
@@ -127,6 +134,9 @@ def test_currency_from_country_is_info_only():
 def test_total_mismatch():
     v = check(total="USD 650.00")
     assert v.status == "needs_review" and codes(v) == ["total_mismatch"]
+    # A plain sentence, both numbers in brackets with the currency, and the gap
+    message = v.reasons[0].message
+    assert message.startswith("Total (650.00 USD) doesn't match lines + adjustments + tax (") and "USD off." in message
 
 
 def test_lines_mismatch():

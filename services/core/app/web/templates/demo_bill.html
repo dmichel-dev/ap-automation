@@ -1,6 +1,7 @@
 {% extends "demo_base.html" %}
 {% from "demo_icons.html" import icon %}
 {% block title %}Bill preview{% endblock %}
+{% block description %}The QuickBooks bill an invoice would create: vendor, dates, lines, tax and total. In the demo, nothing is sent.{% endblock %}
 {% block header_right %}
 <span class="who"><span class="who-name">{{ minutes_left }} min left</span><span class="who-role">Session {{ session.code }}</span></span>
 {% endblock %}
@@ -21,8 +22,8 @@
   <dl class="facts compact demo-bill-facts">
     <div><dt>Vendor</dt><dd>{{ preview.vendor.name }} <span class="chip">{{ "existing vendor" if preview.vendor.action == "existing" else "new vendor" }}</span></dd></div>
     <div><dt>{{ "Credit number" if preview.object_type == "vendor_credit" else "Bill number" }}</dt><dd>{{ preview.document.DocNumber }}</dd></div>
-    <div><dt>Bill date</dt><dd class="num">{{ preview.document.TxnDate }}</dd></div>
-    <div><dt>Due date</dt><dd class="num">{{ preview.document.get("DueDate") or "–" }}</dd></div>
+    <div><dt>Bill date</dt><dd class="num">{{ preview.document.TxnDate | day }}</dd></div>
+    <div><dt>Due date</dt><dd class="num">{{ preview.document.get("DueDate") | day }}</dd></div>
     <div><dt>Currency</dt><dd>{{ preview.document.CurrencyRef.value }}</dd></div>
   </dl>
 </section>

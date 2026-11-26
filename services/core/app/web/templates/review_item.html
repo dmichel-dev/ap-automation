@@ -4,6 +4,7 @@
    pages_href              where the page images are served (default: this item's /pages)
    original_note           shown instead of the original document
    read_only_note          read-only: no form, every control disabled, this note above the decision #}
+{% from "info.html" import confidence_info %}
 {% set labels = {
   "document_type": "Document type", "supplier_name": "Supplier", "supplier_tax_id": "Supplier tax ID",
   "invoice_number": "Invoice number", "invoice_date": "Invoice date", "due_date": "Due date",
@@ -11,6 +12,7 @@
   "subtotal": "Subtotal", "tax_total": "Tax total", "total": "Total"} %}
 {% set dates = ("invoice_date", "due_date", "service_period_start", "service_period_end") %}
 {% set amounts = ("subtotal", "tax_total", "total") %}
+{% macro shown(field, value) %}{% if value is none or value == "" %}empty{% elif field in dates %}{{ value | day }}{% elif field in amounts %}{{ value | money(inv.currency) }}{% else %}{{ value }}{% endif %}{% endmacro %}
 {% set tone = item | tone %}
 {% set is_open = item.status == "open" %}
 {% set back_href = back_href | default("/items") %}
@@ -27,7 +29,7 @@
   </div>
   <p class="state tone-{{ tone }}">{{ item | status_label }}{% if not is_open and item.reviewer %}<span class="state-by"> by {{ item.reviewer }}</span>{% endif %}</p>
 </header>
-<p class="item-meta">Opened {{ item.created_at[:10] }} ({{ item.created_at | age }}{{ " ago" if item.created_at | age != "today" }}), received by {{ inv.channel }}, {{ item.stage }} review number {{ item.id }}.</p>
+<p class="item-meta">Opened {{ item.created_at | day }} ({{ item.created_at | age }}{{ " ago" if item.created_at | age != "today" }}), received by {{ inv.channel }}, {{ item.stage }} review number {{ item.id }}.</p>
 
 {% if done %}<p class="note ok" role="status">{{ done }}</p>{% endif %}
 {% if error %}<p class="note error" role="alert">{{ error }}</p>{% endif %}
@@ -53,16 +55,16 @@
 
 <div class="side">
 <section class="extracted" aria-labelledby="extracted-title">
-  <div class="extracted-head">
+  <div class="extracted-head info-anchor">
     <h2 id="extracted-title">Extracted data (OCR)</h2>
     <div class="conf-wrap">
-      <p class="conf level-{{ confidence.level }}" title="Review threshold {{ confidence.threshold }}; high from {{ confidence.high_from }}">
+      <p class="conf-line"><span class="conf level-{{ confidence.level }}">
         <span class="conf-name">Confidence</span>
         <strong class="conf-value">{{ confidence.percent }}</strong>
         <span class="conf-sep" aria-hidden="true">·</span>
         <span class="conf-level">{{ confidence.label }}</span>
-      </p>
-      <p class="conf-threshold">OCR average × required fields found · threshold {{ confidence.threshold }}</p>
+      </span>{{ confidence_info("conf-info", confidence.threshold) }}</p>
+      <p class="conf-threshold">Review threshold {{ confidence.threshold }} · high from {{ confidence.high_from }}</p>
     </div>
   </div>
 
@@ -71,7 +73,7 @@
     <h3>{{ "Why it needs review" if is_open else "Why it was sent for review" }}</h3>
     <ul>
     {% for r in item.reasons %}
-      <li><p class="why-sentence">{{ (r.code | explain).sentence }}</p>{% if r.get("message") %}<p class="why-detail">{{ r.message }}</p>{% endif %}</li>
+      <li><p class="why-sentence">{{ (r.code | explain).sentence }}</p>{% if r.get("message") %}<p class="why-detail">{{ r.message | detail(inv.currency) }}</p>{% endif %}</li>
     {% endfor %}
     </ul>
   </div>
@@ -81,18 +83,18 @@
     <div><dt>Supplier</dt><dd>{{ inv.supplier_name or "–" }}{% if inv.supplier_country %} <span class="muted">({{ inv.supplier_country }})</span>{% endif %}</dd></div>
     <div><dt>Supplier tax ID</dt><dd>{{ inv.supplier_tax_id or "–" }}</dd></div>
     <div><dt>Invoice number</dt><dd>{{ inv.invoice_number or "–" }}</dd></div>
-    <div><dt>Invoice date</dt><dd>{{ inv.invoice_date or "–" }}
-      {% if inv.dates_ambiguous %}<span class="flag">{% if inv.invoice_date_suggested %}Printed “{{ inv.invoice_date_raw or "–" }}”, which reads two ways. Suggested: <strong>{{ inv.invoice_date_suggested }}</strong>{% if inv.date_suggestion_basis %} ({{ inv.date_suggestion_basis }}){% endif %}.{% else %}Printed “{{ inv.invoice_date_raw or "–" }}”, which reads two ways. Correct the date by hand.{% endif %}</span>{% endif %}</dd></div>
-    <div><dt>Due date</dt><dd>{{ inv.due_date or inv.due_date_suggested or "–" }}</dd></div>
+    <div><dt>Invoice date</dt><dd>{{ inv.invoice_date | day }}
+      {% if inv.dates_ambiguous %}<span class="flag">{% if inv.invoice_date_suggested %}Printed “{{ inv.invoice_date_raw or "–" }}”, which reads two ways. Suggested: <strong>{{ inv.invoice_date_suggested | day }}</strong>{% if inv.date_suggestion_basis %} ({{ inv.date_suggestion_basis }}){% endif %}.{% else %}Printed “{{ inv.invoice_date_raw or "–" }}”, which reads two ways. Correct the date by hand.{% endif %}</span>{% endif %}</dd></div>
+    <div><dt>Due date</dt><dd>{{ (inv.due_date or inv.due_date_suggested) | day }}</dd></div>
     {% if inv.service_period_start or inv.service_period_end %}
-    <div><dt>Service period</dt><dd>{{ inv.service_period_start or "?" }} to {{ inv.service_period_end or "?" }}</dd></div>
+    <div><dt>Service period</dt><dd>{{ inv.service_period_start | day if inv.service_period_start else "?" }} to {{ inv.service_period_end | day if inv.service_period_end else "?" }}</dd></div>
     {% endif %}
     <div><dt>Subtotal</dt><dd class="num">{{ inv.subtotal | money(inv.currency) }}</dd></div>
     <div><dt>Tax</dt><dd class="num">{{ inv.tax_total | money(inv.currency) }}</dd></div>
     <div class="total"><dt>Total</dt><dd class="num">{{ inv.total | money(inv.currency) }}</dd></div>
     <div><dt>Expense account</dt><dd>{% if inv.expense_account_id %}{{ inv.expense_account_id }} <span class="muted">({{ inv.expense_account_source | replace("_", " ") }})</span>{% elif item.supplier_default_account %}Supplier's default: {{ item.supplier_default_account.name or item.supplier_default_account.id }}{% else %}None yet: choose one when approving{% endif %}</dd></div>
   </dl>
-  <p class="hint">Dates are shown as year-month-day, so they can't be misread.</p>
+  <p class="hint">Dates are shown with the month in words, so they can't be misread.</p>
 
   <div class="more-details">
     {% if item.lines %}
@@ -103,8 +105,8 @@
         <tbody>
         {% for l in item.lines %}
         <tr><td>{{ l.line_no }}</td><td>{{ l.description or "" }}{% if l.kind != "item" %} <span class="chip">{{ l.kind }}</span>{% endif %}</td>
-          <td class="num">{{ l.quantity | number }}</td><td class="num">{{ l.unit_price | money if l.unit_price is not none else "" }}</td>
-          <td class="num">{{ l.amount | money }}</td><td class="num">{{ l.tax_rate | number }}</td></tr>
+          <td class="num">{{ l.quantity | number }}</td><td class="num">{{ l.unit_price | amount(inv.currency) if l.unit_price is not none else "" }}</td>
+          <td class="num">{{ l.amount | amount(inv.currency) }}</td><td class="num">{{ l.tax_rate | number }}</td></tr>
         {% endfor %}
         </tbody>
       </table></div>
@@ -118,7 +120,7 @@
         <tbody>
         {% for t in item.taxes %}
         <tr><td>{{ t.tax_type | replace("_", " ") }}</td><td>{{ t.label or "" }}</td><td class="num">{{ t.rate | number }}</td>
-          <td class="num">{{ t.taxable_base | money if t.taxable_base is not none else "" }}</td><td class="num">{{ t.amount | money }}</td></tr>
+          <td class="num">{{ t.taxable_base | amount(inv.currency) if t.taxable_base is not none else "" }}</td><td class="num">{{ t.amount | amount(inv.currency) }}</td></tr>
         {% endfor %}
         </tbody>
       </table></div>
@@ -131,23 +133,23 @@
         <div><dt>Invoice date as printed</dt><dd>“{{ inv.invoice_date_raw or "–" }}”</dd></div>
         <div><dt>Due date as printed</dt><dd>“{{ inv.due_date_raw or "–" }}”</dd></div>
         <div><dt>Currency</dt><dd>{{ inv.currency or "–" }}</dd></div>
-        <div><dt>Confidence score</dt><dd>{{ inv.confidence or "–" }}</dd></div>
-        <div><dt>Raw OCR average</dt><dd>{{ inv.ocr_confidence_avg or "–" }}</dd></div>
-        <div><dt>Required fields found</dt><dd>{{ inv.confidence_completeness or "–" }}</dd></div>
+        <div><dt>Confidence score</dt><dd>{{ inv.confidence | percent }}</dd></div>
+        <div><dt>Reading quality (OCR average)</dt><dd>{{ inv.ocr_confidence_avg | percent }}</dd></div>
+        <div><dt>Key details found</dt><dd>{{ inv.confidence_completeness | percent }}</dd></div>
       </dl>
-      <p class="hint">The confidence score is the OCR page average times the share of required fields found.</p>
+      <p class="hint">The confidence score is the reading quality multiplied by the share of key details found.</p>
     </details>
     <details>
       <summary>Show details: history</summary>
       <ol class="history">
-        <li><span class="when">{{ item.created_at[:16] | replace("T", " ") }}</span> Sent for review.</li>
+        <li><span class="when">{{ item.created_at | moment }}</span> Sent for review.</li>
         {% for c in item.corrections %}
-        <li><span class="when">{{ c.at[:16] | replace("T", " ") }}</span> Corrected by {{ c.by }}:
-          <ul>{% for field, value in c.after.items() %}<li>{{ labels.get(field, field) }} changed from “{{ c.before.get(field) if c.before.get(field) is not none else "empty" }}” to “{{ value if value is not none else "empty" }}”</li>{% endfor %}</ul>
+        <li><span class="when">{{ c.at | moment }}</span> Corrected by {{ c.by }}:
+          <ul>{% for field, value in c.after.items() %}<li>{{ labels.get(field, field) }} changed from “{{ shown(field, c.before.get(field)) }}” to “{{ shown(field, value) }}”</li>{% endfor %}</ul>
         </li>
         {% endfor %}
         {% if item.decision %}
-        <li><span class="when">{{ (item.resolved_at or "")[:16] | replace("T", " ") }}</span> {{ item | status_label }} by {{ item.reviewer }}.
+        <li><span class="when">{{ item.resolved_at | moment }}</span> {{ item | status_label }} by {{ item.reviewer }}.
           {% if item.decision.get("account_id") %}Account {{ item.decision.get("account_name") or item.decision.account_id }} ({{ item.decision.get("account_source", "") | replace("_", " ") }}){% if item.decision.get("supplier_default") %}, supplier default {{ item.decision.supplier_default }}{% endif %}.{% endif %}</li>
         {% endif %}
       </ol>
@@ -184,7 +186,7 @@
     {% if pay.posting.amount_written_off %}<div><dt>Written off</dt><dd class="num">{{ pay.posting.amount_written_off | money(pay.posting.currency) }}</dd></div>{% endif %}
   </dl>
   {% set accepted = pay.matches | selectattr("status", "equalto", "accepted") | list %}
-  {% for m in accepted %}<p class="hint">Paid by bank transaction of {{ m.date }} “{{ m.bank_text }}”, {{ m.bank_amount | money(m.bank_currency) }}{% if m.external_payment_id %}, bill payment {{ m.external_payment_id }} in QuickBooks{% endif %}.</p>{% endfor %}
+  {% for m in accepted %}<p class="hint">Paid by bank transaction of {{ m.date | day }} “{{ m.bank_text }}”, {{ m.bank_amount | money(m.bank_currency) }}{% if m.external_payment_id %}, bill payment {{ m.external_payment_id }} in QuickBooks{% endif %}.</p>{% endfor %}
 </section>
 {% endif %}
 {% if is_open and item.waiting_for %}
@@ -229,7 +231,7 @@
         {% if other_blockers %}
         <div class="note">
           <p><strong>Approving now would be refused.</strong> Correct these first:</p>
-          <ul>{% for b in other_blockers %}<li>{{ (b.code | explain).sentence }}{% if b.get("message") %} <span class="muted">{{ b.message }}</span>{% endif %}</li>{% endfor %}</ul>
+          <ul>{% for b in other_blockers %}<li>{{ (b.code | explain).sentence }}{% if b.get("message") %} <span class="muted">{{ b.message | detail(inv.currency) }}</span>{% endif %}</li>{% endfor %}</ul>
         </div>
         {% endif %}
         {% if date_blockers %}
@@ -259,7 +261,7 @@
         </fieldset>
         {% endif %}
         {% if inv.dates_ambiguous and inv.invoice_date_suggested %}
-        <label class="opt"><input type="checkbox" name="{{ decide }}.accept_suggested_dates" value="1"{% if date_blockers %} data-required-for="{{ decide }}" aria-describedby="dates-needed"{% endif %}> Accept the suggested reading of the dates ({{ inv.invoice_date_suggested }})</label>
+        <label class="opt"><input type="checkbox" name="{{ decide }}.accept_suggested_dates" value="1"{% if date_blockers %} data-required-for="{{ decide }}" aria-describedby="dates-needed"{% endif %}> Accept the suggested reading of the dates ({{ inv.invoice_date_suggested | day }})</label>
         {% endif %}
         <label for="{{ decide }}-note">{{ "How was it confirmed? Required" if decide == "verify" else "Note, optional" }}</label>
         <textarea name="{{ decide }}.note" id="{{ decide }}-note" maxlength="1000" rows="2"></textarea>
@@ -300,7 +302,7 @@
         <fieldset class="sub">
           <legend>Which bank transaction pays this bill?</legend>
           {% for m in pay.matches if m.status == "candidate" %}
-          <label class="opt"><input type="radio" name="confirm_match.bank_transaction_id" value="{{ m.bank_transaction_id }}" data-required-for="confirm_match"> {{ m.date }} · “{{ m.bank_text }}” · <span class="num">{{ m.bank_amount | money(m.bank_currency) }}</span>{% if m.bank_currency != m.currency %} <span class="muted">({% if m.expected_bank_amount %}expected {{ m.expected_bank_amount | money(m.bank_currency) }} at {{ m.fx_rate | number }} (ECB {{ m.fx_rate_date }}), difference {{ m.difference | money }}{% else %}no exchange rate to compare{% endif %})</span>{% elif m.difference | float %} <span class="muted">(difference {{ m.difference | money }})</span>{% endif %}</label>
+          <label class="opt"><input type="radio" name="confirm_match.bank_transaction_id" value="{{ m.bank_transaction_id }}" data-required-for="confirm_match"> {{ m.date | day }} · “{{ m.bank_text }}” · <span class="num">{{ m.bank_amount | money(m.bank_currency) }}</span>{% if m.bank_currency != m.currency %} <span class="muted">({% if m.expected_bank_amount %}expected {{ m.expected_bank_amount | money(m.bank_currency) }} at {{ m.fx_rate | number }} (ECB {{ m.fx_rate_date | day }}), difference {{ m.difference | money(m.bank_currency) }}{% else %}no exchange rate to compare{% endif %})</span>{% elif m.difference | float %} <span class="muted">(difference {{ m.difference | money(m.bank_currency) }})</span>{% endif %}</label>
           {% endfor %}
         </fieldset>
         <label for="confirm_match-note">Note, optional</label>

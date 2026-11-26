@@ -1,5 +1,6 @@
+{% from "info.html" import confidence_info %}
 <div class="demo-cards" data-pending="{{ 'yes' if pending else 'no' }}">
-{% for c in cards %}
+{% for c in cards %}{% set card = loop.index %}
 <article class="demo-card tone-{{ c.tone }}">
   <div class="card-head">
     <div class="card-who"><p class="card-title">{{ c.title }}</p><p class="muted">{{ c.sub }}</p></div>
@@ -13,7 +14,7 @@
   {% if c.tone in ("review", "fraud") %}<p class="muted demo-small">Here a reviewer would check it against the original and correct, verify or reject it. Nothing is posted until then.</p>{% endif %}
   {% endif %}
   <ol class="card-steps">
-    {% for state, text in c.steps %}<li class="step-{{ state }}"><span class="sr">{{ {"done": "Done:", "now": "In progress:", "stop": "Stopped:"}[state] }} </span>{{ text }}</li>{% endfor %}
+    {% for state, text, info in c.steps %}<li class="step-{{ state }}{{ ' info-anchor' if info }}"><span class="sr">{{ {"done": "Done:", "now": "In progress:", "stop": "Stopped:"}[state] }} </span>{{ text }}{% if info %} {{ confidence_info("conf-info-" ~ card, threshold) }}{% endif %}</li>{% endfor %}
   </ol>
   {% if c.bill %}<a class="go demo-go-small" href="/s/{{ session.code }}/bills/{{ c.bill }}">See the bill preview</a>{% endif %}
   {% if c.review %}<a class="go demo-go-small" href="/s/{{ session.code }}/review/{{ c.review }}">See the review page</a>{% endif %}

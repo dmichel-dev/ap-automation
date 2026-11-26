@@ -178,7 +178,7 @@ def test_payments_and_write_offs_per_currency(acfg):
     ]
     text = email(acfg)["text"]
     assert "Payments matched and recorded: 2" in text
-    assert "Written off: EUR 0.50 (1 bill)" in text and "Written off: USD 0.40 (1 bill)" in text
+    assert "Written off: 0.50 EUR (1 bill)" in text and "Written off: 0.40 USD (1 bill)" in text
     assert review(acfg, a)["status"] == "written_off"
 
 
@@ -213,7 +213,7 @@ def test_open_review_items_oldest_first_with_their_age(acfg):
     closed = make_invoice(acfg, number="DONE-1", status="needs_review", account=None)
     open_review(acfg, closed)
     sql(acfg, "UPDATE ap.review_queue SET status = 'approved', reviewer = 'x', resolved_at = now() WHERE id = 4")
-    lines = email(acfg)["text"].split("Waiting for review (3, oldest first)\n")[1].split("\n\n")[0].splitlines()
+    lines = email(acfg)["text"].split("Needs review (3, oldest first)\n")[1].split("\n\n")[0].splitlines()
     assert lines == [
         "- 3 days: Supplier OLD-1 OLD-1: Total doesn't add up",
         "- 1 day: Supplier MID-1 MID-1: Total doesn't add up",
@@ -226,7 +226,7 @@ def test_the_review_list_stops_at_ten(acfg):
         inv = make_invoice(acfg, number=f"L-{n}", status="needs_review", account=None)
         open_review(acfg, inv, ago=f"{12 - n} hours")
     text = email(acfg)["text"]
-    assert "Waiting for review (12, oldest first)" in text and "… and 2 more on the review page." in text
+    assert "Needs review (12, oldest first)" in text and "… and 2 more on the review page." in text
     assert text.count("Total doesn't add up") == 10
 
 

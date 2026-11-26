@@ -1,4 +1,4 @@
-{# Decorative icons for the demo pages: Tabler Icons 3.53.0, outline (MIT, see THIRD-PARTY.md).
+{# Decorative icons for the demo pages and the review page's info buttons: Tabler Icons 3.53.0, outline (MIT, see THIRD-PARTY.md).
    Each is drawn inline with aria-hidden, so every link and step keeps its own visible text. #}
 {% set PATHS = {
   "inbox": ["M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -12", "M4 13h3l3 3h4l3 -3h3"],
@@ -7,6 +7,7 @@
   "arrows-split-2": ["M21 17h-5.397a5 5 0 0 1 -4.096 -2.133l-.514 -.734a5 5 0 0 0 -4.096 -2.133h-3.897", "M21 7h-5.395a5 5 0 0 0 -4.098 2.135l-.51 .73a5 5 0 0 1 -4.097 2.135h-3.9", "M18 10l3 -3l-3 -3", "M18 20l3 -3l-3 -3"],
   "external-link": ["M12 6h-6a2 2 0 0 0 -2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-6", "M11 13l9 -9", "M15 4h5v5"],
   "arrow-left": ["M5 12l14 0", "M5 12l6 6", "M5 12l6 -6"],
+  "info-circle": ["M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0", "M12 9h.01", "M11 12h1v4h1"],
 } %}
 {% macro icon(name, size="") -%}
 <svg class="ico{{ ' ' ~ size if size }}" viewBox="0 0 24 24" aria-hidden="true">{% for d in PATHS[name] %}<path d="{{ d }}"/>{% endfor %}</svg>

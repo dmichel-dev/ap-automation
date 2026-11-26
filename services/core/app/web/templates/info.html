@@ -1,0 +1,8 @@
+{# The confidence score's explanation, next to the score on the review page and the demo's cards.
+   No JavaScript: the text shows while the button is hovered, focused (keyboard) or tapped (phones
+   focus or hover the tapped button), and screen readers read it as the button's description. The
+   nearest ancestor with class "info-anchor" places it: the text spans that box's width. #}
+{% from "demo_icons.html" import icon %}
+{% macro confidence_info(id, threshold) -%}
+<span class="info"><button type="button" class="info-btn" aria-label="About the confidence score" aria-describedby="{{ id }}">{{ icon("info-circle") }}</button><span class="info-tip" role="tooltip" id="{{ id }}">How sure the system is that it read this invoice correctly. It combines how clearly the text could be read with how many key details (supplier, invoice number, date, currency and total) were found. Below {{ threshold }}, the invoice goes to a person for review.</span></span>
+{%- endmacro %}

@@ -1,6 +1,7 @@
 {% extends "demo_base.html" %}
 {% from "demo_icons.html" import icon %}
 {% block title %}Accounts payable, from inbox to QuickBooks{% endblock %}
+{% block path %}/{% endblock %}
 {% block main %}
 <div class="demo">
 <section class="demo-intro">
@@ -38,7 +39,7 @@
     <li><span class="step-ico">{{ icon("scan") }}</span><div><p class="step-name">Read</p><p class="muted">Mistral OCR turns it into structured data, in any language or script.</p></div></li>
     <li><span class="step-ico">{{ icon("checklist") }}</span><div><p class="step-name">Checked</p><p class="muted">By deterministic code, never by the AI: the document can't talk its way through.</p></div></li>
     <li><span class="step-ico">{{ icon("arrows-split-2") }}</span><div><p class="step-name">Routed</p>
-      <p class="demo-badges"><span class="badge tone-ready">Ready to post</span> <span class="badge tone-review">Needs review</span> <span class="badge tone-closed">Rejected</span></p></div></li>
+      <p class="demo-badges">{% for key in ("ready", "needs_review", "rejected") %}{% set st = status(key) %}<span class="badge tone-{{ st.tone }}">{{ st.label }}</span>{{ " " if not loop.last }}{% endfor %}</p></div></li>
   </ol>
 </section>
 

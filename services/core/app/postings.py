@@ -19,6 +19,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
+from .formatting import mismatch
 from .matching import round_to_currency
 from .reference import minor_units
 from .tax_treatment import Treatment
@@ -191,9 +192,7 @@ def _rounding_line(lines: list[Line], total: Decimal, currency: str) -> list[Lin
         return []
     unit = Decimal(1).scaleb(-minor_units(currency))
     if abs(residual) > unit * max(len(lines), 1):
-        raise PostingError(
-            "lines_do_not_sum_to_total", f"lines sum to {target - residual}, total is {target} ({currency})"
-        )
+        raise PostingError("lines_do_not_sum_to_total", mismatch("bill", target - residual, target, currency))
     return [Line("Rounding difference", residual, "expense")]
 
 

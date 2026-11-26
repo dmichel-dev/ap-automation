@@ -641,7 +641,7 @@ def test_service_period_in_a_closed_period_goes_to_review(cfg):
     inv = make_invoice(cfg)  # invoice dated 2026-11-18, in an open period
     sql(cfg, "UPDATE ap.invoices SET service_period_end = '2026-10-31' WHERE id = %s", inv)
     assert claim(cfg, close=postings.BookClose(known=True, closed_through=date(2026, 10, 31))) == []
-    assert "service period ending 2026-10-31" in posting(cfg, inv)["last_error"]
+    assert "service period ending 31 Oct 2026" in posting(cfg, inv)["last_error"]
 
 
 def test_open_period_is_posted_normally(cfg):

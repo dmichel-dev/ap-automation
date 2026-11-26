@@ -10,7 +10,7 @@ A visitor tries the whole pipeline at **demo.davidmichel.dev**: one click starts
 | **Upload** | A PDF or image of their own, up to 5 MB and 3 pages | Mistral OCR |
 | **Email** | To `invoices+CODE@davidmichel.dev`, where CODE is the session's 8-letter code shown on the page | Mistral OCR |
 
-The session page shows each file's outcome in the review page's words: **ready to post** (with the bill it would create: supplier, account, lines, tax, total), or **Review:** and the reason (total doesn't add up, date reads two ways, bank details changed?, new supplier…), or **rejected** and why. The confidence shown is the real one (OCR page average × required fields found). The samples always give the outcome they describe: the demo knows their suppliers and default accounts itself ([`demo_samples.py`](../services/core/app/demo_samples.py)), so live data never changes a demo result.
+The session page shows each file's outcome in the review page's words: **ready to post** (with the bill it would create: supplier, account, lines, tax, total), or **Review:** and the reason (total doesn't add up, date reads two ways, bank details changed?, new supplier…), or **rejected** and why. The confidence shown is the real one the core routes on, as a whole percentage, with an info button explaining it (see [review](review.md)). The samples always give the outcome they describe: the demo knows their suppliers and default accounts itself ([`demo_samples.py`](../services/core/app/demo_samples.py)), so live data never changes a demo result.
 
 ## How a file goes through
 

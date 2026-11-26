@@ -190,13 +190,15 @@ def test_a_sample_goes_from_queued_to_ready_with_its_bill(site, live_now):  # no
     page = c.get(f"/s/{code}").text
     assert "Ateliers Verlibreux SARL" in page and "Ready to post" in page and 'data-pending="no"' in page
     assert "All checks passed" in page and "coded to Office Supplies" in page
-    assert "confidence 98% (OCR × fields found)" in page
+    assert "Read (stored OCR result): 4 lines · confidence 98%" in page and "fields found" not in page
+    assert 'aria-describedby="conf-info-1"' in page and "Below 85%, the invoice goes to a person for review." in page
     assert "Sent</span>" in page  # the sample's button is gone
     [invoice] = query(site, "SELECT id FROM ap.invoices")
     bill = c.get(f"/s/{code}/bills/{invoice['id']}")
     assert bill.status_code == 200
     assert "existing vendor" in bill.text and "AV-2026-0147" in bill.text and "1,598.61 EUR" in bill.text
     assert "nothing is sent" in bill.text and "&#34;DocNumber&#34;: &#34;AV-2026-0147&#34;" in bill.text
+    assert re.search(r"<dt>Bill date</dt><dd class=\"num\">\d{1,2} [A-Z][a-z]{2} \d{4}</dd>", bill.text)  # 26 Nov 2026
 
 
 def test_a_review_card_says_why_in_the_review_page_words(site):
@@ -206,7 +208,7 @@ def test_a_review_card_says_why_in_the_review_page_words(site):
     process_queued(site)
     page = c.get(f"/s/{code}").text
     assert "Needs review" in page and "The lines and tax don&#39;t add up to the invoice total." in page
-    assert "total 875.13 ≠ lines + adjustments + tax 865.13" in page
+    assert "Total (875.13 EUR) doesn&#39;t match lines + adjustments + tax (865.13 EUR): 10.00 EUR off." in page
     assert "Sent to review: Total doesn&#39;t add up" in page and "See the bill preview" not in page
 
 
@@ -597,3 +599,47 @@ def test_loopback_http_origin_is_accepted_for_a_workstation():
 
 def test_session_limits_follow_the_settings(site):
     assert create_app(site_settings(site, demo_files_per_session=2)).state.limits.files_per_session == 2
+
+
+# =====================================================================================
+# Link previews
+# =====================================================================================
+@pytest.mark.parametrize(
+    "path, title",
+    [
+        ("/", "Accounts payable, from inbox to QuickBooks | AP Automation demo"),
+        ("/privacy", "Privacy notice | AP Automation demo"),
+        ("/credits", "Credits | AP Automation demo"),
+    ],
+)
+def test_public_pages_have_a_description_and_link_preview_tags(site, path, title):
+    page = visitor(site).get(path).text
+    head = page[: page.index("</head>")]
+    assert f"<title>{title}</title>" in head and '<link rel="icon" href="/static/favicon.svg">' in head
+    found = re.search(r'<meta name="description" content="([^"]+)">', head)
+    assert found is not None
+    description = found[1]
+    assert 40 < len(description) <= 200
+    for tag in ("og:title", "twitter:title"):
+        assert f'"{tag}" content="{title}">' in head
+    for tag in ("og:description", "twitter:description"):
+        assert f'"{tag}" content="{description}">' in head
+    for tag in ("og:image", "twitter:image"):
+        assert f'"{tag}" content="{ORIGIN}/static/og-demo.png">' in head
+    assert f'<meta property="og:url" content="{ORIGIN}{path}">' in head
+    assert '<meta name="twitter:card" content="summary_large_image">' in head
+    assert '<meta property="og:image:width" content="1200">' in head and 'content="630"' in head
+
+
+def test_the_share_image_is_served_at_1200_by_630(site):
+    r = visitor(site).get("/static/og-demo.png")
+    assert r.status_code == 200 and r.headers["content-type"] == "image/png"
+    size = int.from_bytes(r.content[16:20], "big"), int.from_bytes(r.content[20:24], "big")
+    assert r.content[:8] == b"\x89PNG\r\n\x1a\n" and size == (1200, 630)
+
+
+def test_a_session_page_has_a_preview_but_no_address(site):
+    c = visitor(site)
+    head = c.get(f"/s/{start(c)}").text.split("</head>")[0]
+    assert '<meta property="og:title" content="Your demo session | AP Automation demo">' in head
+    assert "og:url" not in head and 'rel="canonical"' not in head  # a session's address is never published

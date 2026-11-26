@@ -40,10 +40,7 @@
   --accent-hover: #154236;
   --accent-ink: #ffffff;
   --accent-soft: #e3ece5;
-  --green: #2f5e35; --green-bg: #e9f0e2; --green-rule: #8fb98f;   /* ready */
-  --amber: #7a4f0c; --amber-bg: #f7ebd2; --amber-rule: #d9a84e;   /* review */
-  --grey: #5e544b;  --grey-bg: #ece5d9;  --grey-rule: #b3a590;    /* rejected */
-  --red: #9b2c1f;   --red-bg: #f8e4df;   --red-rule: #d27a6c;     /* fraud alert */
+  /* The status colours (green, amber, red, grey) are app.css's: one colour per status on every page */
   --radius-s: 10px;
   --radius-m: 16px;
   --column: 680px;

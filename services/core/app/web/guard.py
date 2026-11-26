@@ -19,6 +19,7 @@ from fastapi import Request
 from fastapi.responses import RedirectResponse, Response
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
+from .. import formatting
 from . import display, reasons
 
 HERE = Path(__file__).parent
@@ -115,16 +116,6 @@ def clear_cookie(response: Response, name: str) -> None:
 # =====================================================================================
 # Templates
 # =====================================================================================
-def money(value: Any, currency: str | None = None) -> str:
-    if value is None:
-        return "–"
-    try:
-        amount = f"{Decimal(str(value)):,.2f}"
-    except InvalidOperation:
-        return str(value)
-    return f"{amount} {currency}" if currency else amount
-
-
 def number(value: Any) -> str:
     """A quantity or rate without the database's trailing zeros (1.000000 → 1, 8.5000 → 8.5)."""
     if value is None:
@@ -138,10 +129,17 @@ def number(value: Any) -> str:
 def templates() -> Environment:
     """The pages' templates (one base template: every page ends with the copyright footer)."""
     env = Environment(loader=FileSystemLoader(HERE / "templates"), autoescape=True, undefined=StrictUndefined)
-    env.filters["money"] = money
+    env.filters["money"] = formatting.money  # with the currency code
+    env.filters["amount"] = formatting.amount  # without it (tables under a currency)
+    env.filters["percent"] = formatting.percent
+    env.filters["day"] = formatting.day
+    env.filters["moment"] = formatting.moment
+    env.filters["detail"] = display.reason_detail
+    env.globals["status"] = display.STATUSES.__getitem__
     env.filters["number"] = number
     env.filters["explain"] = reasons.explain
     env.filters["age"] = display.age
     env.filters["tone"] = display.tone
     env.filters["status_label"] = display.status_label
+    env.filters["status_name"] = display.label
     return env

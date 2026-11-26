@@ -28,8 +28,8 @@ from zoneinfo import ZoneInfo
 
 from . import db, e2e_test, intake_failures
 from .accounting import FX_GAP_MESSAGE
-from .reference import minor_units
-from .web.display import age
+from .formatting import money
+from .web.display import STATUSES, age
 from .web.reasons import explain
 
 REVIEW_LIST_LIMIT = 10  # open items listed one by one; the rest are counted
@@ -229,10 +229,8 @@ def invoices_section(f: dict[str, Any]) -> Section | None:
     lines = []
     if inv["received"]:
         ready = inv["received"] - inv["to_review"] - inv["rejected"]
-        lines.append(
-            f"Received: {inv['received']} ({ready} straight through, {inv['to_review']} sent to review,"
-            f" {inv['rejected']} rejected)"
-        )
+        counts = [(ready, "ready"), (inv["to_review"], "needs_review"), (inv["rejected"], "rejected")]
+        lines.append(f"Received: {inv['received']} (" + ", ".join(f"{n} {_status(k)}" for n, k in counts) + ")")
     if posted["bills"] or posted["credits"]:
         kinds = [(posted["bills"], "bill"), (posted["credits"], "credit note")]
         earlier = f", incl. {posted['received_earlier']} received earlier" if posted["received_earlier"] else ""
@@ -240,7 +238,7 @@ def invoices_section(f: dict[str, Any]) -> Section | None:
     if f["payments"]:
         lines.append(f"Payments matched and recorded: {f['payments']}")
     for w in f["write_offs"]:
-        lines.append(f"Written off: {w['currency']} {_money(w['amount'])} ({_plural(w['count'], 'bill')})")
+        lines.append(f"Written off: {money(w['amount'], w['currency'])} ({_plural(w['count'], 'bill')})")
     if inv["touchless_base"]:
         rate = round(100 * inv["touchless"] / inv["touchless_base"])
         lines.append(
@@ -253,9 +251,8 @@ def invoices_section(f: dict[str, Any]) -> Section | None:
 def fx_gap_section(f: dict[str, Any]) -> Section | None:
     lines = [
         f"{g['supplier_name'] or 'Unknown supplier'} {g['invoice_number'] or ''}".strip()
-        + f" ({_money_in(g['bill_amount'], g['bill_currency'])}): bank {_money(Decimal(g['bank_amount']))}"
-        f" {g['currency']}, booked {_money(Decimal(g['booked']))} {g['currency']},"
-        f" gap {_money(Decimal(g['gap']))} {g['currency']}"
+        + f" ({money(g['bill_amount'], g['bill_currency'])}): bank {money(Decimal(g['bank_amount']), g['currency'])},"
+        f" booked {money(Decimal(g['booked']), g['currency'])}, gap {money(Decimal(g['gap']), g['currency'])}"
         for g in f["fx_gaps"]
     ]
     if lines:
@@ -274,7 +271,7 @@ def review_section(f: dict[str, Any]) -> Section | None:
     lines = [_review_line(r, now) for r in items[:REVIEW_LIST_LIMIT]]
     if len(items) > REVIEW_LIST_LIMIT:
         lines.append(f"… and {len(items) - REVIEW_LIST_LIMIT} more on the review page.")
-    return Section(f"Waiting for review ({len(items)}, oldest first)", lines)
+    return Section(f"{STATUSES['open'].label} ({len(items)}, oldest first)", lines)
 
 
 def _review_line(r: dict[str, Any], now: datetime) -> str:
@@ -329,13 +326,9 @@ SECTIONS = (
 )
 
 
-def _money(amount: Decimal) -> str:
-    return f"{amount:,.2f}"
-
-
-def _money_in(amount: Decimal, currency: str) -> str:
-    """With the currency's own decimals: 2,345,678 JPY, 1,598.61 EUR."""
-    return f"{amount:,.{minor_units(currency)}f} {currency}"
+def _status(key: str) -> str:
+    """A status in the pages' words, inside a sentence: "ready to post", "needs review"."""
+    return STATUSES[key].label.lower()
 
 
 # =====================================================================================

@@ -4,7 +4,7 @@
 <div class="list-head">
   <h1>Review items</h1>
   <nav class="tabs" aria-label="Filter by status">
-    {% for s in statuses %}<a href="/items?status={{ s }}" {% if s == current %}aria-current="page"{% endif %}>{{ s | replace("_", " ") | capitalize }}</a>{% endfor %}
+    {% for s in statuses %}<a href="/items?status={{ s }}" {% if s == current %}aria-current="page"{% endif %}>{{ s | status_name }}</a>{% endfor %}
   </nav>
 </div>
 {% if items %}

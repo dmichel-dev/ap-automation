@@ -38,7 +38,7 @@ def test_an_ambiguous_match_shows_its_candidates_to_choose_from(page):
         r'name="confirm_match\.bank_transaction_id" value="(\w+)" data-required-for="confirm_match"', html
     )
     assert choices == ["t1", "t2"]
-    assert "2026-11-28 · “QUILLMOOR PAPER SUP 2” ·" in text_of(html)
+    assert "28 Nov 2026 · “QUILLMOOR PAPER SUP 2” ·" in text_of(html)
 
 
 def test_confirming_on_the_page_needs_a_transaction_then_waits(page):
@@ -107,5 +107,5 @@ def test_an_fx_amount_difference_shows_expected_and_actual(page):
     assert radios(html) == [("confirm_match", "checked"), ("reject_match", "")]
     text = text_of(html)
     assert "differs from the bill converted at the reference rate" in text
-    assert "1,900.00 USD (expected 1,748.72 USD at 1.0939 (ECB 2026-11-23), difference 151.28)" in text
+    assert "1,900.00 USD (expected 1,748.72 USD at 1.0939 (ECB 23 Nov 2026), difference 151.28 USD)" in text
     assert "The whole bill is paid in QuickBooks at the rate of the bank amount" in text
