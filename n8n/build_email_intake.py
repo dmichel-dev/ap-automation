@@ -7,6 +7,8 @@ Usage:
 Flow: Gmail trigger → email metadata → the core screens it (alias guard, which attachments) →
 one item per attachment → the core processes it → Gmail labels by status, posting started for
 ready invoices. Emails without a valid attachment, or not for the alias, are labelled and logged.
+A demo email the core refuses (invoices+CODE@ with no live session, or over its sender's daily limit)
+is deleted permanently at once; the core has logged it and put it on the demo clean-up's list too.
 
 A failure (OCR service down, core unreachable) labels the email AP/Error and is reported to the core,
 which decides: retried later or given up. Every 15 minutes the re-check lists AP/Error emails, asks the
@@ -45,9 +47,9 @@ ITEM = f"$('{SPLIT}').item.json"
 ERR = "$('Error facts').item.json"
 
 DESCRIBE_EMAIL_JS = r"""
-// For the core's screening: metadata (recipients, attachment types, names, sizes) and the text
-// (subject + body, which the core checks for bank-change wording and never stores; it accepts
-// up to 20,000 characters).
+// For the core's screening: metadata (recipients, sender, attachment types, names, sizes) and the
+// text (subject + body, which the core checks for bank-change wording and never stores; it accepts
+// up to 20,000 characters). The sender counts toward the demo's daily limit (stored only as a hash).
 return $('Email in').all().map((email, i) => {
   const mail = email.json;
   const files = Object.entries(email.binary ?? {}).filter(([key]) => /^attachment_\d+$/.test(key));
@@ -56,6 +58,7 @@ return $('Email in').all().map((email, i) => {
     thread_id: mail.threadId,
     recipients: [...(mail.to?.value ?? []), ...(mail.cc?.value ?? [])].map(a => String(a.address ?? '')),
     delivered_to: String(mail.headers?.['delivered-to'] ?? ''),
+    sender: String(mail.from?.value?.[0]?.address ?? '').slice(0, 500),
     subject: String(mail.subject ?? '').slice(0, 2000),
     attachments: files.map(([key, b]) => ({ key, mime_type: b.mimeType ?? null, file_name: b.fileName ?? null,
                                            size: b.fileSize ?? null })),
@@ -174,8 +177,8 @@ def _intake_nodes() -> list[Node]:
             "POST",
             f"={CORE}/intake/email/screen",
             body="JSON.stringify({ recipients: $json.recipients, delivered_to: $json.delivered_to, "
-            "attachments: $json.attachments, text: $json.text, subject: $json.subject, message_id: $json.message_id, "
-            "execution_id: $execution.id })",
+            "sender: $json.sender, attachments: $json.attachments, text: $json.text, subject: $json.subject, "
+            "message_id: $json.message_id, execution_id: $execution.id })",
         ),
         code_node(SPLIT, AUTO, SPLIT_JS),
         switch(
@@ -187,6 +190,7 @@ def _intake_nodes() -> list[Node]:
                 switch_rule("bank detail notice", "$json.route === 'bank_detail_notice'"),
                 switch_rule("not for alias", "$json.route === 'not_for_alias'"),
                 switch_rule("core error", "$json.route === 'error'"),
+                switch_rule("demo refused", "$json.route === 'demo_refused'"),
             ],
             {},
         ),
@@ -323,6 +327,12 @@ def _not_processed_nodes() -> list[Node]:
             "{}",
             "$json.scope",
         ),
+        # Permanent (not the trash). A failure is harmless: the demo clean-up deletes it later.
+        gmail(
+            "Delete refused demo email",
+            {"resource": "message", "operation": "delete", "messageId": "={{ $json.message_id }}"},
+            onError="continueRegularOutput",
+        ),
     ]
 
 
@@ -345,6 +355,7 @@ CONNECTIONS: Connections = {
         [("Label: fraud alert", 0)],
         [("Log not for alias", 0)],
         [("Error facts", 0)],
+        [("Delete refused demo email", 0)],
     ],
     "Process invoice (core)": [[("Route by status", 0)], [("Error facts", 0)]],
     "Route by status": [
@@ -424,13 +435,14 @@ SECTIONS = [
     Section(
         "Not processed",
         "No PDF or image attached, or not addressed to the alias: labelled and logged, never ignored silently. "
-        "An email asking to change bank details, with no invoice, is a **fraud alert** (AP/Fraud alert).",
+        "An email asking to change bank details, with no invoice, is a **fraud alert** (AP/Fraud alert). "
+        "A **demo** email the core refuses (session over, sender limit) is deleted permanently at once.",
         col=4,
         row=4,
         grid=(
             ("Label: no valid attachment", "Log no valid attachment"),
             ("Label: fraud alert", "Log fraud alert"),
-            ("Log not for alias", None),
+            ("Log not for alias", "Delete refused demo email"),
         ),
         kind="failure",
     ),

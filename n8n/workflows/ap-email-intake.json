@@ -300,6 +300,13 @@
             "node": "Error facts",
             "type": "main"
           }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Delete refused demo email",
+            "type": "main"
+          }
         ]
       ]
     },
@@ -440,7 +447,7 @@
       "name": "Note: Not processed",
       "parameters": {
         "color": 3,
-        "content": "## Not processed\nNo PDF or image attached, or not addressed to the alias: labelled and logged, never ignored silently. An email asking to change bank details, with no invoice, is a **fraud alert** (AP/Fraud alert).",
+        "content": "## Not processed\nNo PDF or image attached, or not addressed to the alias: labelled and logged, never ignored silently. An email asking to change bank details, with no invoice, is a **fraud alert** (AP/Fraud alert). A **demo** email the core refuses (session over, sender limit) is deleted permanently at once.",
         "height": 750,
         "width": 420
       },
@@ -537,7 +544,7 @@
       "id": "email-facts",
       "name": "Email facts",
       "parameters": {
-        "jsCode": "// For the core's screening: metadata (recipients, attachment types, names, sizes) and the text\n// (subject + body, which the core checks for bank-change wording and never stores; it accepts\n// up to 20,000 characters).\nreturn $('Email in').all().map((email, i) => {\n  const mail = email.json;\n  const files = Object.entries(email.binary ?? {}).filter(([key]) => /^attachment_\\d+$/.test(key));\n  return { json: {\n    message_id: mail.id,\n    thread_id: mail.threadId,\n    recipients: [...(mail.to?.value ?? []), ...(mail.cc?.value ?? [])].map(a => String(a.address ?? '')),\n    delivered_to: String(mail.headers?.['delivered-to'] ?? ''),\n    subject: String(mail.subject ?? '').slice(0, 2000),\n    attachments: files.map(([key, b]) => ({ key, mime_type: b.mimeType ?? null, file_name: b.fileName ?? null,\n                                           size: b.fileSize ?? null })),\n    text: [mail.subject, mail.text].filter(Boolean).join('\\n\\n').slice(0, 20000),\n  }, pairedItem: { item: i } };\n});",
+        "jsCode": "// For the core's screening: metadata (recipients, sender, attachment types, names, sizes) and the\n// text (subject + body, which the core checks for bank-change wording and never stores; it accepts\n// up to 20,000 characters). The sender counts toward the demo's daily limit (stored only as a hash).\nreturn $('Email in').all().map((email, i) => {\n  const mail = email.json;\n  const files = Object.entries(email.binary ?? {}).filter(([key]) => /^attachment_\\d+$/.test(key));\n  return { json: {\n    message_id: mail.id,\n    thread_id: mail.threadId,\n    recipients: [...(mail.to?.value ?? []), ...(mail.cc?.value ?? [])].map(a => String(a.address ?? '')),\n    delivered_to: String(mail.headers?.['delivered-to'] ?? ''),\n    sender: String(mail.from?.value?.[0]?.address ?? '').slice(0, 500),\n    subject: String(mail.subject ?? '').slice(0, 2000),\n    attachments: files.map(([key, b]) => ({ key, mime_type: b.mimeType ?? null, file_name: b.fileName ?? null,\n                                           size: b.fileSize ?? null })),\n    text: [mail.subject, mail.text].filter(Boolean).join('\\n\\n').slice(0, 20000),\n  }, pairedItem: { item: i } };\n});",
         "language": "javaScript",
         "mode": "runOnceForAllItems"
       },
@@ -561,7 +568,7 @@
       "parameters": {
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "jsonBody": "={{ JSON.stringify({ recipients: $json.recipients, delivered_to: $json.delivered_to, attachments: $json.attachments, text: $json.text, subject: $json.subject, message_id: $json.message_id, execution_id: $execution.id }) }}",
+        "jsonBody": "={{ JSON.stringify({ recipients: $json.recipients, delivered_to: $json.delivered_to, sender: $json.sender, attachments: $json.attachments, text: $json.text, subject: $json.subject, message_id: $json.message_id, execution_id: $execution.id }) }}",
         "method": "POST",
         "options": {
           "response": {
@@ -729,6 +736,31 @@
                 }
               },
               "outputKey": "core error",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "demo-refused",
+                    "leftValue": "={{ $json.route === 'demo_refused' }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                }
+              },
+              "outputKey": "demo refused",
               "renameOutput": true
             }
           ]
@@ -1388,6 +1420,27 @@
       ],
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6
+    },
+    {
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail – david@davidmichel.dev"
+        }
+      },
+      "id": "delete-refused-demo-email",
+      "name": "Delete refused demo email",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "messageId": "={{ $json.message_id }}",
+        "operation": "delete",
+        "resource": "message"
+      },
+      "position": [
+        1200,
+        1200
+      ],
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1
     }
   ],
   "pinData": {},
