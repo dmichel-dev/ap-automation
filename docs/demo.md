@@ -66,7 +66,7 @@ Matching the [privacy notice](../services/core/app/web/templates/demo_privacy.ht
 | The n8n run records that handled its items | When it ends (n8n API, which removes their stored files too). A run shared by two sessions goes with the first that ends |
 | An emailed file in n8n's temporary storage | Within 90 minutes (cron, [`scripts/purge_n8n_temp_files.sh`](../scripts/purge_n8n_temp_files.sh)) |
 | Address and sender hashes | After 2 days |
-| Nightly backups (may hold a session open at 03:20 UTC) | After 14 days |
+| Nightly backups (may hold a session open at 03:20 UTC) | After 14 days; the host's 24-hour copy of the whole server can keep one up to 15 days in total |
 
 The core decides what each delete answer means: 200, 204 or 404 (already gone) takes the item off the list; anything else is logged and tried again 5 minutes later. The processing log keeps dates, statuses and counts, never a document's content.
 

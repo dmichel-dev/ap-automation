@@ -44,7 +44,7 @@
     <li>Its emails are then deleted permanently from the mailbox (not moved to the trash). An email the demo can't accept (session over, limit reached) is deleted at once.</li>
     <li>An emailed file is deleted from the workflow tool (n8n) within 90 minutes of its arrival.</li>
     <li>The workflow tool's records of the session's runs are deleted at the same time as the session. A run that fails before it reaches your session can stay in that history for up to 14 days, without the file.</li>
-    <li>The server's nightly backup (03:20 UTC) can hold a session that was open at that moment. Backups are kept for 14 days.</li>
+    <li>The server's nightly backup (03:20 UTC) can hold a session that was open at that moment. Backups are kept for 14 days. Our host, OVHcloud, also keeps a copy of the whole server for 24 hours, so a backup copy can exist for up to 15 days in total.</li>
     <li>The processing log keeps dates, statuses and counts, never a document's content.</li>
   </ul>
 </section>
