@@ -34,8 +34,12 @@ docker run --rm -v ap-automation_n8n_data:/src:ro -v "$PWD/backups":/dst alpine:
 ls -l "backups/pg_dumpall_$TS.sql" "backups/n8n_data_$TS.tgz"
 
 # Retention (BACKUP_KEEP_DAYS in .env; empty keeps everything). Reached only after a complete
-# backup, so a failing night never deletes the older copies.
+# backup, so a failing night never deletes the older copies. Copies older than the limit minus
+# one hour are deleted (14 days: -mmin +20100), so the night N days later removes the copy
+# even if the run starts a little earlier than the one that wrote it. (-mtime +14 would only
+# match after 15 full days.)
 if [ -n "${BACKUP_KEEP_DAYS:-}" ]; then
+  KEEP_MINUTES=$((BACKUP_KEEP_DAYS * 1440 - 60))
   find backups -maxdepth 1 -type f \( -name 'pg_dumpall_*.sql' -o -name 'n8n_data_*.tgz' \) \
-    -mtime +"$BACKUP_KEEP_DAYS" -print -delete
+    -mmin +"$KEEP_MINUTES" -print -delete
 fi

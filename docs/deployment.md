@@ -115,7 +115,7 @@ Database migrations and workflow changes follow [operations](operations.md): bac
 20 3 * * * cd $HOME/ap-automation && scripts/backup.sh --online >> backups/backup.log 2>&1
 ```
 
-- Every night at 03:20 (server time, UTC), [`scripts/backup.sh`](../scripts/backup.sh) writes a `pg_dumpall` of every database (n8n, `ap`, roles) and an archive of the n8n data volume to `backups/` (mode 600). Copies older than `BACKUP_KEEP_DAYS` are deleted, but only after a complete backup, so a failing night never removes the older copies.
+- Every night at 03:20 (server time, UTC), [`scripts/backup.sh`](../scripts/backup.sh) writes a `pg_dumpall` of every database (n8n, `ap`, roles) and an archive of the n8n data volume to `backups/` (mode 600). Copies older than `BACKUP_KEEP_DAYS` minus one hour are deleted by the same run, after the new backup is complete, so a failing night never removes the older copies. With 14, a nightly copy is deleted by the run 14 days later, a few seconds after its 14th day (the time that night's backup takes); a backup made by hand during the day is deleted by the first nightly run after 13 days 23 hours.
 - The whole server is also covered by the hosting provider's automated backup.
 - The original invoice files are temporary by design and aren't backed up ([operations](operations.md#backup)).
 - `backups/backup.log` shows each run. A failed run isn't reported anywhere else yet.
