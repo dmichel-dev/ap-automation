@@ -10,7 +10,7 @@ Three levels, from fastest to most realistic:
 | Extraction calibration (21 documents) | The core's extraction and checks on every test document, including Arabic and Hindi invoices and degraded copies (fax-like, crooked scan, phone photo); confidence score and fields compared, nothing stored ([calibration](calibration.md)) | `scripts/calibrate.sh` |
 | Daily end to end (4 emails, every morning) | Same path, automated: one invoice posted to QuickBooks then deleted, one sent to review, one rejected, one fraud alert. Test data kept apart from live figures; a failure sends an alert at once and shows in the daily summary | workflow **AP – Daily e2e test** ([operations](operations.md#daily-end-to-end-test)) |
 
-The unit and integration tests run on every push in CI; the live provider tests are left out by default (they cost OCR calls). To see how many tests there are: `docker compose run --rm core-test pytest --collect-only -q | tail -1` (add `-m live` for the live ones).
+The unit and integration tests run in CI on every code change (docs-only pushes are skipped); the live provider tests are left out by default (they cost OCR calls). To see how many tests there are: `docker compose run --rm core-test pytest --collect-only -q | tail -1` (add `-m live` for the live ones).
 
 ## Test set
 
