@@ -23,7 +23,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from .conftest import AUTH, query
-from .test_demo import LIMITS, UPLOAD, demo_env, live_now, pdf_with_pages  # noqa: F401  (fixtures)
+from .test_demo import LIMITS, UPLOAD, demo_env, live_now, pdf_with_pages, sample_bytes  # noqa: F401  (fixtures)
 from .test_processing import env  # noqa: F401  (fixture)
 
 ORIGIN = "https://demo.test"
@@ -84,7 +84,7 @@ def test_start_page_starts_and_links_the_privacy_notice_without_listing_the_samp
     assert r.status_code == 200
     assert "Start a demo session" in r.text and 'href="/privacy"' in r.text and "demo-facts" not in r.text
     assert "In this demo, nothing is sent to QuickBooks: you see the bill it would create.</p>" in r.text
-    assert "Review: bank details changed? (sent after October)" not in r.text  # the session page lists them
+    assert "Bank details changed: flagged as possible fraud" not in r.text  # the session page lists them
     text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", r.text))
     assert "Today: in many companies, invoices arrive through several channels" in text
     assert "Automated: invoices are picked up wherever they arrive" in text
@@ -93,12 +93,28 @@ def test_start_page_starts_and_links_the_privacy_notice_without_listing_the_samp
     assert text.index("Today:") < text.index("Automated:")
 
 
-def test_the_samples_fold_closed_under_a_summary_with_their_count(site):
+def test_the_samples_fold_is_closed_by_default_under_its_summary(site):
     c = visitor(site)
     page = c.get(f"/s/{start(c)}").text
     fold = page[page.index('<details class="demo-box demo-fold">') : page.index("</details>")]
-    assert "<summary>Send a sample invoice (7)</summary>" in fold  # closed: no `open` attribute
+    assert "<summary>No invoice handy? Try a sample</summary>" in fold  # closed: no `open` attribute
     assert fold.count("/samples/") == 7 and "<script" not in fold and "onclick" not in fold
+    assert fold.count('<p class="sample-label">') == 7 and "Wrong total: caught, sent to review" in fold
+
+
+def test_your_own_invoice_comes_first_then_the_samples(site):
+    """The main action is the visitor's own invoice, by upload or email; the samples are the fallback."""
+    c = visitor(site)
+    code = start(c)
+    page = c.get(f"/s/{code}").text
+    own = page.index("Upload or email your own invoice")
+    assert (
+        own
+        < page.index('action="/s/' + code + '/uploads"')
+        < page.index(f"invoices+{code}@")
+        < page.index("No invoice handy?")
+    )
+    assert '<button class="go demo-go-small">Send the file</button>' in page  # the page's primary button
 
 
 def test_the_samples_fold_stays_open_after_a_send_and_closes_on_a_plain_visit(site):
@@ -215,6 +231,37 @@ def test_a_review_card_says_why_in_the_review_page_words(site):
     assert "Needs review" in page and "The lines and tax don&#39;t add up to the invoice total." in page
     assert "Total (875.13 EUR) doesn&#39;t match lines + adjustments + tax (865.13 EUR): 10.00 EUR off." in page
     assert "Sent to review: Total doesn&#39;t add up" in page and "See the QuickBooks bill preview" not in page
+
+
+def email_in(url: str, code: str, content: bytes, ref: str) -> None:
+    """What the email intake sends the core for an attachment to invoices+CODE@ (after the screening)."""
+    [session] = query(url, "SELECT id FROM ap.demo_sessions WHERE code = %s", code)
+    data = {"channel": "email", "source_ref": ref, "scope": "demo", "demo_session_id": str(session["id"])}
+    r = TestClient(core_app).post("/invoices/process", headers=AUTH, files={"file": ("a.pdf", content)}, data=data)
+    assert r.status_code == 200, r.text
+
+
+def test_an_emailed_sample_is_named_like_a_sent_one(site):
+    """No upload row names an emailed file: the card knows a sample by its bytes, and its button goes."""
+    c = visitor(site)
+    code = start(c)
+    email_in(site, code, sample_bytes("us-hosting-october"), "gmail:m1:0")
+    page = c.get(f"/s/{code}").text
+    card = page[page.index('<article class="demo-card') : page.index("</article>")]
+    assert "Invoice WH-2026-1001 · sample" in card and "Received by email" in card
+    assert "Read (OCR result saved for this sample): 2 lines · confidence 97%" in card
+    row = page[page.index("Hosting invoice, October") :]
+    assert row.index("Sent</span>") < row.index("</li>")  # sent by email: not offered again
+
+
+def test_an_emailed_own_file_stays_the_visitors(site):
+    c = visitor(site)
+    code = start(c)
+    email_in(site, code, UPLOAD, "gmail:m2:0")
+    page = c.get(f"/s/{code}").text
+    card = page[page.index('<article class="demo-card') : page.index("</article>")]
+    assert "your file" in card and "saved for this sample" not in card
+    assert "Sent</span>" not in page
 
 
 def test_a_bill_of_another_session_is_not_found(site):

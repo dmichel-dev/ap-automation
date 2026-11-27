@@ -198,17 +198,14 @@ def _upload_card(item: db.Row) -> dict[str, Any]:
     }
 
 
-def _cards(conn: db.Conn, session: demo.Session) -> list[dict[str, Any]]:
-    items = demo.session_items(conn, session.id)
-    return [_invoice_card(i) if i["kind"] == "invoice" else _upload_card(i) for i in items]
-
-
 def _session_context(request: Request, session: demo.Session) -> dict[str, Any]:
     s, limits, now = settings(request), _limits(request), datetime.now(UTC)
     with _connect(s) as conn:
-        cards = _cards(conn, session)
-        sent = demo.samples_sent(conn, session.id)
+        items = demo.session_items(conn, session.id)
+        # A sample already sent, from this page or by email, can't be sent again
+        sent = demo.samples_sent(conn, session.id) | {i["sample"] for i in items if i["sample"]}
         used = session.files_used + demo.files_pending(conn, session.id)
+    cards = [_invoice_card(i) if i["kind"] == "invoice" else _upload_card(i) for i in items]
     return {
         "session": session,
         "cards": cards,

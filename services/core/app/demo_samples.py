@@ -32,7 +32,7 @@ PROVIDER_NAME = "mistral-ocr (stored sample result)"
 class Sample:
     key: str  # also the file name: <key>.pdf, and its recorded response: <key>.mistral.json
     title: str
-    shows: str  # what the visitor will see happen, in the review page's words (tests/test_demo.py)
+    label: str  # what it shows, in a few words, ending with its outcome (tests/test_demo.py)
     account: str  # its supplier's default expense account: a name the chart of accounts script creates
 
     @property
@@ -48,43 +48,43 @@ CATALOG: tuple[Sample, ...] = (
     Sample(
         "fr-eur-discount",
         "French invoice, EUR, with a discount",
-        "Straight through: ready to post",
+        "Clean, with a discount: goes straight through",
         "Office Supplies",
     ),
     Sample(
         "de-eur-wrong-total",
         "German invoice whose total doesn't add up",
-        "Review: total doesn't add up",
+        "Wrong total: caught, sent to review",
         "Cost of Goods Sold:Materials",
     ),
     Sample(
         "es-eur-ambiguous-date",
         "Spanish invoice with an ambiguous date",
-        "Review: date reads two ways, with a suggested date",
+        "Date reads two ways: sent to review, with a suggestion",
         "Advertising",
     ),
     Sample(
         "ar-aed-tax-invoice",
         "Arabic tax invoice, AED",
-        "Right-to-left text read and checked: ready to post",
+        "Arabic, right-to-left: goes straight through",
         "Office Supplies",
     ),
     Sample(
         "hi-inr-gst-invoice",
         "Hindi GST invoice, INR",
-        "Devanagari text read and checked: ready to post",
+        "Hindi (Devanagari): goes straight through",
         "Office Supplies",
     ),
     Sample(
         "us-hosting-october",
         "Hosting invoice, October",
-        "Ready to post, and its bank account is remembered",
+        "Clean: goes straight through, bank account remembered",
         "Hosting & Cloud Services",
     ),
     Sample(
         "us-hosting-november-other-account",
         "Hosting invoice, November: same supplier, different bank account",
-        "Review: bank details changed? (sent after October)",
+        "Bank details changed: flagged as possible fraud (send October first)",
         "Hosting & Cloud Services",
     ),
 )
@@ -95,12 +95,18 @@ def sample(key: str) -> Sample | None:
 
 
 @lru_cache(maxsize=1)
-def _responses_by_hash() -> dict[str, Path]:
+def _samples_by_hash() -> dict[str, Sample]:
     found = {}
     for s in CATALOG:
         if s.file.is_file() and s.response.is_file():
-            found[hashlib.sha256(s.file.read_bytes()).hexdigest()] = s.response
+            found[hashlib.sha256(s.file.read_bytes()).hexdigest()] = s
     return found
+
+
+def sample_with_hash(sha256: str | None) -> Sample | None:
+    """The sample with these exact bytes (SHA-256), whatever channel brought it, or None. In the demo,
+    such a file is always read from its stored result (stored_result)."""
+    return _samples_by_hash().get(sha256) if sha256 else None
 
 
 def _parse(response: Path) -> ProviderResult:
@@ -109,8 +115,8 @@ def _parse(response: Path) -> ProviderResult:
 
 def stored_result(sha256: str) -> ProviderResult | None:
     """The recorded OCR result of the sample with these exact bytes, or None (not a sample)."""
-    path = _responses_by_hash().get(sha256)
-    return _parse(path) if path else None
+    found = sample_with_hash(sha256)
+    return _parse(found.response) if found else None
 
 
 @lru_cache(maxsize=1)

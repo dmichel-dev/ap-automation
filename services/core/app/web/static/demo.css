@@ -133,14 +133,18 @@ a.go { display: inline-flex; align-items: center; justify-content: center; color
 .demo-samples form { margin: 0; }
 .demo-samples .muted, .demo-box > .muted { font-size: 0.8125rem; }
 .sample-title { font-weight: 600; font-size: 0.9rem; }
+.sample-label { font-size: 0.8125rem; color: var(--ink-body); }
 button.send { min-height: 44px; padding: 8px 16px; border: 1px solid var(--rule-strong); border-radius: 12px; background: var(--white); color: var(--accent); font-weight: 600; font-size: 0.875rem; }
 button.send:hover { border-color: var(--accent); background: var(--accent-soft); }
-.demo-upload { margin: 0; }
+/* Your own invoice comes first: upload, or email; the samples fold below it */
+.demo-own-title { font-family: var(--display); font-weight: 650; font-size: 1.0625rem; letter-spacing: -0.01em; color: var(--ink); }
+.demo-upload { display: flex; flex-direction: column; gap: 10px; margin: 0; }
+.demo-email { display: flex; flex-direction: column; gap: 10px; padding-top: 14px; border-top: 1px solid var(--rule); }
+.demo-upload > .muted, .demo-email > .muted { font-size: 0.8125rem; }
 .demo-upload label { font-family: var(--mono); font-weight: 500; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); }
 .demo-upload input[type=file] { font: inherit; font-size: 0.875rem; max-width: 100%; color: var(--ink-body); }
 .demo-upload input[type=file]::file-selector-button { min-height: 40px; margin-right: 12px; padding: 6px 14px; font: inherit; font-weight: 600; color: var(--ink); background: var(--white); border: 1px solid var(--rule-strong); border-radius: 10px; cursor: pointer; }
 .demo-upload input[type=file]::file-selector-button:hover { border-color: var(--accent); }
-.demo-upload .send { align-self: flex-start; }
 .demo-address { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 /* On a phone the address takes its own line, so it never breaks mid-word */
 .demo-address code { flex: 1 1 260px; min-width: 0; padding: 9px 12px; background: var(--tint); border-radius: 10px; font-size: 0.8125rem; overflow-wrap: anywhere; }

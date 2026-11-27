@@ -422,7 +422,8 @@ def finish_upload(conn: db.Conn, upload_id: int, invoice_id: str | None, error: 
 def session_items(conn: db.Conn, session_id: str) -> list[db.Row]:
     """The session's files, newest first: those still queued, being processed or failed (kind
     'upload'), and every invoice (kind 'invoice': emailed ones have no upload row). The page reads
-    no document content: only the processing results (view demo_invoice_results)."""
+    no document content: only the processing results (view demo_invoice_results). `sample` names the
+    sample a file is, whatever channel brought it (an emailed sample is known by its bytes)."""
     uploads = conn.execute(
         """SELECT 'upload' AS kind, id::text AS id, sample, file_name, status, error, created_at
              FROM demo_uploads WHERE session_id = %s AND status <> 'done'""",
@@ -431,7 +432,7 @@ def session_items(conn: db.Conn, session_id: str) -> list[db.Row]:
     invoices = conn.execute(
         """SELECT 'invoice' AS kind, i.id::text AS id, u.sample, i.file_name, i.channel, i.status,
                   i.status_reasons AS reasons, i.supplier_name, i.invoice_number, i.document_type,
-                  i.total, i.currency, i.confidence, i.created_at, i.lines,
+                  i.total, i.currency, i.confidence, i.created_at, i.lines, i.file_sha256,
                   p.preview IS NOT NULL AS has_preview, p.preview -> 'account_names' AS account_names
              FROM demo_invoice_results i
              LEFT JOIN demo_uploads u ON u.invoice_id = i.id
@@ -439,6 +440,9 @@ def session_items(conn: db.Conn, session_id: str) -> list[db.Row]:
             WHERE i.demo_session_id = %s""",
         (session_id,),
     ).fetchall()
+    for row in invoices:
+        found = demo_samples.sample_with_hash(row.pop("file_sha256"))
+        row["sample"] = row["sample"] or (found.key if found else None)
     return sorted([*uploads, *invoices], key=lambda r: r["created_at"], reverse=True)
 
 

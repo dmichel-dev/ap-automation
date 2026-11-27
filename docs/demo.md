@@ -6,9 +6,11 @@ A visitor tries the whole pipeline at **demo.davidmichel.dev**: one click starts
 
 | Way in | How | OCR cost |
 |---|---|---|
-| **Sample** | Click one of 7 fictional invoices: French (discount), German (total doesn't add up), Spanish (ambiguous date), Arabic (AED), Hindi (INR), and two hosting invoices from the same supplier, the second paid to a different bank account | None: each sample has its stored OCR result |
 | **Upload** | A PDF or image of their own, up to 5 MB and 3 pages | Mistral OCR |
-| **Email** | To `invoices+CODE@davidmichel.dev`, where CODE is the session's 8-letter code shown on the page | Mistral OCR |
+| **Email** | To `invoices+CODE@davidmichel.dev`, where CODE is the session's 8-letter code shown on the page | Mistral OCR (none for a sample's exact file) |
+| **Sample** | Click one of 7 fictional invoices: French (discount), German (total doesn't add up), Spanish (ambiguous date), Arabic (AED), Hindi (INR), and two hosting invoices from the same supplier, the second paid to a different bank account | None: each sample has its stored OCR result |
+
+The session page offers them in that order: the visitor's own invoice first (upload, or the email address), then "No invoice handy? Try a sample", a fold listing the samples. Each sample has a short label saying what it shows and how it ends, in the words of the card that follows (e.g. "Wrong total: caught, sent to review"); a test checks every label against the sample's real outcome. A sample is recognised by its exact bytes whatever the channel: emailed, it is named on its card like a sent one and isn't offered again.
 
 The session page shows each file's outcome in the review page's words: **ready to post** (with the QuickBooks bill it would create: supplier, account, lines, tax, total), or **Review:** and the reason (total doesn't add up, date reads two ways, bank details changed?, new supplier…), or **rejected** and why. The confidence shown is the real one the core routes on, as a whole percentage, with an info button explaining it (see [review](review.md)). The samples always give the outcome they describe: the demo knows their suppliers and default accounts itself ([`demo_samples.py`](../services/core/app/demo_samples.py)), so live data never changes a demo result.
 
@@ -48,7 +50,7 @@ Addresses and senders are stored as keyed hashes (`DEMO_HASH_KEY`), never as wri
 ## Security
 
 - **A session needs its cookie and its code.** The browser that starts a session gets a random token (HttpOnly, Secure, SameSite=Strict; only its SHA-256 is stored). The code alone, from the email address or the URL, never opens the page.
-- **Least privilege:** `demo-web` connects as `ap_demo` ([`db/init/02_demo_role.sh`](../db/init/02_demo_role.sh)): it can start sessions, queue files without reading them back, read results through the view `demo_invoice_results` (demo rows only, no OCR text, no extraction, no bank details), read bill previews and the review page's views (needs-review demo invoices, no bank details) and append to the log. A test applies the script's grants to a temporary role and checks that it reads those views but not the invoices table. Nothing of the live data. It has no file store.
+- **Least privilege:** `demo-web` connects as `ap_demo` ([`db/init/02_demo_role.sh`](../db/init/02_demo_role.sh)): it can start sessions, queue files without reading them back, read results through the view `demo_invoice_results` (demo rows only, no OCR text, no extraction, no bank details; since migration 023 the file's SHA-256, so an emailed sample is recognised), read bill previews and the review page's views (needs-review demo invoices, no bank details) and append to the log. A test applies the script's grants to a temporary role and checks that it reads those views but not the invoices table. Nothing of the live data. It has no file store.
 - **Nothing is served back:** no uploaded or emailed file is ever shown or downloadable.
 - **Only the demo's paths are public.** Caddy forwards `/`, `/start`, `/privacy`, `/credits`, `/s/*` and `/static/*` to `demo-web` (a test checks that every page route is covered and `/health` is not); every other path (its `/health` included) is an empty 404, and bodies over 6 MB are refused ([`deploy/Caddyfile`](../deploy/Caddyfile)). Nothing of n8n is public.
 - Every page sends a strict CSP and the security headers, and ends with the copyright footer. Cross-site form posts are refused.

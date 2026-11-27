@@ -29,7 +29,7 @@ Defined in [`db/migrations/`](../db/migrations). Migrations run as the `ap_app` 
 | `demo_bill_previews` | The bill a ready demo invoice would post (demo invoices are never sent to QuickBooks) |
 | `demo_external_items` | What a session left outside the database: its Gmail messages, Drive files and the n8n runs that handled its items |
 | `demo_deletions` | Those still to be deleted permanently in Gmail, Drive or n8n (outlives the session; a refused email goes here at once) |
-| `demo_invoice_results` (view) | What the demo pages may read of invoices: demo rows and results only, no OCR text, extraction or bank details |
+| `demo_invoice_results` (view) | What the demo pages may read of invoices: demo rows and results only, no OCR text, extraction or bank details; the file's SHA-256 (migration 023) recognises a sample sent by email |
 | `login_attempts` | Sign-in attempts for the per-address limit and the audit: address, listener, outcome and a hash of the typed email (never the email or a password); kept 30 days |
 
 ## Conventions

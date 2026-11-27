@@ -12,7 +12,6 @@ from app import accounting, db, demo, demo_samples, main
 from app.extraction import build_common_invoice
 from app.intake import Attachment, demo_code, screen_email
 from app.main import app
-from app.web.reasons import explain
 from fastapi.testclient import TestClient
 from PIL import Image
 
@@ -255,7 +254,7 @@ def test_sample_uses_its_stored_result_and_gets_a_bill_preview(demo_env, live_no
     assert upload["status"] == "done" and upload["content"] is None and str(upload["invoice_id"]) == body["invoice_id"]
 
 
-# What each sample shows a visitor who sends it first in a new session (demo_samples.CATALOG "shows")
+# What each sample shows a visitor who sends it first in a new session (demo_samples.CATALOG "label")
 SAMPLE_OUTCOMES = {
     "fr-eur-discount": ("ready", []),
     "de-eur-wrong-total": ("needs_review", ["total_mismatch"]),
@@ -278,19 +277,23 @@ def test_every_sample_has_an_expected_outcome():
     assert sorted(SAMPLE_OUTCOMES) == sorted(s.key for s in demo_samples.CATALOG)
 
 
+# How a sample's label ends: its outcome, in the words of the card the visitor then sees
+LABEL_ENDINGS = {"ready": "goes straight through", "needs_review": "sent to review", "fraud": "possible fraud"}
+
+
 @pytest.mark.parametrize("key", sorted(SAMPLE_OUTCOMES))
-def test_each_sample_says_what_it_shows_in_the_review_page_words(key):
-    """One wording everywhere: "ready to post", or "Review: " and the reason's label on the review page.
-    The bank-detail alert needs October first, so the November sample names that outcome."""
+def test_each_sample_label_names_its_real_outcome_in_a_few_words(key):
+    """The bank-detail alert needs October first, so the November sample names that outcome (and says so)."""
     sample = demo_samples.sample(key)
     assert sample is not None
-    status, reasons = SAMPLE_OUTCOMES[key]
+    status = SAMPLE_OUTCOMES[key][0]
     if key == "us-hosting-november-other-account":
-        status, reasons = "needs_review", ["possible_bank_detail_change"]
-    if status == "ready":
-        assert "ready to post" in sample.shows.lower()
-    else:
-        assert sample.shows.lower().startswith(f"review: {explain(reasons[0]).label.lower()}")
+        status = "fraud"
+        assert "October first" in sample.label
+    feature, outcome = sample.label.split(": ", 1)
+    assert 1 <= len(feature.split()) <= 4 and LABEL_ENDINGS[status] in outcome and len(sample.label.split()) <= 10
+    for other in set(LABEL_ENDINGS.values()) - {LABEL_ENDINGS[status]}:
+        assert other not in sample.label
 
 
 @pytest.mark.parametrize("key", sorted(SAMPLE_OUTCOMES))
