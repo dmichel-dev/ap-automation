@@ -127,6 +127,13 @@ def supplier_accounts() -> dict[str, str]:
     return found
 
 
+def supplier_default(supplier_key: str | None) -> dict[str, str] | None:
+    """The review page's "supplier's default" for a demo invoice: the account name the demo knows for a
+    sample's supplier (no account id: the demo pages can't read the chart of accounts), else None."""
+    name = supplier_accounts().get(supplier_key) if supplier_key else None
+    return {"id": "", "name": name} if name else None
+
+
 def supplier_status(conn: db.Conn, inv: CommonInvoice) -> SupplierStatus:
     """The demo's counterpart of db.supplier_status: a sample's supplier is known, with its default
     account found by name in the QuickBooks copy (none if that account is missing or ambiguous there:

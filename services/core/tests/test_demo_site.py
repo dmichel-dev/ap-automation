@@ -193,7 +193,8 @@ def test_a_sample_goes_from_queued_to_ready_with_its_bill(site, live_now):  # no
     page = c.get(f"/s/{code}").text
     assert "Ateliers Verlibreux SARL" in page and "Ready to post" in page and 'data-pending="no"' in page
     assert "All checks passed" in page and "coded to Office Supplies" in page
-    assert "Read (stored OCR result): 4 lines · confidence 98%" in page and "fields found" not in page
+    assert "Read (OCR result saved for this sample): 4 lines · confidence 98%" in page and "fields found" not in page
+    assert "Received by upload" in page and "stored OCR result" not in page  # one wording per channel
     assert 'aria-describedby="conf-info-1"' in page and "Below 85%, the invoice goes to a person for review." in page
     assert '<script src="/static/info.js" defer></script>' in page and c.get("/static/info.js").status_code == 200
     assert "Sent</span>" in page  # the sample's button is gone
@@ -313,6 +314,27 @@ def test_the_review_page_shows_no_bank_details(site):
     card = c.get(f"/s/{code}").text
     assert stored and {v for v in stored if v in page} <= {v for v in stored if v in card}
     assert not any(v in page for v in stored if v not in card)
+
+
+def test_the_review_page_reads_well_for_a_visitor(site):
+    """Header and meta line: number and total apart, the channel in the cards' words, no internal
+    counter. The supplier's default is the demo's own (its sample list), tax rates read as percentages
+    and the line items have no empty tax-rate column."""
+    c, code, ids = review_session(site, "us-hosting-october", "us-hosting-november-other-account")
+    page = c.get(f"/s/{code}/review/{ids['us-hosting-november-other-account']}").text
+    assert 'Invoice WH-2026-1101 · <span class="num">160.58 USD</span>' in page and "WH-2026-1101," not in page
+    assert "received by upload." in page and "review number" not in page
+    assert "<dd>Supplier's default: Hosting &amp; Cloud Services</dd>" in page and "None yet" not in page
+    assert "Keep Hosting &amp; Cloud Services as the default" in page
+    assert '<td class="num">8.5%</td>' in page and "Tax rate</th>" not in page
+
+
+def test_a_supplier_the_demo_does_not_know_has_no_default_on_the_review_page(site):
+    c, code, ids = review_session(site, "de-eur-wrong-total")
+    with db.connect(site) as conn:  # as if a visitor had sent an invoice of a supplier of their own
+        conn.execute("UPDATE ap.invoices SET supplier_tax_id_norm = 'XX123', supplier_name_norm = 'unknown co'")
+    page = c.get(f"/s/{code}/review/{ids['de-eur-wrong-total']}").text
+    assert "None yet: choose one when approving" in page and "Supplier's default:" not in page
 
 
 def demo_role_grants(role: str) -> list[str]:

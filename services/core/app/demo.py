@@ -33,7 +33,7 @@ from typing import Any
 
 from psycopg.types.json import Jsonb
 
-from . import db, files, review
+from . import db, demo_samples, files, review
 from .web import render
 from .web.security import new_token, token_digest
 
@@ -501,7 +501,8 @@ def session_review(conn: db.Conn, session_id: str, invoice_id: str) -> dict[str,
         "effect_error": None,
     }  # fmt: skip
     inv = {k: v for k, v in row.items() if not k.startswith("review_")} | {"file_path": None, "bank_accounts": []}
-    data = review.page_data(item, inv, lines, taxes, supplier_default=None, payment=None)
+    default = demo_samples.supplier_default(inv["supplier_key"])  # the demo's own, never a live default
+    data = review.page_data(item, inv, lines, taxes, supplier_default=default, payment=None)
     return {"data": data, "sample": row["sample"]}
 
 

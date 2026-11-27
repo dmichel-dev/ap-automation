@@ -25,11 +25,11 @@
 <header class="item-head">
   <div>
     <h1>{{ inv.supplier_name or "Supplier name missing" }}</h1>
-    <p class="item-sub">{{ "Credit note" if inv.document_type == "credit_note" else "Invoice" }} {{ inv.invoice_number or "without a number" }}{% if inv.related_invoice_number %}, for invoice {{ inv.related_invoice_number }}{% endif %}, <span class="num">{{ inv.total | money(inv.currency) }}</span></p>
+    <p class="item-sub">{{ "Credit note" if inv.document_type == "credit_note" else "Invoice" }} {{ inv.invoice_number or "without a number" }}{% if inv.related_invoice_number %}, for invoice {{ inv.related_invoice_number }}{% endif %} · <span class="num">{{ inv.total | money(inv.currency) }}</span></p>
   </div>
   <p class="state tone-{{ tone }}">{{ item | status_label }}{% if not is_open and item.reviewer %}<span class="state-by"> by {{ item.reviewer }}</span>{% endif %}</p>
 </header>
-<p class="item-meta">Opened {{ item.created_at | day }} ({{ item.created_at | age }}{{ " ago" if item.created_at | age != "today" }}), received by {{ inv.channel }}, {{ item.stage }} review number {{ item.id }}.</p>
+<p class="item-meta">Opened {{ item.created_at | day }} ({{ item.created_at | age }}{{ " ago" if item.created_at | age != "today" }}), received {{ inv.channel | channel }}{% if item.scope != "demo" %}, {{ item.stage }} review number {{ item.id }}{% endif %}.</p>
 
 {% if done %}<p class="note ok" role="status">{{ done }}</p>{% endif %}
 {% if error %}<p class="note error" role="alert">{{ error }}</p>{% endif %}
@@ -98,15 +98,16 @@
 
   <div class="more-details">
     {% if item.lines %}
+    {% set line_rates = item.lines | selectattr("tax_rate", "ne", none) | list %}{# no column when no line has a rate #}
     <details>
       <summary>Show details: line items ({{ item.lines | length }})</summary>
       <div class="scroll"><table>
-        <thead><tr><th>#</th><th>Description</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Amount</th><th class="num">Tax rate</th></tr></thead>
+        <thead><tr><th>#</th><th>Description</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Amount</th>{% if line_rates %}<th class="num">Tax rate</th>{% endif %}</tr></thead>
         <tbody>
         {% for l in item.lines %}
         <tr><td>{{ l.line_no }}</td><td>{{ l.description or "" }}{% if l.kind != "item" %} <span class="chip">{{ l.kind }}</span>{% endif %}</td>
           <td class="num">{{ l.quantity | number }}</td><td class="num">{{ l.unit_price | amount(inv.currency) if l.unit_price is not none else "" }}</td>
-          <td class="num">{{ l.amount | amount(inv.currency) }}</td><td class="num">{{ l.tax_rate | number }}</td></tr>
+          <td class="num">{{ l.amount | amount(inv.currency) }}</td>{% if line_rates %}<td class="num">{{ l.tax_rate | rate }}</td>{% endif %}</tr>
         {% endfor %}
         </tbody>
       </table></div>
@@ -119,7 +120,7 @@
         <thead><tr><th>Type</th><th>Label</th><th class="num">Rate</th><th class="num">Base</th><th class="num">Amount</th></tr></thead>
         <tbody>
         {% for t in item.taxes %}
-        <tr><td>{{ t.tax_type | replace("_", " ") }}</td><td>{{ t.label or "" }}</td><td class="num">{{ t.rate | number }}</td>
+        <tr><td>{{ t.tax_type | replace("_", " ") }}</td><td>{{ t.label or "" }}</td><td class="num">{{ t.rate | rate }}</td>
           <td class="num">{{ t.taxable_base | amount(inv.currency) if t.taxable_base is not none else "" }}</td><td class="num">{{ t.amount | amount(inv.currency) }}</td></tr>
         {% endfor %}
         </tbody>

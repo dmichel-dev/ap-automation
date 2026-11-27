@@ -42,7 +42,6 @@ SESSION_COOKIE = "__Host-ap_demo"  # __Host-: Secure, Path=/, no Domain
 MAX_FORM = 16 * 1024  # a click on a button
 UPLOAD_OVERHEAD = 64 * 1024  # multipart framing around the file
 SENT_PARAM, SENT_SAMPLE = "sent", "sample"  # the redirect after a sample send: the sample list opens
-CHANNELS = {"upload": "from this page", "email": "by email", "drive": "from Google Drive"}
 FRAUD_CODES = frozenset({"possible_bank_detail_change"})
 UPLOAD_ERRORS = {"provider_server": "The OCR service didn't answer. Try again in a few minutes."}
 ENDED = "This demo session has ended, or it opens only in the browser that started it."
@@ -115,6 +114,10 @@ def _minutes_left(session: demo.Session, now: datetime) -> int:
 # =====================================================================================
 # What a card on the session page says (display only: the statuses and reasons are the core's)
 # =====================================================================================
+# A sample was read by OCR once, when it was made; its saved result is used, so it costs nothing
+SAMPLE_SOURCE = "OCR result saved for this sample"
+
+
 def _reason_lines(found: list[dict[str, Any]], currency: str | None) -> list[dict[str, str | None]]:
     lines: list[dict[str, str | None]] = []
     for r in found:
@@ -129,14 +132,14 @@ Step = tuple[str, str, bool]  # (state, text, followed by the confidence score's
 
 
 def _read_step(item: db.Row) -> Step:
-    source = " (stored OCR result)" if item["sample"] else ""
+    source = f" ({SAMPLE_SOURCE})" if item["sample"] else ""
     if item["confidence"] is None:
         return ("done", f"Read{source}: {item['lines']} lines", False)
     return ("done", f"Read{source}: {item['lines']} lines · confidence {formatting.percent(item['confidence'])}", True)
 
 
 def _invoice_steps(item: db.Row) -> list[Step]:
-    steps = [("done", f"Received {CHANNELS.get(item['channel'], '')}".strip(), False)]
+    steps = [("done", f"Received {display.channel(item['channel'])}".strip(), False)]
     if item["status"] == "rejected":
         return [*steps, ("stop", "Not processed further", False)]
     steps.append(_read_step(item))
@@ -176,7 +179,7 @@ def _invoice_sub(item: db.Row) -> str:
 
 def _upload_card(item: db.Row) -> dict[str, Any]:
     failed = item["status"] == "failed"
-    reading = "Reading (stored OCR result)" if item["sample"] else "Reading with Mistral OCR (a few seconds)"
+    reading = f"Reading ({SAMPLE_SOURCE})" if item["sample"] else "Reading with Mistral OCR (a few seconds)"
     now = {"queued": "Waiting to be read", "processing": reading}.get(item["status"], "")
     error = UPLOAD_ERRORS.get(item["error"] or "", "This file couldn't be processed.")
     last = ("stop", error, False) if failed else ("now", now, False)
@@ -188,7 +191,7 @@ def _upload_card(item: db.Row) -> dict[str, Any]:
         "tone": status.tone,
         "label": status.label,
         "reasons": [],
-        "steps": [("done", "Received from this page", False), last],
+        "steps": [("done", f"Received {display.channel('upload')}", False), last],
         "bill": None,
         "review": None,
         "pending": not failed,

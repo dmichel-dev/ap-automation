@@ -126,6 +126,12 @@ def number(value: Any) -> str:
         return str(value)
 
 
+def rate(value: Any) -> str:
+    """A tax rate stored in percent, with its sign (8.5000 → "8.5%"); empty when there is none."""
+    shown = number(value)
+    return f"{shown}%" if shown else ""
+
+
 def templates() -> Environment:
     """The pages' templates (one base template: every page ends with the copyright footer)."""
     env = Environment(loader=FileSystemLoader(HERE / "templates"), autoescape=True, undefined=StrictUndefined)
@@ -137,6 +143,8 @@ def templates() -> Environment:
     env.filters["detail"] = display.reason_detail
     env.globals["status"] = display.STATUSES.__getitem__
     env.filters["number"] = number
+    env.filters["rate"] = rate
+    env.filters["channel"] = display.channel
     env.filters["explain"] = reasons.explain
     env.filters["age"] = display.age
     env.filters["tone"] = display.tone

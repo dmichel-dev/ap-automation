@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import pytest
 from app import formatting
-from app.web import display
+from app.web import display, guard
 
 
 @pytest.mark.parametrize(
@@ -93,6 +93,20 @@ def test_a_mismatch_shows_both_numbers_and_the_gap():
 )
 def test_messages_stored_in_the_old_wording_are_shown_in_the_new_one(stored, currency, shown):
     assert display.reason_detail(stored, currency) == shown
+
+
+def test_each_channel_has_one_wording():
+    assert [display.channel(c) for c in ("upload", "email", "drive")] == [
+        "by upload",
+        "by email",
+        "from Google Drive",
+    ]
+    assert display.channel("fax") == "by fax" and display.channel(None) == ""
+
+
+@pytest.mark.parametrize("stored, shown", [("8.5000", "8.5%"), (Decimal("20"), "20%"), ("0", "0%"), (None, "")])
+def test_tax_rates_are_shown_as_percentages(stored, shown):
+    assert guard.rate(stored) == shown
 
 
 def test_each_status_has_one_label_and_one_colour():

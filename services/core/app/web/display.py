@@ -12,6 +12,8 @@ from ..formatting import below_threshold, day, mismatch, percent
 Level = Literal["high", "medium", "low", "unknown"]
 Tone = Literal["review", "fraud", "ready", "closed"]
 SCOPE_LABELS = {"live": "live data", "e2e": "end-to-end test data", "demo": "demo data"}
+# How an invoice came in, after "Received" / "received", on every page (review page, demo cards)
+CHANNELS = {"upload": "by upload", "email": "by email", "drive": "from Google Drive"}
 LEVEL_LABELS: dict[Level, str] = {
     "high": "high",
     "medium": "close to the threshold",
@@ -77,6 +79,11 @@ def data_label(environment: str, scope: str) -> tuple[str, str]:
     if environment == "test":
         return "test data", "data-test"
     return SCOPE_LABELS.get(scope, f"{scope} data"), f"data-{scope}"
+
+
+def channel(code: str | None) -> str:
+    """ "by email" for "email"; an unknown channel is named as stored."""
+    return CHANNELS.get(code or "", f"by {code}" if code else "")
 
 
 def age(created_at: str, now: datetime | None = None) -> str:

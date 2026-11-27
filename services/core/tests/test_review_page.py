@@ -136,6 +136,25 @@ def test_the_item_page_explains_why_in_sentences_without_codes(samples):
     assert "possible_capex" not in page and "possible capex" not in page
 
 
+def test_the_heading_and_meta_line_keep_number_total_and_review_number_apart(samples):
+    c, _url, ids = samples
+    page = page_of(c, ids["pellingham"])
+    head = page[page.index('class="item-sub"') : page.index("</p>", page.index('class="item-sub"'))]
+    assert ' · <span class="num">' in head and ", <span" not in head
+    assert re.search(r"received by email, validation review number \d+\.</p>", page)  # reviewers keep the number
+
+
+def test_tax_rates_read_as_percentages_and_an_empty_rate_column_is_hidden(samples):
+    c, url, ids = samples
+    page = page_of(c, ids["pellingham"])
+    assert "Tax rate</th>" not in page  # no line carries a rate
+    assert re.search(r'<td class="num">\d+(\.\d+)?%</td>', page)  # the tax lines' rates
+    [inv] = q(url, "SELECT invoice_id FROM ap.review_queue WHERE id = %s", ids["pellingham"])
+    q(url, "UPDATE ap.invoice_lines SET tax_rate = 20 WHERE invoice_id = %s AND line_no = 1", inv["invoice_id"])
+    page = page_of(c, ids["pellingham"])
+    assert "Tax rate</th>" in page and '<td class="num">20%</td>' in page
+
+
 # =====================================================================================
 # Confidence badge (display only)
 # =====================================================================================
