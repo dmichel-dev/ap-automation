@@ -15,7 +15,9 @@
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
-		Referrer-Policy "no-referrer"
+		# A default only ("?"): the demo pages send their own, same-origin, because under no-referrer
+		# browsers post forms with "Origin: null", which demo-web's same-origin check refuses.
+		?Referrer-Policy "no-referrer"
 		X-Frame-Options "DENY"
 		-Server
 	}

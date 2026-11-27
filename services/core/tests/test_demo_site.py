@@ -547,6 +547,16 @@ def test_caddy_forwards_every_demo_page_and_not_the_health_check():
     )
 
 
+def test_caddy_keeps_the_demo_pages_own_referrer_policy():
+    # Caddy writes its header block after the upstream answers (the block deletes a header), so a plain
+    # "Referrer-Policy no-referrer" would replace demo-web's same-origin. Browsers then post every form
+    # with "Origin: null", and the same-origin check refuses it: no session could start.
+    assert SECURITY_HEADERS["Referrer-Policy"] == "same-origin"
+    fields = [ln.split()[0] for ln in CADDYFILE.read_text().splitlines() if ln.strip()]
+    policies = [f for f in fields if f.lstrip("?") == "Referrer-Policy"]
+    assert policies and all(f == "?Referrer-Policy" for f in policies), policies
+
+
 def test_icons_are_decorative(every_page):
     c, pages = every_page
     for path in pages:
