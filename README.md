@@ -46,4 +46,4 @@ open http://localhost:8081  # review page
 
 ## Copyright
 
-Copyright (c) 2026 David Michel. All rights reserved.
+Copyright (c) 2026 David Michel. All rights reserved. See [LICENSE](LICENSE).
