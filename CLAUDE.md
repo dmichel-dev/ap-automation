@@ -13,8 +13,8 @@ Intake channels → **common invoice format** → shared processing core → ban
 - **Extraction:** structured e-invoices (Factur-X/ZUGFeRD, UBL/CII) are parsed directly (after go-live, not before). PDFs and scans go to **Mistral OCR / Document AI** (`mistral-ocr-latest`, with a JSON-schema annotation for structured output; check the current Mistral docs). **No LLM fallback for now**: if validation fails, the invoice goes to human review. Keep a slot in the design for a fallback provider later.
 - **Common invoice format (country-neutral, worldwide):** supplier name, supplier tax ID, invoice number, invoice and due dates (ISO 8601; ambiguous dates are flagged, not guessed), ISO 4217 currency, line items, generic tax lines (VAT/GST/sales tax/withholding/none), totals, converted amount in the home currency (USD; **not planned before go-live**: ECB rates via Frankfurter are used for foreign-currency bank matching only), original-language text kept, confidence score.
 - **Core checks:** required fields present, line items + tax = total, duplicate check (supplier + invoice number), confidence threshold.
-- **Bank (Day 2):** Plaid sandbox (US). Matching rules: amount tolerance, date window, fuzzy supplier name. `/sandbox/transactions/create` exists for custom test transactions.
-- **Accounting (Day 2):** QuickBooks Online sandbox (US, Plus, **home currency USD, multi-currency ON**). Flow: vendor (find or create) → bill + PDF attachment → payment if matched; unmatched → unpaid bill, re-checked on later runs.
+- **Bank:** Plaid sandbox (US). Matching rules: amount tolerance, date window, fuzzy supplier name. `/sandbox/transactions/create` exists for custom test transactions.
+- **Accounting:** QuickBooks Online sandbox (US, Plus, **home currency USD, multi-currency ON**). Flow: vendor (find or create) → bill + PDF attachment → payment if matched; unmatched → unpaid bill, re-checked on later runs.
 - **Routing:** auto-post only if all checks pass; otherwise human review (approve/correct/reject); unreadable or non-invoice → rejected with a reason and logged.
 - **Security rule:** the LLM only *extracts data*. All approval decisions are deterministic code (protection against prompt injection in uploaded documents).
 
@@ -54,17 +54,17 @@ Intake channels → **common invoice format** → shared processing core → ban
 
 ## Decisions taken (2026-11-22)
 - **Python core** (`services/core`): `POST /invoices/process` does extract → normalize → checks → duplicate lookup → persist, in one DB transaction, and returns the status. **Routing happens in n8n** after that response, as visible branches `ready` / `needs_review` / `rejected`.
-- **From Day 2, integrations are n8n nodes** (Plaid, QuickBooks, notifications, daily summary). The canvas must show n8n skills, so don't move these into Python.
+- **From v0.2.0, integrations are n8n nodes** (Plaid, QuickBooks, notifications, daily summary). The canvas must show n8n skills, so don't move these into Python.
 - **Confidence score** is computed by code (field presence, arithmetic, format validity), never self-reported by the model.
 - **Tables:** `invoices`, `invoice_lines`, `invoice_tax_lines`, `review_queue`, `processing_log`.
 - **Duplicates:** same file hash → `rejected`; same supplier + invoice number with a different file → `needs_review`.
 - **Routing principle:** `rejected` only when a human could do nothing with it (not an invoice, unreadable, exact duplicate file). Everything a human can check or fix (wrong sign, missing field, totals mismatch…) → `needs_review`.
 - **Ambiguous dates:** `needs_review`, with a suggested date from `supplier_country` (US = month first, CA = no suggestion, others = day first) for one-click confirmation.
-- **Confidence** = OCR page average × required-field completeness; both parts stored. **Threshold 0.85 is provisional: calibrate it on the test set on Day 3.**
+- **Confidence** = OCR page average × required-field completeness; both parts stored. **Threshold 0.85, calibrated on the test set** ([docs/calibration.md](docs/calibration.md)).
 - **Totals check** includes discount, shipping, fee and rounding lines (table rows or totals-section adjustments).
 - **Test emails:** sent from the connected Gmail connector, **only to `invoices@davidmichel.dev`**, and each one is shown to David before sending.
 - **Git:** commit and **push to GitHub after each step**.
-- **Releases:** a milestone is one completed Day. Tag it (`v0.1.0` = Day 1 … `v0.7.0` = Day 7; `v1.0.0` when the repo goes public), push the tag, and create a **draft** GitHub release with notes for clients (what it does, how it was verified, known limits). Never publish a release: David does that himself when the repo goes public.
+- **Releases:** a milestone is a minor version (`v0.1.0`, `v0.2.0` …; `v1.0.0` when the repo goes public). Tag it, push the tag, and create a **draft** GitHub release with notes for clients (what it does, how it was verified, known limits). Never publish a release: David does that himself when the repo goes public.
 
 ## Later days (for context only, don't build yet)
 Day 5: deploy to the VPS (Caddy, HTTPS, firewall). Day 6: public demo page (sample, upload, `invoices+CODE@` email), live tracking page, privacy notice, rate limits, file deletion.

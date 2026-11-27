@@ -52,7 +52,7 @@ docker compose exec postgres sh /docker-entrypoint-initdb.d/01_migrate.sh   # ap
 docker compose up -d --build core
 ```
 
-Migration 004 (Day 2) was applied this way on 2026-11-22, after backup `pg_dumpall_20261122-172709.sql`; 006 and 007 on 2026-11-23 (backups `pg_dumpall_20261123-113152.sql`, `pg_dumpall_20261123-114811.sql`); 016 on 2026-11-24 (backup `pg_dumpall_20261124-155751.sql`).
+Migration 004 (v0.2.0) was applied this way on 2026-11-22, after backup `pg_dumpall_20261122-172709.sql`; 006 and 007 on 2026-11-23 (backups `pg_dumpall_20261123-113152.sql`, `pg_dumpall_20261123-114811.sql`); 016 on 2026-11-24 (backup `pg_dumpall_20261124-155751.sql`).
 
 ## Recomputing a normalized value after a rule change
 
@@ -116,7 +116,7 @@ Roles: `reviewer` and `admin` work on `live` (or `e2e`) data and sign in only on
 
 `POST /invoices/{id}/exclude-from-posting` with `{"reason": "superseded_test_data" | "manual", "note": "…"}`. It is logged and refused once the invoice is posted (reverse it in QuickBooks instead).
 
-Used once on 2026-11-22 for invoice `f6a94cb0-…` (BW-1042, Step 5 test of Day 1): its fictional supplier name was too close to a real company and was renamed in the test set, and it has the same amount as the renamed invoice, so posting it would also confuse bank matching.
+Used once on 2026-11-22 for invoice `f6a94cb0-…` (BW-1042, from a Gmail intake test): its fictional supplier name was too close to a real company and was renamed in the test set, and it has the same amount as the renamed invoice, so posting it would also confuse bank matching.
 
 ## Google Drive intake
 

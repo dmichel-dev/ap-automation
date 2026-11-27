@@ -1,6 +1,6 @@
 # Integrations: verified behaviour (Plaid, QuickBooks Online)
 
-Each fact below was checked on **2026-11-22** (and 2026-11-23 for the n8n posting workflow): against the vendor documentation where it was readable, and with live sandbox calls in every case. The design of Day 2 depends on these facts, so if one changes, the matching design or the workflows must change too.
+Each fact below was checked on **2026-11-22** (and 2026-11-23 for the n8n posting workflow): against the vendor documentation where it was readable, and with live sandbox calls in every case. The accounting and bank design depends on these facts, so if one changes, the matching design or the workflows must change too.
 
 ## Plaid (sandbox)
 
@@ -48,7 +48,7 @@ Company: multicurrency **ON**, home currency **USD** (read from `Preferences.Cur
 | `GET /preferences`: `AccountingInfoPrefs.BookCloseDate` is **absent** when no closing date is set | Live (2026-11-23) | Absent = no closed period; an unreadable response = unknown, nothing is posted |
 | The closing date **can't be set through the API** in the demo company: a sparse preferences update is validated as a whole and fails on unrelated inventory settings (Fault 6000-range business validation) | Live | It is set in the QuickBooks UI (*Settings → Account and settings → Advanced → Close the books*). Set to 2026-09-30 there on 2026-11-23: the API then returned `BookCloseDate: "2026-09-30"` (preferences SyncToken 3 → 4) and the posting run reported `closed_through: 2026-09-30` |
 
-Expense accounts are **chosen per supplier by a reviewer** (see [review](review.md)); until Day 3 every bill went to **Supplies** (20). Fixed accounts (sandbox IDs, configurable): bank **Checking** (35), A/P (33), and **Withholding Tax Payable** (`QBO_WITHHOLDING_ACCOUNT_ID`, an *Other Current Liability* created through the API on 2026-11-23, since the demo company had none). Until Day 3, all taxes went to **Taxes & Licenses** (21); now non-recoverable tax is part of the expense lines and withholding goes to the liability account.
+Expense accounts are **chosen per supplier by a reviewer** (see [review](review.md)); before v0.3.0 every bill went to **Supplies** (20). Fixed accounts (sandbox IDs, configurable): bank **Checking** (35), A/P (33), and **Withholding Tax Payable** (`QBO_WITHHOLDING_ACCOUNT_ID`, an *Other Current Liability* created through the API on 2026-11-23, since the demo company had none). Before v0.3.0, all taxes went to **Taxes & Licenses** (21); now non-recoverable tax is part of the expense lines and withholding goes to the liability account.
 
 ## n8n
 

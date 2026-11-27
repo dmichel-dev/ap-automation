@@ -58,7 +58,7 @@ Original files are needed until they're attached to the QuickBooks bill, then de
   n8n gets a file through the core API (`GET /invoices/{id}/file`), so there is no shared volume.
 - **Deletion triggers:**
   1. **After posting**: when n8n reports the attachment ID to the core service (`POST /postings/{id}/result`), the core deletes the file (`reason = posted`), after the database commit.
-  2. **Retention limit** (Day 3): a daily n8n schedule calls a purge endpoint that deletes files whose `file_delete_after` has passed (`reason = retention`). `file_delete_after = received_at + FILE_RETENTION_DAYS` (default 30; shorter for the public demo).
+  2. **Retention limit** (planned, not built yet): a daily n8n schedule will call a purge endpoint that deletes files whose `file_delete_after` has passed (`reason = retention`). `file_delete_after = received_at + FILE_RETENTION_DAYS` (default 30; shorter for the public demo).
   3. **Rejected by a reviewer**: deleted right after the decision (`reason = rejected`). Documents rejected automatically are never stored.
 - **After deletion:** `file_path` is cleared, `file_deleted_at` and `file_deletion_reason` are set, and the deletion is logged. `file_sha256` stays, so a re-sent file is still detected as a duplicate.
-- **To decide on Day 6:** for the public demo, whether `ocr_text` and `extraction` should also be cleared at retention time.
+- **Open question:** whether `ocr_text` and `extraction` should also be cleared at retention time. The public demo already deletes a session's invoices entirely when it ends ([demo](demo.md#what-is-deleted-and-when)).
