@@ -1,4 +1,5 @@
-# Runs on every push and pull request: lint, workflow and server config checks, type check, tests.
+# Runs on every push and pull request, or by hand (Actions tab or `gh workflow run ci.yml`):
+# lint, workflow and server config checks, type check, tests.
 # Skipped when only documentation changed; a new push cancels the run still going on the same ref.
 # The tests run in the core's test image against a throwaway PostgreSQL; live OCR tests are skipped.
 name: CI
@@ -8,6 +9,7 @@ on:
     paths-ignore: ["**.md", "docs/**", "LICENSE"]
   pull_request:
     paths-ignore: ["**.md", "docs/**", "LICENSE"]
+  workflow_dispatch:
 
 permissions:
   contents: read
