@@ -9,11 +9,6 @@
   <p class="muted">Each invoice is read by OCR, checked against fixed rules (totals, tax, dates, duplicates, bank details), then either prepared as a QuickBooks bill or sent to a person for review. You see every step. In this demo, nothing is sent to QuickBooks: you see the bill it would create.</p>
 </section>
 
-<section class="demo-compare" aria-label="Before and after automation">
-  <p class="compare-today"><span class="compare-label">Today:</span> in many companies, invoices arrive <strong>through several channels</strong> (email, shared drives…), then each one is <strong>typed in by hand</strong> and checked by eye. It's slow, and a <strong>changed bank account</strong> can slip through.</p>
-  <p class="compare-auto"><span class="compare-label">Automated:</span> invoices are <strong>picked up wherever they arrive</strong>, then read and checked automatically. Clean ones <strong>go straight to QuickBooks</strong>, a <strong>changed bank account is flagged</strong>, and the rest go to a person with the reason.</p>
-</section>
-
 <section class="demo-panel">
   {% if error %}<p class="note error" role="alert">{{ error }}</p>{% endif %}
   {% if current %}
@@ -23,6 +18,11 @@
   {% else %}
   <form method="post" action="/start"><button class="go demo-go">Start a demo session</button></form>
   {% endif %}
+</section>
+
+<section class="demo-compare" aria-label="Before and after automation">
+  <p class="compare-today"><span class="compare-label">Today:</span> in many companies, invoices arrive <strong>through several channels</strong> (email, shared drives…), then each one is <strong>typed in by hand</strong> and checked by eye. It's slow, and a <strong>changed bank account</strong> can slip through.</p>
+  <p class="compare-auto"><span class="compare-label">Automated:</span> invoices are <strong>picked up wherever they arrive</strong>, then read and checked automatically. Clean ones <strong>go straight to QuickBooks</strong>, a <strong>changed bank account is flagged</strong>, and the rest go to a person with the reason.</p>
 </section>
 
 <section class="demo-section">

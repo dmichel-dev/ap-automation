@@ -88,7 +88,9 @@ def test_start_page_starts_and_links_the_privacy_notice_without_listing_the_samp
     text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", r.text))
     assert "Today: in many companies, invoices arrive through several channels" in text
     assert "Automated: invoices are picked up wherever they arrive" in text
-    assert text.index("Today:") < text.index("Automated:") < text.index("Start a demo session")
+    # The start button comes right under the intro, so it is on a phone's first screen
+    assert text.index("nothing is sent to QuickBooks") < text.index("Start a demo session") < text.index("Today:")
+    assert text.index("Today:") < text.index("Automated:")
 
 
 def test_the_samples_fold_closed_under_a_summary_with_their_count(site):
