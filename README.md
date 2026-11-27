@@ -4,6 +4,8 @@ End-to-end **accounts payable invoice processing**. Invoices arrive by email or 
 
 **Live demo: [demo.davidmichel.dev](https://demo.davidmichel.dev)**: send a sample invoice, your own file or an email, and see what the pipeline decides and the QuickBooks bill it would create.
 
+**Case study: [what it does and the results](https://davidmichel.dev/ap-automation/)**
+
 ## How it works
 
 ```
@@ -24,6 +26,7 @@ Email / Drive ─► Mistral OCR ─► common invoice format ─► checks
 - **Totals and taxes:** lines, discounts, shipping, VAT/GST/withholding and totals must add up.
 - **Human review:** a review page shows the document next to what was read, and records who approved, corrected or rejected it.
 - **Safe re-runs:** a crash or retry never creates a second bill or payment.
+- **Tested:** more than 1,000 automated tests, plus live OCR tests ([tests and verification](docs/testing.md)).
 
 ## Stack
 
