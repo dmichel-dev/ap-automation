@@ -52,7 +52,7 @@ These are company policies, not accounting rules, so they are settings (`.env`),
 |---|---|---|
 | `CUTOFF_MATERIALITY` | 1000 | A service period ending in an earlier month (calendar months) goes to review at or above this total; below it, the invoice is posted and only listed for the month-end accruals. |
 | `CAPEX_THRESHOLD` | 2500 | **Capitalisation policy:** an item whose cost (unit price when printed, otherwise the line amount, before tax) reaches this amount may be a fixed asset, so a person decides. $2,500 is a common anchor (the IRS de minimis safe harbor for businesses without audited financial statements), not a GAAP rule; each company sets its own. |
-| `app/tax_treatment.json` | non-recoverable | How each tax is booked, by tax type and supplier country (see the README, *Accounting considerations*). |
+| `app/tax_treatment.json` | non-recoverable | How each tax is booked, by tax type and supplier country (see [how taxes are booked in QuickBooks](integrations.md#quickbooks-online-sandbox-company-intuit-demo-data)). |
 
 **Foreign-currency invoices (no home-currency conversion at validation yet; on the roadmap):** their amount in the home currency isn't known at validation. A prior-period service period therefore always goes to review (conservative), and the capitalisation check is skipped and marked `checked: false` in `checks.capex`, because comparing yen or euros with a dollar threshold would be wrong.
 

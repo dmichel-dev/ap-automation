@@ -1,5 +1,5 @@
 {
-  "note": "Tax treatment policy of the demo company (US, home currency USD). See app/tax_treatment.py and the README section 'Accounting considerations'. Withholding taxes are always booked as a liability, whatever this file says.",
+  "note": "Tax treatment policy of the demo company (US, home currency USD). See app/tax_treatment.py and docs/validation.md (company accounting policy settings). Withholding taxes are always booked as a liability, whatever this file says.",
   "default": "non_recoverable",
   "rules": [
     {
