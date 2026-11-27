@@ -67,6 +67,3 @@ Intake channels → **common invoice format** → shared processing core → ban
 
 ## Later (for context only, don't build yet)
 After go-live: Factur-X/UBL, home-currency conversion; see [docs/roadmap.md](docs/roadmap.md).
-
-## Before publication
-Before the repo goes public, follow [docs/pre-publication.md](docs/pre-publication.md) (history rewrite, signed commits and tags, secret scan, license).
