@@ -22,4 +22,5 @@ What each version changed in detail: [CHANGELOG](../CHANGELOG.md).
 - **Purchase orders and 3-way matching:** invoice ↔ PO ↔ goods receipt, with quantity and price tolerances.
 - **Structured e-invoices:** Factur-X/ZUGFeRD and UBL/CII parsed directly, without OCR.
 - **Home-currency conversion of invoices:** each invoice's amount in USD at validation (today ECB rates are used for bank matching only).
+- **Retention purge of live files:** a daily run that deletes stored originals whose deletion date (`FILE_RETENTION_DAYS` after receipt) has passed. Today live files are deleted after posting or rejection only; demo files when their session ends.
 - **Early-payment discounts:** read terms such as "2/10 net 30" and flag bills worth paying early.
